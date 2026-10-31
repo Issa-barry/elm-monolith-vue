@@ -19,9 +19,12 @@ use App\Models\User;
 use App\Services\MatriculeService;
 use App\Services\PhoneCountryInfo;
 use App\Services\Rh\AffectationRemunerationService;
+use App\Services\Rh\DepartEmployeService;
 use App\Services\Rh\EmployeAffectationService;
 use App\Services\SiteScopeService;
 use App\Support\Rh\AffectationRemunerationPresenter;
+use App\Support\Rh\LiensContactUrgence;
+use App\Support\Rh\Nationalites;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -202,11 +205,13 @@ class EmployeController extends Controller
 
         return Inertia::render('Employes/Create', [
             'type_employe_options' => TypeEmploye::options(),
-            'statut_options' => StatutEmploye::options(),
+            'statut_options' => $this->statutsSaisissables(),
             'sites' => $this->siteOptions($orgId),
             'fonctions' => $this->fonctionOptions($orgId),
             'services' => $this->serviceOptions($orgId),
             'civilite_options' => Civilite::options(),
+            'nationalite_options' => Nationalites::options(),
+            'lien_contact_options' => LiensContactUrgence::options(),
         ]);
     }
 
@@ -281,6 +286,10 @@ class EmployeController extends Controller
 
         $this->assertEmailUniqueInOrg($data['email'] ?? null, $orgId);
 
+        // La date d'embauche n'est pas saisie à la création : elle vient du premier contrat
+        // (ContratService::creer()) ou se renseigne ensuite dans la fiche.
+        unset($data['date_embauche']);
+
         $telephoneInfo = filled($data['telephone'] ?? null) ? $this->resolveTelephone($data['telephone']) : null;
 
         $identite = [
@@ -347,6 +356,8 @@ class EmployeController extends Controller
         return Inertia::render('Employes/Show', [
             'employe' => array_merge($this->toDetail($employe), [
                 'compte' => $this->compteInfo($employe),
+                // Bouton « Enregistrer / Annuler le départ » : affiché seulement si le serveur l'accepterait.
+                'peut_gerer_depart' => DepartEmployeService::peutGerer(auth()->user(), $employe),
             ]),
             'primes' => $this->primes($employe),
         ]);
@@ -410,11 +421,14 @@ class EmployeController extends Controller
         return Inertia::render('Employes/Edit', [
             'employe' => $this->toDetail($employe),
             'type_employe_options' => TypeEmploye::options(),
-            'statut_options' => StatutEmploye::options(),
+            // Un salarié sorti garde son statut (lecture seule) : seul « Annuler le départ » le rétablit.
+            'statut_options' => $employe->statut === StatutEmploye::SORTI ? StatutEmploye::options() : $this->statutsSaisissables(),
             'sites' => $this->siteOptions($orgId),
             'fonctions' => $this->fonctionOptions($orgId),
             'services' => $this->serviceOptions($orgId, $employe->service_rh_id),
             'civilite_options' => Civilite::options(),
+            'nationalite_options' => Nationalites::options($employe->personne?->nationalite),
+            'lien_contact_options' => LiensContactUrgence::options(),
         ]);
     }
 
@@ -426,7 +440,12 @@ class EmployeController extends Controller
         // administrateur laisse passer la Policy.
         $orgId = $employe->organization_id;
 
-        $data = $request->validate($this->regles($orgId), $this->messages());
+        $data = $request->validate($this->regles($orgId, $employe), $this->messages());
+
+        // Départ : seulement par « Enregistrer / Annuler le départ » (DepartEmployeService).
+        if ($employe->statut === StatutEmploye::SORTI) {
+            $data['statut'] = StatutEmploye::SORTI->value;
+        }
 
         $this->assertEmailUniqueInOrg($data['email'] ?? null, $orgId, $employe->id);
 
@@ -469,12 +488,26 @@ class EmployeController extends Controller
             ->with('success', "{$employe->nom_complet} a été mis à jour.");
     }
 
+    /** Statuts choisis dans le formulaire : « Sorti » s'obtient par l'action de départ. */
+    private function statutsSaisissables(): array
+    {
+        return array_values(array_filter(
+            StatutEmploye::options(),
+            fn (array $o) => $o['value'] !== StatutEmploye::SORTI->value,
+        ));
+    }
+
     /**
      * Règles communes à la création et à la modification. Les champs du dossier sont tous
-     * facultatifs : les dossiers existants restent valides sans saisie complémentaire.
+     * facultatifs : les dossiers existants restent valides sans saisie complémentaire. La date de
+     * sortie et son motif ne passent jamais par ce formulaire (DepartEmployeService).
      */
-    private function regles(string $orgId): array
+    private function regles(string $orgId, ?Employe $employe = null): array
     {
+        $estSorti = $employe?->statut === StatutEmploye::SORTI;
+        // Nationalité : liste fermée ; une valeur enregistrée avant la liste reste acceptée telle quelle.
+        $nationalites = array_filter([...Nationalites::libelles(), $employe?->personne?->nationalite]);
+
         return [
             'nom' => 'required|string|max:100',
             'prenom' => 'required|string|max:100',
@@ -484,18 +517,22 @@ class EmployeController extends Controller
             'site_id' => ['nullable', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'fonction_rh_id' => ['nullable', Rule::exists('fonctions_rh', 'id')->where('organization_id', $orgId)],
             'service_rh_id' => ['nullable', Rule::exists('services_rh', 'id')->where('organization_id', $orgId)],
-            'statut' => ['required', Rule::in(StatutEmploye::values())],
+            'statut' => $estSorti
+                ? ['nullable']
+                : ['required', Rule::in(array_column($this->statutsSaisissables(), 'value'))],
             // Identité civile (portée par Personne)
             'date_naissance' => ['nullable', 'date', 'before:today'],
             'lieu_naissance' => ['nullable', 'string', 'max:100'],
             'civilite' => ['nullable', Rule::in(Civilite::values())],
-            'nationalite' => ['nullable', 'string', 'max:60'],
+            'nationalite' => ['nullable', 'string', 'max:60', Rule::in($nationalites)],
             // Dossier
-            'date_embauche' => ['nullable', 'date'],
-            'date_sortie' => ['nullable', 'date', 'after_or_equal:date_embauche'],
-            'motif_sortie' => ['nullable', 'string', 'max:255'],
+            'date_embauche' => array_filter([
+                'nullable', 'date',
+                $employe?->date_sortie ? 'before_or_equal:'.$employe->date_sortie->toDateString() : null,
+            ]),
             'contact_urgence_nom' => ['nullable', 'string', 'max:150'],
-            'contact_urgence_lien' => ['nullable', 'string', 'max:50'],
+            'contact_urgence_lien' => ['nullable', Rule::in([...LiensContactUrgence::LISTE, LiensContactUrgence::AUTRE])],
+            'contact_urgence_lien_precision' => ['nullable', 'required_if:contact_urgence_lien,'.LiensContactUrgence::AUTRE, 'string', 'max:50'],
             'contact_urgence_telephone' => ['nullable', 'string', 'max:30'],
             // Donnée sensible : ignorée sans `rh-employes.donnees_sensibles` (cf. enregistrerDonneesSensibles())
             'numero_cnss' => ['nullable', 'string', 'max:30'],
@@ -525,11 +562,10 @@ class EmployeController extends Controller
     {
         return [
             'service_rh_id' => $data['service_rh_id'] ?? null,
-            'date_embauche' => $data['date_embauche'] ?? null,
-            'date_sortie' => $data['date_sortie'] ?? null,
-            'motif_sortie' => $data['motif_sortie'] ?? null,
+            // Absente à la création (premier contrat) : la date existante n'est alors pas touchée.
+            ...(array_key_exists('date_embauche', $data) ? ['date_embauche' => $data['date_embauche']] : []),
             'contact_urgence_nom' => $data['contact_urgence_nom'] ?? null,
-            'contact_urgence_lien' => $data['contact_urgence_lien'] ?? null,
+            'contact_urgence_lien' => LiensContactUrgence::valeur($data['contact_urgence_lien'] ?? null, $data['contact_urgence_lien_precision'] ?? null),
             'contact_urgence_telephone' => $data['contact_urgence_telephone'] ?? null,
         ];
     }
@@ -722,12 +758,16 @@ class EmployeController extends Controller
             'type_employe.required' => 'Le type d\'employé est obligatoire.',
             'type_employe.in' => 'Type d\'employé invalide.',
             'statut.required' => 'Le statut est obligatoire.',
-            'statut.in' => 'Statut invalide.',
+            'statut.in' => 'Statut invalide. Le départ d’un salarié s’enregistre avec « Enregistrer le départ » sur sa fiche.',
             'site_id.exists' => 'Site invalide.',
             'service_rh_id.exists' => 'Service invalide.',
             'date_naissance.before' => 'La date de naissance doit être antérieure à aujourd\'hui.',
-            'date_sortie.after_or_equal' => 'La date de sortie ne peut pas précéder la date d\'embauche.',
+            'date_embauche.before_or_equal' => 'La date d\'embauche ne peut pas suivre la date de sortie du salarié.',
             'civilite.in' => 'Civilité invalide.',
+            'nationalite.in' => 'Choisissez une nationalité dans la liste.',
+            'contact_urgence_lien.in' => 'Choisissez un lien dans la liste.',
+            'contact_urgence_lien_precision.required_if' => 'Précisez le lien avec le contact.',
+            'contact_urgence_lien_precision.max' => 'La précision du lien est limitée à 50 caractères.',
         ];
     }
 }

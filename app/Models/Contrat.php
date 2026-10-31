@@ -34,6 +34,9 @@ class Contrat extends Model
             'date_debut' => 'date',
             'date_fin' => 'date',
             'salaire_base' => 'decimal:2',
+            // Départ du salarié (DepartEmployeService) : écrits seulement par ce service, hors $fillable.
+            'termine_par_depart' => 'boolean',
+            'date_fin_avant_depart' => 'date',
         ];
     }
 

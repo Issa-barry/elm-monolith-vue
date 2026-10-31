@@ -2,11 +2,13 @@
 import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import EmployeDossierFields from '@/components/rh/EmployeDossierFields.vue';
 import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
+import { type NationaliteOption } from '@/components/rh/NationaliteSelect.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { lienVersFormulaire } from '@/lib/contactUrgence';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
@@ -88,6 +90,8 @@ const props = defineProps<{
     fonctions: Option[];
     services: Option[];
     civilite_options: Option[];
+    nationalite_options: NationaliteOption[];
+    lien_contact_options: Option[];
 }>();
 
 const { can } = usePermissions();
@@ -113,14 +117,15 @@ const form = useForm({
     // Dossier salarié
     service_rh_id: props.employe.service_rh_id ?? null,
     date_embauche: props.employe.date_embauche_iso ?? '',
-    date_sortie: props.employe.date_sortie ?? '',
-    motif_sortie: props.employe.motif_sortie ?? '',
     date_naissance: props.employe.date_naissance ?? '',
     lieu_naissance: props.employe.lieu_naissance ?? '',
     civilite: props.employe.civilite ?? '',
     nationalite: props.employe.nationalite ?? '',
     contact_urgence_nom: props.employe.contact_urgence_nom ?? '',
-    contact_urgence_lien: props.employe.contact_urgence_lien ?? '',
+    ...lienVersFormulaire(
+        props.employe.contact_urgence_lien,
+        props.lien_contact_options,
+    ),
     contact_urgence_telephone: props.employe.contact_urgence_telephone ?? '',
     numero_cnss: props.employe.donnees_sensibles?.numero_cnss ?? '',
 });
@@ -323,8 +328,22 @@ function deleteContrat(c: ContratRow) {
                                     :options="statut_options"
                                     option-label="label"
                                     option-value="value"
+                                    :disabled="employe.statut === 'sorti'"
                                     class="w-full"
                                 />
+                                <p
+                                    v-if="employe.statut === 'sorti'"
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
+                                    Salarié sorti : « Annuler le départ » sur sa
+                                    fiche le rétablit.
+                                </p>
+                                <p
+                                    v-if="form.errors.statut"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.statut }}
+                                </p>
                             </div>
                             <div>
                                 <label class="mb-1.5 block text-sm font-medium"
@@ -365,6 +384,8 @@ function deleteContrat(c: ContratRow) {
                         v-model:form="form"
                         :services="services"
                         :civilite-options="civilite_options"
+                        :nationalite-options="nationalite_options"
+                        :lien-contact-options="lien_contact_options"
                     />
 
                     <!-- Historique d'affectation (site + fonction) -->

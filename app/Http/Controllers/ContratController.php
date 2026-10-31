@@ -165,6 +165,10 @@ class ContratController extends Controller
             if ($statutFinal === StatutContrat::ACTIF->value) {
                 $contrats->assertAucunAutreContratActif($employe->id, $contrat->id);
             }
+            // Un contrat terminé sans date de fin n'a pas de période connue (ignoré comme dans la paie).
+            if ($statutFinal === StatutContrat::ACTIF->value || ($data['date_fin'] ?? null) !== null) {
+                $contrats->assertPasDeChevauchement($employe->id, $data['date_debut'], $data['date_fin'] ?? null, $contrat->id);
+            }
 
             $contrat->update($data);
         });

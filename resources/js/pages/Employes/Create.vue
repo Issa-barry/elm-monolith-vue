@@ -2,6 +2,7 @@
 import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import EmployeDossierFields from '@/components/rh/EmployeDossierFields.vue';
 import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
+import { type NationaliteOption } from '@/components/rh/NationaliteSelect.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -24,6 +25,8 @@ defineProps<{
     fonctions: Option[];
     services: Option[];
     civilite_options: Option[];
+    nationalite_options: NationaliteOption[];
+    lien_contact_options: Option[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -43,15 +46,13 @@ const form = useForm({
     statut: 'actif',
     // Dossier salarié (facultatif)
     service_rh_id: null as string | null,
-    date_embauche: '',
-    date_sortie: '',
-    motif_sortie: '',
     date_naissance: '',
     lieu_naissance: '',
     civilite: '',
     nationalite: '',
     contact_urgence_nom: '',
     contact_urgence_lien: '',
+    contact_urgence_lien_precision: '',
     contact_urgence_telephone: '',
     numero_cnss: '',
 });
@@ -253,6 +254,9 @@ function submit() {
                     v-model:form="form"
                     :services="services"
                     :civilite-options="civilite_options"
+                    :nationalite-options="nationalite_options"
+                    :lien-contact-options="lien_contact_options"
+                    creation
                 />
 
                 <div class="flex items-center justify-between">

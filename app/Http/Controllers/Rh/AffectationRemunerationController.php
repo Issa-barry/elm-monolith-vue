@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Rh;
 
-use App\Enums\CategorieTypeRemuneration;
 use App\Enums\StatutAffectationRemuneration;
 use App\Enums\StatutEmploye;
 use App\Enums\StatutTypeRemuneration;
@@ -73,7 +72,6 @@ class AffectationRemunerationController extends Controller
             'sites' => $this->sitesFiltre($user, $orgId),
             'employes' => $this->employesOptions($user, $orgId),
             'types' => $this->typesOptions($orgId),
-            'categories' => CategorieTypeRemuneration::options(),
             'etats' => StatutAffectationRemuneration::optionsEtat(),
         ]);
     }
@@ -195,7 +193,6 @@ class AffectationRemunerationController extends Controller
             'etat' => (string) $request->input('etat', ''),
             'employe_id' => (string) $request->input('employe_id', ''),
             'type_remuneration_id' => (string) $request->input('type_remuneration_id', ''),
-            'categorie' => (string) $request->input('categorie', ''),
             'periode_du' => $this->dateOuVide($request->input('periode_du')),
             'periode_au' => $this->dateOuVide($request->input('periode_au')),
         ];
@@ -212,9 +209,6 @@ class AffectationRemunerationController extends Controller
         }
         if ($filtres['type_remuneration_id'] !== '') {
             $query->where('type_remuneration_id', $filtres['type_remuneration_id']);
-        }
-        if ($filtres['categorie'] !== '') {
-            $query->whereHas('type', fn (Builder $q) => $q->where('categorie', $filtres['categorie']));
         }
         if ($filtres['periode_du'] !== '' || $filtres['periode_au'] !== '') {
             $du = $filtres['periode_du'] !== '' ? Carbon::parse($filtres['periode_du']) : Carbon::create(1900, 1, 1);

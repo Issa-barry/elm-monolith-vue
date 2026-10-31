@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import InfoTooltip from '@/components/InfoTooltip.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -296,11 +297,24 @@ function enregistrerSignature() {
                                         : ''
                                 "
                             >
-                                <Label
-                                    :for="`champ-${c.champ}`"
-                                    class="mb-1.5 block text-xs font-medium"
-                                    >{{ c.libelle }}</Label
-                                >
+                                <div class="mb-1.5 flex items-center gap-1.5">
+                                    <Label
+                                        :for="`champ-${c.champ}`"
+                                        class="text-xs font-medium"
+                                        >{{ c.libelle }}</Label
+                                    >
+                                    <InfoTooltip
+                                        v-if="c.champ === 'periode_essai'"
+                                        label="Aide : période d'essai"
+                                    >
+                                        Durée de la période d'essai prévue au
+                                        contrat, telle qu'elle figurera dans le
+                                        document (ex. « trois (3) mois,
+                                        renouvelable une fois »). Écrivez « sans
+                                        période d'essai » si elle ne s'applique
+                                        pas.
+                                    </InfoTooltip>
+                                </div>
                                 <Input
                                     :id="`champ-${c.champ}`"
                                     v-model="form.champs[c.champ]"

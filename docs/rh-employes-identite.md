@@ -40,10 +40,36 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 
 | Bloc | Champs | Porté par |
 |---|---|---|
-| Dossier | Service, date d'embauche, date de sortie (≥ embauche), motif de sortie | `employes` |
-| Identité civile | Date de naissance (antérieure à aujourd'hui), lieu, civilité (Monsieur / Madame / Mademoiselle), nationalité | `personnes` (partagée avec les autres rôles) |
-| Contact d'urgence | Nom, lien, téléphone (un seul contact) | `employes` |
-| Données sensibles | N° CNSS | `employes.numero_cnss` |
+| Dossier | Service, date d'embauche (fiche seulement, pas à la création) ; date et motif de sortie en lecture seule | `employes` |
+| Identité civile | Date de naissance (antérieure à aujourd'hui), lieu, civilité (Monsieur / Madame / Mademoiselle), nationalité (liste) | `personnes` (partagée avec les autres rôles) |
+| Contact d'urgence | Nom, lien (liste + « Autre » précisé), téléphone (un seul contact) | `employes` |
+| Données sensibles | N° CNSS **du salarié** | `employes.numero_cnss` |
+
+- **Dates du dossier (31/10/2026, ADR 0045)** : la date d'embauche n'est plus saisie à la création
+  de l'employé. Le premier contrat créé la renseigne quand elle est vide (date de début du
+  contrat) ; une date déjà connue (ancienneté antérieure, import RH) n'est jamais modifiée. Elle se
+  corrige dans la fiche (pas après la date de sortie). Les dates d'un contrat (début, fin prévue) se
+  saisissent dans RH → Contrats. La date de sortie et son motif ne passent plus par le formulaire :
+  action « Enregistrer le départ » ([rh-depart-salarie.md](rh-depart-salarie.md)). Le statut
+  « Sorti » ne se choisit plus dans le formulaire ; un salarié sorti garde ce statut jusqu'à
+  l'annulation du départ.
+- **Nationalité (31/10/2026)** : liste fermée de nationalités au féminin (« Guinéenne »,
+  « Française »…), jamais un nom de pays ; Guinéenne en tête, recherche sans tenir compte des
+  accents, drapeau comme repère visuel. Source unique : `App\Support\Rh\Nationalites` (envoyée au
+  formulaire, valeur vérifiée par le serveur). Une valeur saisie avant la liste et absente de
+  celle-ci reste affichée et acceptée telle quelle tant qu'elle n'est pas remplacée (aucune
+  conversion automatique, aucune migration).
+- **Lien du contact d'urgence (31/10/2026)** : liste `App\Support\Rh\LiensContactUrgence`
+  (Conjoint(e), Père, Mère, Frère, Sœur, Fils, Fille, Oncle, Tante, Cousin(e), Ami(e), Collègue,
+  Tuteur / Tutrice, Autre). « Autre » exige une précision (50 caractères), enregistrée à la place
+  du libellé dans `contact_urgence_lien` ; choisir un autre lien efface la précision. Une ancienne
+  saisie libre se relit comme « Autre » avec cette valeur pour précision. Pas de migration.
+- **N° CNSS** : numéro personnel d'immatriculation du salarié à la Caisse nationale de sécurité
+  sociale (cnss.gov.gn), facultatif, jamais généré par l'application. Le numéro employeur de
+  l'entreprise n'est pas géré dans le dossier du salarié.
+- **Infobulles ⓘ** : composant partagé `InfoTooltip.vue` (survol, focus clavier, appui sur écran
+  tactile) sur les champs ambigus : date d'embauche, nationalité, lien, N° CNSS ; dans les contrats :
+  date de début, date de fin, salaire de base, période d'essai ; dans le départ : date et motif.
 
 - À la création, une identité civile déjà renseignée sur la Personne réutilisée est conservée ;
   seuls les champs vides sont complétés (même règle que nom/prénom/email).

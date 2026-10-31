@@ -3,6 +3,7 @@
 namespace App\Services\Rh;
 
 use App\Enums\AuditEvent;
+use App\Enums\CategorieTypeRemuneration;
 use App\Enums\ModeCalculRemuneration;
 use App\Enums\StatutTypeRemuneration;
 use App\Models\TypeRemuneration;
@@ -31,8 +32,11 @@ class TypeRemunerationService
 
     private const LONGUEUR_CODE = 30;
 
-    /** Caractéristiques de calcul, figées dès que le type a servi (il faut alors créer un nouveau type). */
-    private const CHAMPS_FIGES_APRES_USAGE = ['code', 'categorie', 'mode_calcul', 'periodicite', 'nature_montant'];
+    /**
+     * Caractéristiques de calcul, figées dès que le type a servi (il faut alors créer un nouveau type).
+     * La catégorie n'y figure plus : elle n'est jamais modifiée par le formulaire (ADR 0046).
+     */
+    private const CHAMPS_FIGES_APRES_USAGE = ['code', 'mode_calcul', 'periodicite', 'nature_montant'];
 
     private const CHAMPS_JOURNAL = [
         'code', 'libelle', 'description', 'categorie', 'mode_calcul', 'periodicite', 'nature_montant',
@@ -59,6 +63,8 @@ class TypeRemunerationService
 
             $type = TypeRemuneration::create([
                 ...$attributs,
+                // Une seule catégorie à la création (ADR 0046) : tout nouveau type est une prime, versée.
+                'categorie' => CategorieTypeRemuneration::PRIME->value,
                 'code' => $attributs['code'] ?? $this->codePropose($attributs['libelle'], $organizationId),
                 'organization_id' => $organizationId,
                 'statut' => StatutTypeRemuneration::A_VALIDER->value,
@@ -285,7 +291,6 @@ class TypeRemunerationService
             'code' => $code,
             'libelle' => $libelle,
             'description' => filled($data['description'] ?? null) ? trim((string) $data['description']) : null,
-            'categorie' => $data['categorie'],
             'mode_calcul' => $data['mode_calcul'],
             'periodicite' => $data['periodicite'],
             'nature_montant' => $data['nature_montant'],

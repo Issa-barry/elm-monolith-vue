@@ -6,18 +6,24 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Info } from 'lucide-vue-next';
+import { ref } from 'vue';
 
 defineProps<{ label: string }>();
+
+// Survol, focus clavier ou appui : un écran tactile n'a pas de survol, l'appui ouvre et ferme
+// l'explication (un appui ailleurs la ferme aussi).
+const ouvert = ref(false);
 </script>
 
 <template>
     <TooltipProvider :delay-duration="150">
-        <Tooltip>
+        <Tooltip v-model:open="ouvert" disable-closing-trigger>
             <TooltipTrigger as-child>
                 <button
                     type="button"
                     :aria-label="label"
                     class="shrink-0 rounded-sm text-primary transition-colors outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring"
+                    @click="ouvert = !ouvert"
                 >
                     <Info class="h-4 w-4" aria-hidden="true" />
                 </button>

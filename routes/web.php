@@ -198,6 +198,8 @@ use App\Http\Controllers\Rh\Contrats\GenererDocumentContratController;
 use App\Http\Controllers\Rh\Contrats\ShowDocumentContratController;
 use App\Http\Controllers\Rh\Contrats\TelechargerContratController;
 use App\Http\Controllers\Rh\Contrats\TelechargerDocumentContratController;
+use App\Http\Controllers\Rh\Employes\AnnulerDepartEmployeController;
+use App\Http\Controllers\Rh\Employes\EnregistrerDepartEmployeController;
 use App\Http\Controllers\Rh\Imports\AbandonnerImportRhController;
 use App\Http\Controllers\Rh\Imports\ConfirmImportRhController;
 use App\Http\Controllers\Rh\Imports\CreateImportRhController;
@@ -889,6 +891,8 @@ Route::prefix('backoffice')->group(function () {
             Route::resource('employes', EmployeController::class);
             Route::patch('employes/{employe}/transferer-site', [EmployeController::class, 'transfererSite'])
                 ->name('employes.transferer-site');
+            Route::post('employes/{employe}/depart', EnregistrerDepartEmployeController::class)->name('employes.depart.store');
+            Route::delete('employes/{employe}/depart', AnnulerDepartEmployeController::class)->name('employes.depart.destroy');
             // Pas de create()/edit() : la création/modification se fait exclusivement en popup
             // (écran Fonctions RH ou sélecteur embarqué Employé/validation de compte), mirroring
             // les routes produits/categories — jamais de navigation vers une page dédiée.

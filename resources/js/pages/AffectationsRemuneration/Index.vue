@@ -140,7 +140,6 @@ const props = defineProps<{
     sites: { id: string; nom: string }[];
     employes: EmployeOption[];
     types: TypeOption[];
-    categories: Option[];
     etats: Option[];
 }>();
 
@@ -185,12 +184,6 @@ const filterFields = computed((): FilterField[] => [
         type: 'select',
         options: props.types.map((t) => ({ value: t.value, label: t.label })),
         searchable: true,
-    },
-    {
-        key: 'categorie',
-        label: 'Catégorie',
-        type: 'select',
-        options: props.categories,
     },
     {
         key: 'periode',
@@ -334,16 +327,6 @@ function valeurSaisie(a: Affectation, s: Saisie): string {
         ? `${(s.taux ?? 0).toLocaleString('fr-FR')} %`
         : `${formatGnf.format(s.montant ?? 0)} GNF`;
 }
-
-// Catégorie (pas un statut) : fond coloré autorisé.
-const categorieColors: Record<string, string> = {
-    prime: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-    indemnite: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
-    allocation:
-        'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
-    avantage_nature:
-        'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-};
 
 function nombreOuNull(valeur: string | number | null): number | null {
     return valeur === '' || valeur === null ? null : Number(valeur);
@@ -821,19 +804,10 @@ const champSelect =
                             <p class="flex flex-wrap items-center gap-2">
                                 {{ data.type.libelle }}
                                 <span
-                                    class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                                    :class="
-                                        categorieColors[data.type.categorie] ??
-                                        'bg-muted text-muted-foreground'
-                                    "
-                                    >{{ data.type.categorie_label }}</span
+                                    v-if="data.type.valorise"
+                                    class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+                                    >Avantage en nature · hors net à payer</span
                                 >
-                            </p>
-                            <p
-                                v-if="data.type.valorise"
-                                class="text-[11px] text-muted-foreground"
-                            >
-                                Valorisé, hors net à payer
                             </p>
                             <p
                                 v-if="data.est_changement"
@@ -1089,7 +1063,8 @@ const champSelect =
                             :key="t.value"
                             :value="t.value"
                         >
-                            {{ t.label }} ({{ t.categorie_label }})
+                            {{ t.label
+                            }}{{ t.valorise ? ' (avantage en nature)' : '' }}
                         </option>
                     </select>
                     <p
