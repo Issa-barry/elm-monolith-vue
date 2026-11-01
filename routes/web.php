@@ -201,6 +201,8 @@ use App\Http\Controllers\Rh\Contrats\TelechargerDocumentContratController;
 use App\Http\Controllers\Rh\Employes\AnnulerDepartEmployeController;
 use App\Http\Controllers\Rh\Employes\DesignerPdgController;
 use App\Http\Controllers\Rh\Employes\EnregistrerDepartEmployeController;
+use App\Http\Controllers\Rh\Employes\RechercherContactUrgenceController;
+use App\Http\Controllers\Rh\Employes\RechercherTelephoneEmployeController;
 use App\Http\Controllers\Rh\Imports\AbandonnerImportRhController;
 use App\Http\Controllers\Rh\Imports\ConfirmImportRhController;
 use App\Http\Controllers\Rh\Imports\CreateImportRhController;
@@ -880,6 +882,9 @@ Route::prefix('backoffice')->group(function () {
             // Import des dossiers et contrats (docs/import-dossiers-rh.md) — déclaré AVANT la
             // ressource employes, sinon employes/{employe} intercepterait employes/imports.
             Route::get('employes/export-maj', ExporterDossiersRhController::class)->name('employes.export-maj');
+            // « Nouvel employé » commence par le téléphone : déclaré avant la ressource (cf. ci-dessus).
+            Route::get('employes/recherche-telephone', RechercherTelephoneEmployeController::class)->name('employes.recherche-telephone');
+            Route::get('employes/recherche-contact-urgence', RechercherContactUrgenceController::class)->name('employes.recherche-contact-urgence');
             Route::prefix('employes/imports')->name('employes.imports.')->group(function () {
                 Route::get('/', IndexImportRhController::class)->name('index');
                 Route::get('nouveau', CreateImportRhController::class)->name('create');

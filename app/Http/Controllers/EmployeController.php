@@ -17,16 +17,17 @@ use App\Models\ServiceRh;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\MatriculeService;
-use App\Services\PhoneCountryInfo;
 use App\Services\Rh\AffectationRemunerationService;
 use App\Services\Rh\DepartEmployeService;
 use App\Services\Rh\EmployeAffectationService;
 use App\Services\Rh\PdgService;
+use App\Services\Rh\RechercheEmployeParTelephone;
 use App\Services\SiteScopeService;
 use App\Support\Rh\AffectationRemunerationPresenter;
 use App\Support\Rh\LiensContactUrgence;
 use App\Support\Rh\Nationalites;
 use App\Support\Rh\PerimetreEmploye;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +49,8 @@ class EmployeController extends Controller
      */
     private function resolveTelephone(string $telephone): array
     {
-        $info = PhoneCountryInfo::resolve($telephone);
+        // Même normalisation que « Rechercher » (espaces, « 00 » initial…) : même clé, même résultat.
+        $info = RechercheEmployeParTelephone::normaliser($telephone);
 
         if ($info === null) {
             throw ValidationException::withMessages([
@@ -62,6 +64,41 @@ class EmployeController extends Controller
             'pays' => $info['pays'],
             'code_phone_pays' => $info['indicatif'],
         ];
+    }
+
+    /** Pays de référence quand l'employé n'a pas de téléphone : le premier pays du sélecteur (Guinée). */
+    private const INDICATIF_PAR_DEFAUT = '+224';
+
+    /**
+     * Téléphone du contact d'urgence : même pays que le téléphone de l'employé (non modifiable dans
+     * le formulaire, revérifié ici), enregistré au format international. Une valeur déjà
+     * enregistrée et renvoyée telle quelle est conservée sans être revalidée : un dossier ancien
+     * reste modifiable.
+     */
+    private function telephoneUrgence(array $data, ?string $indicatifEmploye, ?string $actuel = null): ?string
+    {
+        $saisi = trim((string) ($data['contact_urgence_telephone'] ?? ''));
+        if ($saisi === '') {
+            return null;
+        }
+        if ($actuel !== null && $saisi === $actuel) {
+            return $actuel;
+        }
+
+        $indicatif = $indicatifEmploye ?: self::INDICATIF_PAR_DEFAUT;
+        $info = RechercheEmployeParTelephone::normaliser($saisi, $indicatif);
+        if ($info === null) {
+            throw ValidationException::withMessages([
+                'contact_urgence_telephone' => 'Numéro du contact d’urgence invalide : vérifiez le nombre de chiffres.',
+            ]);
+        }
+        if ($info['indicatif'] !== $indicatif) {
+            throw ValidationException::withMessages([
+                'contact_urgence_telephone' => "Le numéro du contact d’urgence doit être du même pays que celui de l’employé ({$indicatif}).",
+            ]);
+        }
+
+        return $info['telephone'];
     }
 
     /**
@@ -299,6 +336,7 @@ class EmployeController extends Controller
         unset($data['date_embauche']);
 
         $telephoneInfo = filled($data['telephone'] ?? null) ? $this->resolveTelephone($data['telephone']) : null;
+        $data['contact_urgence_telephone'] = $this->telephoneUrgence($data, $telephoneInfo['code_phone_pays'] ?? null);
 
         $identite = [
             'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
@@ -307,7 +345,27 @@ class EmployeController extends Controller
             ...$this->identiteCivile($data),
         ];
 
-        $employe = DB::transaction(function () use ($orgId, $data, $identite, $telephoneInfo) {
+        try {
+            $employe = $this->creerEmploye($orgId, $data, $identite, $telephoneInfo);
+        } catch (UniqueConstraintViolationException) {
+            // Même numéro enregistré au même instant par quelqu'un d'autre : la contrainte
+            // (organization_id, telephone_normalise) a refusé la seconde personne.
+            throw ValidationException::withMessages([
+                'telephone' => 'Ce numéro vient d’être enregistré par quelqu’un d’autre. Cliquez de nouveau sur « Rechercher » pour voir le dossier existant.',
+            ]);
+        }
+
+        return redirect()->route('employes.edit', $employe)
+            ->with('success', "{$employe->nom_complet} a été créé avec succès.");
+    }
+
+    /**
+     * Contrôle anti-doublon qui fait foi (la recherche préalable n'est qu'une aide) : personne
+     * retrouvée par téléphone normalisé, verrouillée, et refus d'un second dossier employé.
+     */
+    private function creerEmploye(string $orgId, array $data, array $identite, ?array $telephoneInfo): Employe
+    {
+        return DB::transaction(function () use ($orgId, $data, $identite, $telephoneInfo) {
             $personne = Personne::resoudreOuCreer($orgId, [
                 ...$identite,
                 'telephone' => $telephoneInfo['telephone'] ?? null,
@@ -344,9 +402,6 @@ class EmployeController extends Controller
 
             return $employe;
         });
-
-        return redirect()->route('employes.edit', $employe)
-            ->with('success', "{$employe->nom_complet} a été créé avec succès.");
     }
 
     /**
@@ -473,6 +528,7 @@ class EmployeController extends Controller
         } else {
             $this->assertTelephonePeutEtreEfface($employe->personne);
         }
+        $data['contact_urgence_telephone'] = $this->telephoneUrgence($data, $telephoneInfo['code_phone_pays'] ?? null, $employe->contact_urgence_telephone);
 
         DB::transaction(function () use ($employe, $data, $telephoneInfo) {
             $employe->personne->update([
@@ -530,7 +586,10 @@ class EmployeController extends Controller
             'nom' => 'required|string|max:100',
             'prenom' => 'required|string|max:100',
             'email' => ['nullable', 'email', 'max:255'],
-            'telephone' => 'nullable|string|max:50',
+            // Obligatoire à la création : « Nouvel employé » passe toujours par la recherche du
+            // numéro (anti-doublon). Facultatif en modification : une fiche ancienne sans numéro
+            // reste modifiable.
+            'telephone' => [$employe === null ? 'required' : 'nullable', 'string', 'max:50'],
             'type_employe' => ['required', Rule::in(TypeEmploye::values())],
             'site_id' => ['nullable', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
             'fonction_rh_id' => ['nullable', Rule::exists('fonctions_rh', 'id')->where('organization_id', $orgId)],
@@ -775,6 +834,7 @@ class EmployeController extends Controller
         return [
             'nom.required' => 'Le nom est obligatoire.',
             'prenom.required' => 'Le prénom est obligatoire.',
+            'telephone.required' => 'Le numéro de téléphone est obligatoire : il permet de vérifier que l’employé n’est pas déjà enregistré.',
             'email.email' => "L'adresse e-mail est invalide.",
             'type_employe.required' => 'Le type d\'employé est obligatoire.',
             'type_employe.in' => 'Type d\'employé invalide.',
