@@ -6,9 +6,10 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Save } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, FileText, Save } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed } from 'vue';
+import ConditionsContrat from './partials/ConditionsContrat.vue';
 
 // Salaire : saisi et affiché seulement avec rh-remunerations.read (ignoré par le serveur sinon).
 const { can } = usePermissions();
@@ -22,7 +23,10 @@ const props = defineProps<{
     employes: Option[];
     type_contrat_options: Option[];
     statut_contrat_options: Option[];
+    unites_periode_essai: Option[];
     employe_id_prefill: string | null;
+    pdg: { nom: string; qualite: string } | null;
+    message_pdg_absent: string;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -37,10 +41,17 @@ const form = useForm({
     date_debut: '',
     date_fin: '',
     salaire_base: null as number | null,
-    statut_contrat: 'actif',
+    periode_essai_duree: null as number | null,
+    periode_essai_unite: null as string | null,
+    heures_hebdomadaires: null as number | null,
+    motif_cdd: null as string | null,
 });
 
 const isCdd = computed(() => form.type_contrat === 'cdd');
+// Refus serveur : aucun PDG désigné (clé `pdg`, hors des champs du formulaire).
+const erreurPdg = computed(
+    () => (form.errors as Record<string, string | undefined>).pdg,
+);
 
 function submit() {
     form.post('/backoffice/contrats');
@@ -60,6 +71,28 @@ function submit() {
                 <h1 class="text-2xl font-semibold tracking-tight">
                     Nouveau contrat
                 </h1>
+            </div>
+
+            <div
+                v-if="!pdg"
+                class="mb-6 flex gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+                data-testid="pdg-absent"
+            >
+                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+                {{ message_pdg_absent }}
+            </div>
+            <div
+                v-else
+                class="mb-6 flex gap-2 rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+            >
+                <FileText class="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                    Le PDF du contrat sera préparé automatiquement à
+                    l’enregistrement, avec les informations de l’organisation,
+                    du salarié et du signataire :
+                    <strong class="text-foreground">{{ pdg.nom }}</strong
+                    >, {{ pdg.qualite }}.
+                </span>
             </div>
 
             <form class="space-y-6" @submit.prevent="submit">
@@ -106,18 +139,7 @@ function submit() {
                                 {{ form.errors.type_contrat }}
                             </p>
                         </div>
-                        <div>
-                            <label class="mb-1.5 block text-sm font-medium"
-                                >Statut</label
-                            >
-                            <Select
-                                v-model="form.statut_contrat"
-                                :options="statut_contrat_options"
-                                option-label="label"
-                                option-value="value"
-                                class="w-full"
-                            />
-                        </div>
+                        <div class="hidden sm:block" />
                         <div>
                             <div class="mb-1.5 flex items-center gap-1.5">
                                 <label class="text-sm font-medium"
@@ -224,6 +246,24 @@ function submit() {
                             </p>
                         </div>
                     </div>
+
+                    <ConditionsContrat
+                        v-model:duree="form.periode_essai_duree"
+                        v-model:unite="form.periode_essai_unite"
+                        v-model:heures="form.heures_hebdomadaires"
+                        v-model:motif="form.motif_cdd"
+                        :unites="unites_periode_essai"
+                        :est-cdd="isCdd"
+                        :requis="true"
+                        :errors="form.errors"
+                    />
+
+                    <p
+                        v-if="erreurPdg"
+                        class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                    >
+                        {{ erreurPdg }}
+                    </p>
                 </div>
 
                 <div class="flex items-center justify-between">
@@ -232,7 +272,11 @@ function submit() {
                             ><ArrowLeft class="mr-2 h-4 w-4" />Annuler</Button
                         >
                     </Link>
-                    <Button type="submit" :disabled="form.processing">
+                    <Button
+                        type="submit"
+                        :disabled="form.processing || !pdg"
+                        data-testid="creer-contrat"
+                    >
                         <Save class="mr-2 h-4 w-4" />
                         {{
                             form.processing

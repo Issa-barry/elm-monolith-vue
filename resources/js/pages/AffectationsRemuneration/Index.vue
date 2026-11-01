@@ -100,6 +100,8 @@ interface Affectation {
         periodicite: string;
         periodicite_label: string;
         nature_montant: string;
+        montant_defaut: number | null;
+        taux_defaut: number | null;
         proratisable: boolean;
         statut: string;
     };
@@ -563,10 +565,40 @@ const affectationSaisies = computed(
     () => props.affectations.find((a) => a.id === saisiesDe.value?.id) ?? null,
 );
 
+/**
+ * Proposition pour un montant variable : premier mois de la période d'effet sans montant saisi,
+ * et la valeur du dernier mois saisi, sinon la valeur par défaut du type. Simple préremplissage :
+ * le montant reste modifiable et suit la validation habituelle.
+ */
+function proposerSaisie(a: Affectation) {
+    const dejaSaisis = new Set(
+        a.saisies.map((s) => `${s.annee}-${String(s.mois).padStart(2, '0')}`),
+    );
+    const [anneeDebut, moisDebut] = a.date_debut.split('-').map(Number);
+    const fin = a.date_fin ? a.date_fin.slice(0, 7) : null;
+    let mois = '';
+    for (let i = 0; i < 36; i++) {
+        const d = new Date(anneeDebut, moisDebut - 1 + i, 1);
+        const cle = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (fin && cle > fin) break;
+        if (!dejaSaisis.has(cle)) {
+            mois = cle;
+            break;
+        }
+    }
+    const derniere = [...a.saisies].sort(
+        (x, y) => y.annee * 100 + y.mois - (x.annee * 100 + x.mois),
+    )[0];
+    formSaisie.mois = mois;
+    formSaisie.montant = derniere?.montant ?? a.type.montant_defaut ?? '';
+    formSaisie.taux = derniere?.taux ?? a.type.taux_defaut ?? '';
+}
+
 function ouvrirSaisies(a: Affectation) {
     saisiesDe.value = a;
     formSaisie.reset();
     formSaisie.clearErrors();
+    proposerSaisie(a);
 }
 
 function enregistrerSaisie(valider: boolean) {
@@ -590,6 +622,9 @@ function enregistrerSaisie(valider: boolean) {
             preserveScroll: true,
             onSuccess: () => {
                 formSaisie.reset();
+                if (affectationSaisies.value) {
+                    proposerSaisie(affectationSaisies.value);
+                }
             },
         });
 }
@@ -1550,6 +1585,16 @@ const champSelect =
                 {{ periode(affectationSaisies).toLowerCase() }}. Un mois sans
                 montant validé n’est pas transmis.
             </p>
+            <p
+                class="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground"
+                data-testid="aide-montant-variable"
+            >
+                Cette prime est à montant variable : un montant est saisi pour
+                chaque mois. Le mois suivant à saisir et le dernier montant (ou
+                le montant par défaut de la prime) sont proposés ; modifiez-les
+                si besoin. Une prime à montant fixe, elle, est reprise
+                automatiquement chaque mois, sans saisie.
+            </p>
 
             <div class="overflow-hidden rounded-lg border">
                 <p
@@ -1720,6 +1765,15 @@ const champSelect =
                         Enregistrer et valider
                     </Button>
                 </div>
+                <p class="text-right text-[11px] text-muted-foreground">
+                    « Enregistrer le montant » : il reste à valider par une
+                    personne habilitée avant d’être transmis à la paie.<template
+                        v-if="peutValider"
+                    >
+                        « Enregistrer et valider » : il est validé tout de
+                        suite.</template
+                    >
+                </p>
             </form>
         </div>
     </Dialog>

@@ -58,10 +58,22 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
 - **PRIME-006** — Suppression (`rh-types-remuneration.delete`) : possible **tant que le type n'a
   jamais été attribué** (décision du 28/10/2026) — une affectation, même annulée, compte ; sinon il
   se désactive. Un type déjà validé exige en plus le droit de validation.
-- **PRIME-007** — Un type déjà attribué garde ses caractéristiques de calcul (code, mode de calcul,
-  périodicité, nature du montant ; la catégorie, elle, ne se modifie jamais) : il faut créer un
-  nouveau type. Libellé, description,
-  valeurs par défaut et période restent modifiables.
+- **PRIME-007** — Type déjà attribué (révision du 31/10/2026, remplace le gel total) :
+  - le **code** ne change plus (il identifie les montants déjà transmis) ; la catégorie ne se
+    modifie jamais (ADR 0046) ;
+  - **ponctuelle → mensuelle** : toujours possible, sans effet sur les montants (une attribution
+    ponctuelle couvre un mois complet, ses dates restent les mêmes) ; les nouvelles attributions
+    suivent la périodicité mensuelle ;
+  - **mensuelle → ponctuelle, nature du montant, mode de calcul** : possibles seulement si aucune
+    attribution (hors annulées) ne porte sur un mois de paie encore ouvert (en cours, à venir, ou
+    terminée après le dernier mois figé — `CalendrierPaieService`). Sinon refus expliqué : la prime
+    continuerait d'être versée chaque mois, une attribution resterait sans montant (passage de
+    variable à fixe), ou un montant changerait de calcul. Terminer ou annuler ces attributions, ou
+    créer un nouveau type ;
+  - les mois figés ne sont jamais recalculés (transmission copiée) : aucun montant transmis, aucun
+    montant mensuel saisi ou validé n'est modifié ni dupliqué ;
+  - libellé, description, valeurs par défaut, période d'application, prorata et cumul restent
+    modifiables. Modifier un type validé exige toujours le droit de validation (PRIME-005).
 - **PRIME-008** — *Fermer* maintient les bénéficiaires actuels (leurs affectations continuent, un
   changement de montant reste possible) et refuse toute nouvelle attribution, y compris la
   validation d'une proposition en attente. *Désactiver* exige une **date d'effet** dès qu'une
@@ -121,12 +133,18 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
 - **AFF-009** — **Mois figés** : aucun début d'effet, changement de montant, fin d'effet (sauf au
   dernier jour du dernier mois figé), annulation ni montant mensuel ne peut toucher un mois figé. Un
   mois est figé dès qu'une version de sa transmission est validée, ou que la Comptabilité a validé
-  sa paie (`CalendrierPaieService`). Le message indique la première date possible.
+  sa paie (`CalendrierPaieService`). Annuler la validation (ADR 0047) le rouvre si aucune autre
+  version validée ne le fige. Le message indique la première date possible.
 - **AFF-010** — **Montants mensuels** (nature « saisi chaque mois ») : un montant (ou un taux) par
   mois, sur une affectation validée en vigueur ce mois-là ; « à valider » puis validé. Un montant
   validé ne se corrige ou ne se supprime qu'avec le droit de validation. Un mois sans montant validé
   n'est pas transmis (avertissement dans la transmission) ; un montant à valider bloque la
-  transmission du mois. Montant 0 accepté (rien ce mois-là).
+  transmission du mois. Montant 0 accepté (rien ce mois-là). **Préremplissage (31/10/2026)** :
+  la fenêtre propose le premier mois de la période d'effet encore sans montant, et la valeur du
+  dernier mois saisi, à défaut la valeur par défaut du type ; tout reste modifiable et suit la
+  validation habituelle (« Enregistrer le montant » = à valider, « Enregistrer et valider » =
+  validé tout de suite, réservé au droit de validation). Un type à montant **fixe** n'a jamais de
+  saisie mensuelle : son montant d'attribution est repris chaque mois.
 - **AFF-011** — **Avantage en nature** : attribué comme les autres, mais toujours **valorisé** —
   transmis à part, jamais dans le total versé.
 - **AFF-012** — **Annulation** : une proposition s'annule avec `rh-affectations-remuneration.delete`.

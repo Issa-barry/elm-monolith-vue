@@ -21,10 +21,12 @@ use App\Services\PhoneCountryInfo;
 use App\Services\Rh\AffectationRemunerationService;
 use App\Services\Rh\DepartEmployeService;
 use App\Services\Rh\EmployeAffectationService;
+use App\Services\Rh\PdgService;
 use App\Services\SiteScopeService;
 use App\Support\Rh\AffectationRemunerationPresenter;
 use App\Support\Rh\LiensContactUrgence;
 use App\Support\Rh\Nationalites;
+use App\Support\Rh\PerimetreEmploye;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -181,9 +183,15 @@ class EmployeController extends Controller
             });
         }
 
+        // Modifier / supprimer : agences de rattachement seulement (PerimetreEmploye), même avec la
+        // vision de toutes les agences en lecture. Calculé une fois pour toute la liste.
+        $sitesEcriture = $user->agitSurToutesLesAgences() ? null : app(SiteScopeService::class)->assignedSiteIds($user);
         $employes = $query->get()
             ->sortBy(['nom', 'prenom'])
-            ->map(fn (Employe $e) => $this->toRow($e))
+            ->map(fn (Employe $e) => [
+                ...$this->toRow($e),
+                'dans_perimetre_ecriture' => $sitesEcriture === null || ($e->site_id !== null && $sitesEcriture->contains($e->site_id)),
+            ])
             ->values();
 
         return Inertia::render('Employes/Index', [
@@ -350,14 +358,22 @@ class EmployeController extends Controller
     public function show(Employe $employe): Response
     {
         $this->authorize('view', $employe);
+        abort_unless(PerimetreEmploye::peutConsulter(auth()->user(), $employe), 403);
 
         $employe->load(['personne.user.roles']);
+        $pdgActuel = app(PdgService::class)->actuel($employe->organization_id);
 
         return Inertia::render('Employes/Show', [
             'employe' => array_merge($this->toDetail($employe), [
                 'compte' => $this->compteInfo($employe),
                 // Bouton « Enregistrer / Annuler le départ » : affiché seulement si le serveur l'accepterait.
                 'peut_gerer_depart' => DepartEmployeService::peutGerer(auth()->user(), $employe),
+                // Modifier : permission + agence de rattachement (PerimetreEmploye).
+                'dans_perimetre_ecriture' => PerimetreEmploye::peutModifier(auth()->user(), $employe),
+                // PDG de l'organisation (ADR 0048) : signataire des contrats de travail.
+                'est_pdg' => $pdgActuel?->id === $employe->id,
+                'pdg_actuel' => $pdgActuel ? PdgService::nom($pdgActuel) : null,
+                'peut_designer_pdg' => $employe->statut === StatutEmploye::ACTIF && PdgService::peutDesigner(auth()->user(), $employe),
             ]),
             'primes' => $this->primes($employe),
         ]);
@@ -415,6 +431,7 @@ class EmployeController extends Controller
     public function edit(Employe $employe): Response
     {
         $this->authorize('update', $employe);
+        abort_unless(PerimetreEmploye::peutModifier(auth()->user(), $employe), 403);
 
         $orgId = auth()->user()->organization_id;
 
@@ -435,6 +452,7 @@ class EmployeController extends Controller
     public function update(Request $request, Employe $employe): RedirectResponse
     {
         $this->authorize('update', $employe);
+        abort_unless(PerimetreEmploye::peutModifier(auth()->user(), $employe), 403);
 
         // Organisation de l'employé, pas celle de l'acteur : le Gate::before du super
         // administrateur laisse passer la Policy.
@@ -617,6 +635,7 @@ class EmployeController extends Controller
     public function transfererSite(Request $request, Employe $employe): RedirectResponse
     {
         $this->authorize('update', $employe);
+        abort_unless(PerimetreEmploye::peutModifier(auth()->user(), $employe), 403);
 
         $orgId = auth()->user()->organization_id;
 
@@ -637,7 +656,9 @@ class EmployeController extends Controller
     public function destroy(Employe $employe): RedirectResponse
     {
         $this->authorize('delete', $employe);
+        abort_unless(PerimetreEmploye::peutModifier(auth()->user(), $employe), 403);
 
+        app(PdgService::class)->retirerSiPdg($employe);
         $employe->delete();
 
         return redirect()->route('employes.index')

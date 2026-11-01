@@ -14,6 +14,7 @@ use App\Models\Personne;
 use App\Models\ServiceRh;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\ImportRh\ImportRhParser;
 use App\Services\Rh\ContratService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,6 +28,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Concerns\DesigneUnPdg;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -37,7 +39,7 @@ use Tests\TestCase;
  */
 class ImportRhTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use DesigneUnPdg, HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     private const COMPLET = [
         'rh-employes.read', 'rh-employes.update', 'rh-contrats.create',
@@ -59,6 +61,8 @@ class ImportRhTest extends TestCase
         $this->site = Site::where('organization_id', $this->org->id)->firstOrFail();
         $this->logistique = ServiceRh::create(['organization_id' => $this->org->id, 'libelle' => 'Logistique', 'code' => 'LOG']);
         $this->gerant = FonctionRh::create(['organization_id' => $this->org->id, 'libelle' => 'Gérant de dépôt', 'code' => 'GDD', 'is_active' => true]);
+        // Signataire des contrats (ADR 0048) : sans lui, l'import ne crée aucun contrat.
+        $this->designerPdg($this->org);
     }
 
     // ── Aides ─────────────────────────────────────────────────────────────────
@@ -441,6 +445,38 @@ class ImportRhTest extends TestCase
 
         $sansImport = $this->utilisateur(['rh-employes.read', 'rh-employes.update'], 'admin_entreprise');
         $this->actingAs($sansImport)->get(route('employes.imports.index'))->assertForbidden();
+    }
+
+    public function test_sans_pdg_le_dossier_est_importe_mais_aucun_contrat_n_est_cree(): void
+    {
+        $this->org->forceFill(['pdg_employe_id' => null])->save();
+        $employe = $this->salarie('004213');
+        $ligneFichier = [
+            'matricule' => '004213', 'date_embauche' => '01/03/2024', 'fonction' => 'GDD',
+            'contrat_type' => 'CDI', 'contrat_date_debut' => '01/03/2024', 'salaire_base' => '2 500 000',
+        ];
+
+        $import = $this->deposer([$ligneFichier]);
+
+        // Pas d'erreur (une erreur bloquerait tout le fichier) : un avertissement explique pourquoi.
+        $ligne = $this->ligne($import, '004213');
+        $this->assertSame([], $ligne['erreurs']);
+        $this->assertSame([ImportRhParser::AVERTISSEMENT_SANS_PDG], $ligne['avertissements']);
+        $this->assertNull($ligne['mise_a_jour']['contrat']);
+
+        $this->confirmer($import)->assertSessionHasNoErrors();
+        $this->assertSame('2024-03-01', $employe->fresh()->date_embauche->toDateString());
+        $this->assertSame($this->gerant->id, $employe->fresh()->fonction_rh_id);
+        $this->assertSame(0, Contrat::count());
+        $this->assertSame(StatutImportRh::TERMINE, $import->fresh()->statut);
+        $this->assertSame(0, $import->fresh()->nb_contrats_crees);
+
+        // Le PDG désigné, la même ligne crée le contrat.
+        $this->designerPdg($this->org);
+        $reimport = $this->deposer([$ligneFichier]);
+        $this->assertSame([], $this->ligne($reimport, '004213')['avertissements']);
+        $this->confirmer($reimport)->assertSessionHasNoErrors();
+        $this->assertEquals(2_500_000, (float) Contrat::where('employe_id', $employe->id)->sole()->salaire_base);
     }
 
     public function test_sans_droit_de_creer_un_contrat_la_ligne_est_refusee(): void

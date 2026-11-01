@@ -3,6 +3,7 @@
 namespace App\Services\Rh;
 
 use App\Enums\StatutContrat;
+use App\Enums\StatutEmploye;
 use App\Enums\TypeContrat;
 use App\Models\Contrat;
 use App\Models\Employe;
@@ -28,6 +29,7 @@ class ContratService
 
         return DB::transaction(function () use ($data, $organizationId) {
             $employe = $this->verrouillerEmploye($data['employe_id'], $organizationId);
+            $this->assertPasSorti($employe);
             $this->assertAucunAutreContratActif($employe->id);
             $this->assertPasDeChevauchement($employe->id, $data['date_debut'], $data['date_fin'] ?? null);
 
@@ -44,6 +46,20 @@ class ContratService
                 'statut_contrat' => StatutContrat::ACTIF->value,
             ]);
         });
+    }
+
+    /**
+     * Salarié sorti (DepartEmployeService) : aucun contrat actif ne peut lui être créé ou rendu,
+     * tant qu'une procédure de réembauche n'est pas définie — un contrat ne le réactiverait pas et
+     * la paie s'arrêterait toujours à sa date de sortie. Le salarié n'est jamais réactivé ici.
+     */
+    public function assertPasSorti(Employe $employe): void
+    {
+        if ($employe->statut === StatutEmploye::SORTI) {
+            throw ValidationException::withMessages([
+                'employe_id' => 'Ce salarié est sorti de l’entreprise : aucun contrat ne peut lui être créé tant qu’une procédure de réembauche n’est pas définie. Si le départ a été enregistré par erreur, annulez-le depuis sa fiche.',
+            ]);
+        }
     }
 
     /**

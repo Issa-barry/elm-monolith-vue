@@ -31,9 +31,9 @@ trait PrepareLaPaieDepuisLesRh
         $existante = TransmissionPaie::where('organization_id', $org->id)->where('annee', $annee)->where('mois', $mois)
             ->whereIn('statut', TransmissionPaie::STATUTS_FIGES)->exists();
         $transmission = $service->preparer($acteur, $annee, $mois, $existante ? 'Correction de test' : null);
-        $service->valider($transmission, $acteur);
 
-        return $service->transmettre($transmission->fresh(), $acteur)->fresh();
+        // ADR 0047 : la validation RH met la version à disposition de la Comptabilité.
+        return $service->valider($transmission, $acteur)->fresh();
     }
 
     /**

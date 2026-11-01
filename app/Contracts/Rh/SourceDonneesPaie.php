@@ -13,7 +13,15 @@ use Illuminate\Support\Collection;
  */
 interface SourceDonneesPaie
 {
-    /** Version transmise en vigueur pour le mois (null si rien n'a encore été transmis). */
+    /**
+     * Brouillon RH du mois, en lecture seule et provisoire (ADR 0047) : la Comptabilité le voit sans
+     * pouvoir le reprendre ni le payer. Null s'il n'y en a pas.
+     *
+     * @return array{version: int, nb_salaries: int, total_verse: float, total_valorise: float, nb_anomalies_bloquantes: int, a_jour: bool, preparee_le: ?string}|null
+     */
+    public function brouillonEnCours(string $organizationId, int $annee, int $mois): ?array;
+
+    /** Version validée par les RH en vigueur pour le mois (null si aucune). */
     public function transmissionCourante(string $organizationId, int $annee, int $mois): ?TransmissionPaie;
 
     /**

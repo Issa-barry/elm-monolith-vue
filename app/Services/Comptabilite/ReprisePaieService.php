@@ -64,6 +64,9 @@ class ReprisePaieService
         $reprise = $periode->transmission_paie_id !== null ? TransmissionPaie::find($periode->transmission_paie_id) : null;
         $verrouillee = $periode->statut instanceof StatutPeriodePaie && $periode->statut->estVerrouille();
 
+        $brouillon = $verrouillee ? null : $this->source->brouillonEnCours($periode->organization_id, $periode->annee, $periode->mois);
+        $aJour = $courante !== null && $reprise?->id === $courante->id;
+
         return [
             'courante' => $courante !== null ? $this->resume($courante) + [
                 'transmise_le' => $courante->transmise_le?->format('d/m/Y à H:i'),
@@ -72,9 +75,46 @@ class ReprisePaieService
                 'reprise_le' => $periode->reprise_le?->format('d/m/Y à H:i'),
                 'reprise_par' => $periode->repreneur?->name,
             ] : null,
-            'a_jour' => $courante !== null && $reprise?->id === $courante->id,
+            // Brouillon RH, lecture seule et provisoire : jamais repris ni payé (ADR 0047).
+            'brouillon' => $brouillon,
+            'a_jour' => $aJour,
             'a_reprendre' => ! $verrouillee && $courante !== null && $reprise?->id !== $courante->id,
+            'etape' => $this->etape($periode, $verrouillee, $courante, $aJour, $brouillon),
         ];
+    }
+
+    /**
+     * Où en est la paie du mois, vue de la Comptabilité (ADR 0047) : code (couleur, StatusDot) et
+     * libellé. Les étapes comptables priment sur l'état RH.
+     *
+     * @param  array<string, mixed>|null  $brouillon
+     * @return array{code: string, label: string}
+     */
+    private function etape(PaiePeriode $periode, bool $verrouillee, ?TransmissionPaie $courante, bool $aJour, ?array $brouillon): array
+    {
+        if ($verrouillee) {
+            return match ($periode->statut) {
+                StatutPeriodePaie::PAYE => ['code' => 'paye', 'label' => 'Payée'],
+                StatutPeriodePaie::CLOTURE => ['code' => 'cloture', 'label' => 'Clôturée'],
+                default => ['code' => 'valide_rh', 'label' => 'Validée par la Comptabilité'],
+            };
+        }
+        if ($courante !== null) {
+            return $aJour
+                ? ['code' => 'paie_reprise', 'label' => 'Reprise par la Comptabilité, à valider']
+                : ['code' => 'paie_validee_rh', 'label' => 'Validée et figée par les RH'];
+        }
+        if ($brouillon !== null) {
+            if (! $brouillon['a_jour']) {
+                return ['code' => 'paie_a_recalculer', 'label' => 'Brouillon RH à recalculer'];
+            }
+
+            return $brouillon['nb_anomalies_bloquantes'] > 0
+                ? ['code' => 'paie_brouillon', 'label' => 'Brouillon provisoire, anomalies à corriger côté RH']
+                : ['code' => 'paie_prete_a_valider', 'label' => 'Prête à valider côté RH'];
+        }
+
+        return ['code' => 'paie_aucune', 'label' => 'Aucune paie préparée par les RH'];
     }
 
     /** Droits seuls (organisation, permission, toutes les agences), sans l'état de la période. */

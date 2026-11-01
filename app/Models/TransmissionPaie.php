@@ -80,7 +80,7 @@ class TransmissionPaie extends Model
     {
         static::updating(function (self $transmission) {
             $statutAvant = StatutTransmissionPaie::from((string) $transmission->getRawOriginal('statut'));
-            if (! $statutAvant->estFigee()) {
+            if (! $statutAvant->estConservee()) {
                 return;
             }
 
@@ -91,7 +91,7 @@ class TransmissionPaie extends Model
         });
 
         static::deleting(function (self $transmission) {
-            if (StatutTransmissionPaie::from((string) $transmission->getRawOriginal('statut'))->estFigee()) {
+            if (StatutTransmissionPaie::from((string) $transmission->getRawOriginal('statut'))->estConservee()) {
                 throw new LogicException('Version de transmission figée : suppression refusée.');
             }
         });

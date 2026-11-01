@@ -95,7 +95,7 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 | `rh-employes.read` / `.create` / `.update` / `.delete` | Dossier (hors données sensibles et salaires) | inchangé |
 | `rh-employes.donnees_sensibles` | Voir et modifier le n° CNSS ; voir les coordonnées de paiement déjà enregistrées | super_admin, admin_entreprise |
 | `rh-remunerations.read` | Voir et saisir le salaire (fiche employé, contrats) | super_admin, admin_entreprise, manager |
-| `rh-referentiels.gerer` | Gérer les fonctions et services RH, et les modèles de contrat ([rh-contrat-pdf.md](rh-contrat-pdf.md)) | super_admin, admin_entreprise |
+| `rh-referentiels.gerer` | Gérer les fonctions et services RH, les modèles de contrat et désigner le PDG de l'organisation, signataire des contrats ([rh-contrat-pdf.md](rh-contrat-pdf.md), ADR 0048) | super_admin, admin_entreprise |
 
 - Sans la permission, la donnée n'est **pas envoyée** au navigateur, et une valeur envoyée est
   ignorée (la donnée existante reste intacte).
@@ -108,6 +108,17 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 Limitées aux agences de l'utilisateur (agence actuelle de l'employé), sauf vision de toutes les
 agences (ADR 0025) ; un employé sans agence n'apparaît qu'à ces derniers. Filtre Agence
 (`site_ids[]`), plus filtre Service pour les employés.
+
+**Fiche et contrats (31/10/2026)** : même cloisonnement en accès direct, vérifié par le serveur
+(`App\Support\Rh\PerimetreEmploye`, règle unique aussi utilisée par les primes et le départ) :
+- consulter la fiche : agences de rattachement, ou vision de toutes les agences ;
+- modifier, transférer, supprimer l'employé, créer, modifier ou supprimer ses contrats : agences de
+  rattachement, sauf administrateur ou superviseur (ADR 0034) — la vision de toutes les agences
+  n'ouvre que la lecture ;
+- toujours limité à l'organisation, super administrateur compris.
+Les boutons Modifier / Supprimer / Nouveau contrat de la liste et de la fiche suivent la même règle
+(`dans_perimetre_ecriture` calculé par le serveur). Le formulaire de création de contrat ne propose
+que les salariés actifs des agences de rattachement.
 
 ## Modification
 

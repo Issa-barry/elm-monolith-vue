@@ -199,6 +199,7 @@ use App\Http\Controllers\Rh\Contrats\ShowDocumentContratController;
 use App\Http\Controllers\Rh\Contrats\TelechargerContratController;
 use App\Http\Controllers\Rh\Contrats\TelechargerDocumentContratController;
 use App\Http\Controllers\Rh\Employes\AnnulerDepartEmployeController;
+use App\Http\Controllers\Rh\Employes\DesignerPdgController;
 use App\Http\Controllers\Rh\Employes\EnregistrerDepartEmployeController;
 use App\Http\Controllers\Rh\Imports\AbandonnerImportRhController;
 use App\Http\Controllers\Rh\Imports\ConfirmImportRhController;
@@ -893,6 +894,8 @@ Route::prefix('backoffice')->group(function () {
                 ->name('employes.transferer-site');
             Route::post('employes/{employe}/depart', EnregistrerDepartEmployeController::class)->name('employes.depart.store');
             Route::delete('employes/{employe}/depart', AnnulerDepartEmployeController::class)->name('employes.depart.destroy');
+            // PDG de l'organisation, signataire des contrats de travail (ADR 0048).
+            Route::post('employes/{employe}/designer-pdg', DesignerPdgController::class)->name('employes.designer-pdg');
             // Pas de create()/edit() : la création/modification se fait exclusivement en popup
             // (écran Fonctions RH ou sélecteur embarqué Employé/validation de compte), mirroring
             // les routes produits/categories — jamais de navigation vers une page dédiée.
@@ -947,6 +950,7 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('{transmission}/abandonner', [TransmissionPaieController::class, 'abandonner'])->name('abandonner');
                 Route::post('{transmission}/valider', [TransmissionPaieController::class, 'valider'])->name('valider');
                 Route::post('{transmission}/transmettre', [TransmissionPaieController::class, 'transmettre'])->name('transmettre');
+                Route::post('{transmission}/annuler-validation', [TransmissionPaieController::class, 'annulerValidation'])->name('annuler-validation');
             });
             Route::resource('contrats', ContratController::class)->except(['show']);
             // Contrat de travail généré (docs/rh-contrat-pdf.md, ADR 0044) ; ?preview=1 = aperçu.
