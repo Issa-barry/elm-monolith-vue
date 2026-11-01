@@ -10,6 +10,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     Briefcase,
+    Crown,
     Gift,
     History,
     Loader2,
@@ -92,6 +93,10 @@ interface EmployeData {
     peut_gerer_depart: boolean;
     // Modifier, nouveau contrat : agence de rattachement (calculé par le serveur).
     dans_perimetre_ecriture: boolean;
+    // PDG de l'organisation (ADR 0048) : bouton calculé par le serveur (rh-referentiels.gerer).
+    est_pdg: boolean;
+    pdg_actuel: string | null;
+    peut_designer_pdg: boolean;
 }
 
 interface PrimeRow {
@@ -164,6 +169,23 @@ function annulerDepart() {
     });
 }
 
+// PDG de l'organisation, signataire des contrats de travail (docs/rh-contrat-pdf.md, ADR 0048).
+const pdgOuvert = ref(false);
+const designationPdg = useForm({});
+const erreurPdg = computed(
+    () => (designationPdg.errors as Record<string, string | undefined>).pdg,
+);
+
+function designerPdg() {
+    designationPdg.post(
+        `/backoffice/employes/${props.employe.id}/designer-pdg`,
+        {
+            preserveScroll: true,
+            onSuccess: () => (pdgOuvert.value = false),
+        },
+    );
+}
+
 /** Date ISO (AAAA-MM-JJ) → JJ/MM/AAAA, sans dépendre du fuseau du navigateur. */
 function dateFr(iso: string | null): string {
     if (!iso) return '—';
@@ -196,9 +218,28 @@ function dateFr(iso: string | null): string {
                         >
                         <span aria-hidden="true">·</span>
                         <span>{{ employe.type_employe_label }}</span>
+                        <template v-if="employe.est_pdg">
+                            <span aria-hidden="true">·</span>
+                            <span
+                                class="inline-flex items-center gap-1 font-medium text-foreground"
+                                data-testid="badge-pdg"
+                                ><Crown class="h-3.5 w-3.5" />PDG de
+                                l’organisation (signataire des contrats)</span
+                            >
+                        </template>
                     </div>
                 </template>
                 <template #actions>
+                    <Button
+                        v-if="employe.peut_designer_pdg && !employe.est_pdg"
+                        variant="outline"
+                        size="sm"
+                        data-testid="designer-pdg"
+                        @click="pdgOuvert = true"
+                    >
+                        <Crown class="mr-1.5 h-4 w-4" />
+                        Désigner comme PDG
+                    </Button>
                     <Link
                         v-if="
                             can('rh-contrats.create') &&
@@ -901,6 +942,62 @@ function dateFr(iso: string | null): string {
                             class="mr-1.5 h-3.5 w-3.5 animate-spin"
                         />
                         Annuler le départ
+                    </Button>
+                </div>
+            </div>
+        </Dialog>
+
+        <Dialog
+            :visible="pdgOuvert"
+            modal
+            :closable="!designationPdg.processing"
+            header="Désigner comme PDG"
+            :style="{ width: '28rem' }"
+            @update:visible="
+                (v: boolean) => {
+                    if (!v && !designationPdg.processing) pdgOuvert = false;
+                }
+            "
+        >
+            <div class="space-y-4">
+                <p class="text-sm text-muted-foreground">
+                    {{ employe.nom_complet }} deviendra le PDG de l’organisation
+                    : son nom et sa qualité (Président-directeur général)
+                    figureront comme représentant de l’employeur sur tous les
+                    contrats de travail.
+                </p>
+                <p
+                    v-if="employe.pdg_actuel"
+                    class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+                >
+                    {{ employe.pdg_actuel }} ne sera plus PDG. Les contrats déjà
+                    signés ne changent pas.
+                </p>
+                <p
+                    v-if="erreurPdg"
+                    class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                    {{ erreurPdg }}
+                </p>
+                <div class="flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        :disabled="designationPdg.processing"
+                        @click="pdgOuvert = false"
+                        >Annuler</Button
+                    >
+                    <Button
+                        size="sm"
+                        :disabled="designationPdg.processing"
+                        data-testid="confirmer-designer-pdg"
+                        @click="designerPdg"
+                    >
+                        <Loader2
+                            v-if="designationPdg.processing"
+                            class="mr-1.5 h-3.5 w-3.5 animate-spin"
+                        />
+                        Confirmer
                     </Button>
                 </div>
             </div>

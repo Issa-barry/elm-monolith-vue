@@ -13,6 +13,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Concerns\DesigneUnPdg;
 use Tests\TestCase;
 
 /**
@@ -22,6 +23,7 @@ use Tests\TestCase;
  */
 class PerimetreEmployeTest extends TestCase
 {
+    use DesigneUnPdg;
     use RefreshDatabase;
 
     private const DROITS = [
@@ -96,6 +98,7 @@ class PerimetreEmployeTest extends TestCase
         $this->actingAs($cba)->delete(route('contrats.destroy', $contrat))->assertForbidden();
         $contrat->update(['statut_contrat' => 'termine', 'date_fin' => '2025-12-31']);
         $this->actingAs($cba)->post(route('contrats.store'), [
+            ...$this->conditionsContrat(),
             'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2026-01-01',
         ])->assertForbidden();
 

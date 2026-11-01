@@ -95,7 +95,7 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 | `rh-employes.read` / `.create` / `.update` / `.delete` | Dossier (hors données sensibles et salaires) | inchangé |
 | `rh-employes.donnees_sensibles` | Voir et modifier le n° CNSS ; voir les coordonnées de paiement déjà enregistrées | super_admin, admin_entreprise |
 | `rh-remunerations.read` | Voir et saisir le salaire (fiche employé, contrats) | super_admin, admin_entreprise, manager |
-| `rh-referentiels.gerer` | Gérer les fonctions et services RH, et les modèles de contrat ([rh-contrat-pdf.md](rh-contrat-pdf.md)) | super_admin, admin_entreprise |
+| `rh-referentiels.gerer` | Gérer les fonctions et services RH, les modèles de contrat et désigner le PDG de l'organisation, signataire des contrats ([rh-contrat-pdf.md](rh-contrat-pdf.md), ADR 0048) | super_admin, admin_entreprise |
 
 - Sans la permission, la donnée n'est **pas envoyée** au navigateur, et une valeur envoyée est
   ignorée (la donnée existante reste intacte).

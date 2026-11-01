@@ -21,6 +21,7 @@ use App\Services\PhoneCountryInfo;
 use App\Services\Rh\AffectationRemunerationService;
 use App\Services\Rh\DepartEmployeService;
 use App\Services\Rh\EmployeAffectationService;
+use App\Services\Rh\PdgService;
 use App\Services\SiteScopeService;
 use App\Support\Rh\AffectationRemunerationPresenter;
 use App\Support\Rh\LiensContactUrgence;
@@ -360,6 +361,7 @@ class EmployeController extends Controller
         abort_unless(PerimetreEmploye::peutConsulter(auth()->user(), $employe), 403);
 
         $employe->load(['personne.user.roles']);
+        $pdgActuel = app(PdgService::class)->actuel($employe->organization_id);
 
         return Inertia::render('Employes/Show', [
             'employe' => array_merge($this->toDetail($employe), [
@@ -368,6 +370,10 @@ class EmployeController extends Controller
                 'peut_gerer_depart' => DepartEmployeService::peutGerer(auth()->user(), $employe),
                 // Modifier : permission + agence de rattachement (PerimetreEmploye).
                 'dans_perimetre_ecriture' => PerimetreEmploye::peutModifier(auth()->user(), $employe),
+                // PDG de l'organisation (ADR 0048) : signataire des contrats de travail.
+                'est_pdg' => $pdgActuel?->id === $employe->id,
+                'pdg_actuel' => $pdgActuel ? PdgService::nom($pdgActuel) : null,
+                'peut_designer_pdg' => $employe->statut === StatutEmploye::ACTIF && PdgService::peutDesigner(auth()->user(), $employe),
             ]),
             'primes' => $this->primes($employe),
         ]);
@@ -652,6 +658,7 @@ class EmployeController extends Controller
         $this->authorize('delete', $employe);
         abort_unless(PerimetreEmploye::peutModifier(auth()->user(), $employe), 403);
 
+        app(PdgService::class)->retirerSiPdg($employe);
         $employe->delete();
 
         return redirect()->route('employes.index')

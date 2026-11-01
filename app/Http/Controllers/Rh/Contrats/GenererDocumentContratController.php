@@ -5,14 +5,16 @@ namespace App\Http\Controllers\Rh\Contrats;
 use App\Http\Controllers\Controller;
 use App\Models\Contrat;
 use App\Services\Rh\DocumentContratService;
-use App\Support\Rh\Contrats\VariablesContrat;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 /**
- * « Générer le PDF » (ADR 0044) : nouvelle version du contrat, à partir du modèle actif du type.
- * Accès en écriture : `rh-contrats.update`, `rh-remunerations.read` et agence du salarié dans les
- * agences de rattachement.
+ * « Mettre à jour le PDF » (ADR 0048) : nouvelle tentative après un échec, ou nouvelle version à
+ * faire signer après une version signée. Le PDF est d'ordinaire produit tout seul à la création et
+ * à la modification du contrat ; rien n'est créé si le contenu n'a pas changé. Accès en écriture :
+ * `rh-contrats.update`, `rh-remunerations.read` et agence du salarié dans les agences de
+ * rattachement.
  */
 class GenererDocumentContratController extends Controller
 {
@@ -22,14 +24,18 @@ class GenererDocumentContratController extends Controller
     {
         $this->verifierAccesContrat($request->user(), $contrat, ecriture: true);
 
-        $regles = ['avantages' => ['array', 'max:50'], 'avantages.*' => ['string', 'max:26']];
-        foreach (array_keys(VariablesContrat::CHAMPS_SAISIS) as $champ) {
-            $regles["champs.$champ"] = ['nullable', 'string', 'max:500'];
+        try {
+            $document = $documents->actualiser($contrat, $request->user(), apresSignature: true);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', DocumentContratService::MESSAGE_ECHEC_TECHNIQUE);
         }
-        $data = $request->validate($regles, ['champs.*.max' => 'Chaque champ est limité à 500 caractères.']);
 
-        $document = $documents->generer($contrat, $data['champs'] ?? [], $data['avantages'] ?? [], $request->user());
-
-        return back()->with('success', 'Contrat généré (version '.$document->version.'). Il reste à le faire signer.');
+        return back()->with('success', $document
+            ? 'PDF du contrat prêt (version '.$document->version.'). Il reste à le faire signer.'
+            : 'Le PDF est déjà à jour.');
     }
 }

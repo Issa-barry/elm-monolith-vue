@@ -15,6 +15,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Concerns\DesigneUnPdg;
 use Tests\TestCase;
 
 /**
@@ -24,6 +25,7 @@ use Tests\TestCase;
  */
 class DepartEmployeTest extends TestCase
 {
+    use DesigneUnPdg;
     use RefreshDatabase;
 
     private const DROITS = ['rh-employes.read', 'rh-employes.update', 'rh-contrats.update'];
@@ -38,6 +40,7 @@ class DepartEmployeTest extends TestCase
         Carbon::setTestNow('2026-10-20 10:00:00');
         app(PermissionRegistrar::class)->forgetCachedPermissions();
         $this->org = Organization::factory()->create();
+        $this->designerPdg($this->org);
         $this->site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'depot']);
     }
 
@@ -251,7 +254,7 @@ class DepartEmployeTest extends TestCase
         $this->partir($user, $employe)->assertSessionHasNoErrors();
 
         $this->actingAs($user)->post(route('contrats.store'), [
-            'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2026-10-19',
+            ...$this->conditionsContrat(), 'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2026-10-19',
         ])->assertSessionHasErrors('employe_id');
         $this->assertSame(1, Contrat::where('employe_id', $employe->id)->count());
 
@@ -274,7 +277,7 @@ class DepartEmployeTest extends TestCase
         $user = $this->utilisateur([...self::DROITS, 'rh-contrats.read', 'rh-contrats.create']);
 
         $this->actingAs($user)->post(route('contrats.store'), [
-            'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2026-07-01',
+            ...$this->conditionsContrat(), 'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2026-07-01',
         ])->assertSessionHasNoErrors();
 
         $this->assertSame(2, Contrat::where('employe_id', $employe->id)->count());

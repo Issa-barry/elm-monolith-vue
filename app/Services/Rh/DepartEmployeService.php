@@ -71,6 +71,8 @@ class DepartEmployeService
                 'date_sortie' => $dateSortie->toDateString(),
                 'motif_sortie' => trim($motif),
             ]);
+            // Le PDG qui part n'est plus signataire : un successeur sera à désigner (ADR 0048).
+            app(PdgService::class)->retirerSiPdg($employe);
 
             return $employe;
         });

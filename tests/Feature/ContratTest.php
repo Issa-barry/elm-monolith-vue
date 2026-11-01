@@ -13,10 +13,12 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Concerns\DesigneUnPdg;
 use Tests\TestCase;
 
 class ContratTest extends TestCase
 {
+    use DesigneUnPdg;
     use RefreshDatabase;
 
     private Organization $org;
@@ -31,6 +33,7 @@ class ContratTest extends TestCase
 
         $this->org = Organization::factory()->create();
         $this->site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Dépôt', 'type' => 'depot']);
+        $this->designerPdg($this->org);
         $this->user = $this->makeUser([
             'rh-contrats.read', 'rh-contrats.create', 'rh-contrats.update', 'rh-contrats.delete',
             'rh-employes.read',
@@ -121,6 +124,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -139,6 +143,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -157,6 +162,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdd',
                 'date_debut' => '2025-01-01',
@@ -170,6 +176,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdd',
                 'date_debut' => '2025-06-01',
@@ -184,6 +191,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdd',
                 'date_debut' => '2025-01-01',
@@ -204,6 +212,7 @@ class ContratTest extends TestCase
 
         $response = $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-06-01',
@@ -220,6 +229,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-06-01',
@@ -244,6 +254,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'ctt',
                 'date_debut' => '2025-01-01',
@@ -260,6 +271,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $otherEmploye->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -364,6 +376,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -404,6 +417,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -428,7 +442,7 @@ class ContratTest extends TestCase
         Permission::firstOrCreate(['name' => 'rh-remunerations.read', 'guard_name' => 'web']);
         $this->user->givePermissionTo('rh-remunerations.read');
         $employe = $this->makeEmploye();
-        $donnees = ['employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2025-01-01'];
+        $donnees = [...$this->conditionsContrat(), 'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2025-01-01'];
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [...$donnees, 'salaire_base' => '750 000'])
