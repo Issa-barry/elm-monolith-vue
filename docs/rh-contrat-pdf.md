@@ -1,101 +1,173 @@
 # Contrats de travail générés (PDF)
 
-Décision : [ADR 0044](adr/0044-contrat-de-travail-genere-modele-versions.md). Le salarié et son
-contrat apportent les données, le **modèle** apporte le texte, le générateur produit le PDF dans le
-modèle officiel partagé ([documents-pdf.md](documents-pdf.md)). Il remplace le récapitulatif PDF
-livré le 30/10/2026 (commit 743ab859).
+Décisions : [ADR 0044](adr/0044-contrat-de-travail-genere-modele-versions.md) (modèle par type,
+instantané figé, versions) et [ADR 0048](adr/0048-contrat-genere-automatiquement-pdg-signataire.md)
+(génération automatique, PDG signataire). Le salarié, son contrat, le PDG et l'agence apportent les
+données, le **modèle** apporte le texte, le PDF est produit dans le modèle officiel partagé
+([documents-pdf.md](documents-pdf.md)). **Aucune saisie au moment de la génération, aucun bouton
+« Générer »** : le PDF est produit dès la création du contrat et remis à jour à chaque modification.
 
-## 1. Modèles de contrat — Paramètres → RH → Modèles de contrat
+## 1. PDG de l'organisation — RH → Employés → fiche → « Désigner comme PDG »
 
-- **Un modèle par type** (CDI, CDD) et par organisation : intitulé + articles (titre, texte).
-- Tant qu'aucun modèle n'est enregistré, l'écran présente la **trame de l'application** : douze
-  articles (objet, nature, durée et prise d'effet, fonction, lieu de travail, période d'essai,
-  rémunération, durée du travail/congés/absences, obligations, rupture, dispositions finales,
-  signatures). C'est une **structure fonctionnelle, pas un texte juridique validé**.
-- Statuts : **brouillon** (aucune génération possible) → **actif**. L'activation demande de
-  confirmer que le texte a été relu et adapté au droit applicable ; « Repasser en brouillon »
-  bloque à nouveau la génération. Un modèle actif modifié reste actif.
-- Chaque enregistrement incrémente la **révision**, tracée dans chaque contrat généré.
-- **Texte brut uniquement** (pas de HTML ni d'éditeur riche) : un paragraphe par ligne vide, un
-  retour à la ligne simple est conservé. Le texte est toujours échappé dans le PDF.
-- Permission : `rh-referentiels.gerer` (comme Fonctions et Services RH).
+- Le PDG est un **employé RH actif**, désigné depuis sa fiche (permission `rh-referentiels.gerer`,
+  bouton masqué sans elle). Il est le représentant de l'employeur et le **signataire de tous les
+  contrats** ; qualité imprimée : « Président-directeur général ». Ce n'est ni un rôle ni une
+  permission informatique.
+- **Un seul PDG par organisation** (`organizations.pdg_employe_id`). Désigner un autre employé
+  remplace le précédent (confirmation, journal d'audit). Un employé ne peut pas être PDG de deux
+  organisations ; un employé d'une autre organisation ou sorti ne peut pas être désigné.
+- Le départ ou la suppression du PDG retire la désignation : un successeur est à désigner.
+- **Sans PDG** : « Nouveau contrat » affiche le message et la création est refusée par le serveur
+  (« … Veuillez désigner un PDG dans le module RH (RH → Employés → fiche de la personne → « Désigner
+  comme PDG ») »). Aucun autre salarié n'est jamais pris à sa place. Les dossiers des salariés
+  restent consultables, modifiables et importables ; l'import Excel met les dossiers à jour mais
+  ne crée aucun contrat (avertissement sur la ligne, [import-dossiers-rh.md](import-dossiers-rh.md)
+  IMPRH-006 bis).
 
-### Variables
+## 2. Créer un contrat — RH → Contrats → Nouveau contrat
 
-Écrites `{{cle}}` (liste complète et cliquable dans l'éditeur, `VariablesContrat::CATALOGUE`) :
+L'utilisateur saisit seulement ce que l'application ne connaît pas :
+
+| Champ | Règle (vérifiée par le serveur) |
+|---|---|
+| Employé, type (CDI/CDD), date de début, date de fin (CDD) | inchangés |
+| Salaire de base | avec `rh-remunerations.read` seulement (ignoré sinon) |
+| **Période d'essai** | deux champs : un **nombre entier ≥ 0** (pas de lettres, pas de négatif, pas de décimale, ≤ 99) et **Semaines / Mois** (obligatoire si le nombre > 0). **0 = aucune** : le contrat indique « aucune » |
+| **Heures de travail par semaine** | nombre **> 0 et ≤ 168**, deux décimales au plus (37,5 accepté) ; l'unité « heures/semaine » est affichée, jamais saisie |
+| **Motif du CDD** | CDD seulement |
+
+- Période d'essai, heures et motif du CDD sont **obligatoires à la création**, facultatifs en
+  modification (contrats antérieurs : le PDF signale alors ce qui manque).
+- Le statut n'est plus proposé à la création : un nouveau contrat est toujours actif.
+- **« Créer le contrat »** enregistre le contrat **puis produit le PDF** (version 1, « à signer »)
+  et ouvre la page du contrat. Le PDF est associé au contrat et à son organisation.
+
+### Primes ajoutées à la création (01/11/2026)
+
+Section facultative **« Primes et avantages »**, bouton **« Ajouter une prime »**, autant de lignes
+que nécessaire. Visible seulement avec `rh-affectations-remuneration.create` **et**
+`rh-affectations-remuneration.valider` ; le serveur refuse (403) des lignes envoyées sans ces deux
+droits. Le reste du contrat ne change pas pour les autres utilisateurs.
+
+- **Uniquement des primes validées** (décision du 01/11/2026) : une prime créée ici est validée à
+  l'enregistrement, jamais « à valider », et figure donc dans le PDF. Seuls les types actifs sont
+  proposés.
+- **Une ligne** : prime, montant (ou taux en % du salaire de base, ou rien pour un montant saisi
+  chaque mois), date « À partir du » (ou mois de versement pour une prime ponctuelle). La périodicité
+  est celle du type, affichée sans être choisie. Montant et taux par défaut du type sont proposés.
+- **Date proposée** : le début du contrat, ou le premier jour modifiable si ce mois est figé ; le
+  mois suivant pour une prime ponctuelle si le contrat commence en cours de mois (elle couvre le mois
+  entier). Modifiable ; une date non modifiée suit celle du contrat.
+- **Fin** : une prime mensuelle s'arrête à la fin du CDD, ou plus tôt si le type prend fin avant.
+  Refus si elle commence avant le contrat ou après la fin du CDD.
+- **Doublons** : une prime déjà attribuée au salarié sur la période, ou déjà choisie sur une autre
+  ligne, n'est pas proposée (`resources/js/lib/primesAttribuees.ts`). Le serveur applique les règles
+  de `AffectationRemunerationService::affecter()` (AFF-002 à AFF-005, AFF-009).
+- **Une seule opération** (`ContratService::creerAvecPrimes`) : si une ligne est refusée, ni le
+  contrat ni aucune prime n'est enregistré, et l'erreur s'affiche sur la ligne concernée.
+- **En modification** : pas de lignes de saisie. La page montre les primes reprises au contrat en
+  lecture seule (droit `rh-affectations-remuneration.read`), avec un lien vers « Primes des
+  salariés », qui garde l'historique des montants (AFF-006, AFF-007).
+
+### Données reprises automatiquement
 
 | Source | Variables |
 |---|---|
-| Dossier RH / contrat | `employeur.nom`, `salarie.civilite`, `salarie.nom_complet`, `salarie.prenom`, `salarie.nom`, `salarie.matricule`, `salarie.date_naissance`, `salarie.lieu_naissance`, `salarie.nationalite`, `salarie.adresse`, `salarie.date_embauche`, `poste.fonction`, `poste.service`, `poste.agence`, `contrat.type`, `contrat.date_debut`, `contrat.date_fin` (CDD), `contrat.salaire_base`, `document.date` |
-| À compléter à la génération | `employeur.representant_nom`, `employeur.representant_qualite`, `poste.lieu_travail`, `contrat.periode_essai`, `contrat.horaires`, `contrat.motif_cdd` (CDD), `document.lieu_signature` |
-| Primes cochées | `contrat.avantages` (« aucun » si rien n'est coché) |
+| Organisation | `employeur.nom` |
+| PDG désigné | `employeur.representant_nom`, `employeur.representant_qualite` (« Président-directeur général ») |
+| Fiche du salarié | `salarie.civilite`, `salarie.nom_complet`, `salarie.prenom`, `salarie.nom`, `salarie.matricule`, `salarie.date_naissance`, `salarie.lieu_naissance`, `salarie.nationalite`, `salarie.adresse`, `salarie.date_embauche`, `poste.fonction`, `poste.service`, `poste.agence` |
+| Agence du salarié | `poste.lieu_travail` (« Matoto, Conakry » : agence et sa ville) |
+| Contrat | `contrat.type`, `contrat.date_debut`, `contrat.date_fin` (CDD), `contrat.salaire_base`, `contrat.periode_essai` (« 3 mois », « 2 semaines », « aucune »), `contrat.horaires` (« 40 heures par semaine »), `contrat.motif_cdd` (CDD) |
+| Primes des salariés | `contrat.avantages` : **toutes** les affectations **validées** du salarié, en cours ou à venir (« Prime de transport (50 000 GNF par mois) », pourcentage du salaire de base, montant variable, avantage en nature avec sa valeur estimée, date de fin) ; « aucune prime ni aucun avantage » sinon. Jamais une proposition à valider, annulée, terminée ou d'un autre salarié |
+| Document | `document.date` (date de génération), `document.lieu_signature` = **laissé en blanc** (« Fait à ……………………, ») : le lieu s'écrit à la main au moment de la signature |
 
-- Une variable **inconnue**, ou réservée aux CDD dans un modèle CDI, est refusée à
-  l'enregistrement.
-- Une variable **utilisée et vide** bloque la génération (message « Informations manquantes : … ») :
-  le document n'est jamais produit avec un trou ou une valeur inventée. Pour un article non
-  applicable, écrire la valeur (« sans période d'essai ») ou retirer la variable du modèle.
+### Information manquante
 
-## 2. Générer — RH → Contrats → ⋮ → Générer le contrat
+- Le contrat est **enregistré quand même** (la paie en dépend) ; le PDF ne l'est pas. Un message
+  dit **quoi compléter et où** : « Informations manquantes pour le PDF : fonction (fiche du
+  salarié : RH → Employés → Modifier) ; salaire de base mensuel (contrat : RH → Contrats →
+  Modifier). » Même logique sans modèle actif (« un administrateur doit l'activer »).
+- Le PDF est produit dès que la correction est faite : à l'enregistrement du contrat, à
+  l'ouverture de sa page ou de son PDF par un gestionnaire, ou par « Mettre à jour le PDF ».
+- Un échec technique est signalé (« Réessayez avec « Mettre à jour le PDF » ») ; le contrat n'est
+  jamais créé deux fois.
 
-Page `GET /backoffice/contrats/{contrat}/document` (`contrats.document`) :
+## 3. Modifier un contrat, versions et signature
 
-1. Modèle actif du type du contrat (sinon message : « un administrateur doit l'activer »).
-2. **Données reprises du dossier RH** (seulement celles que le modèle utilise), une valeur absente
-   étant signalée en rouge.
-3. **À compléter** : seulement les champs utilisés par le modèle. Proposés : les valeurs de la
-   version précédente de ce contrat ; sinon le représentant du dernier contrat généré dans
-   l'organisation, l'agence du salarié comme lieu de travail et sa ville comme lieu de signature.
-4. **Primes et avantages** : cases à cocher parmi les affectations **validées** du salarié, en
-   cours ou à venir (écran « Primes des salariés ») — jamais une proposition à valider, annulée,
-   terminée ou d'un autre salarié (refus serveur). Texte repris : « Prime de transport (50 000 GNF
-   par mois) », pourcentage du salaire de base, montant variable, avantage en nature (valeur
-   estimée), date de fin éventuelle.
-5. **Générer le PDF** → `POST /backoffice/contrats/{contrat}/documents`.
-
-Refus : modèle non actif, contrat non actif (terminé ou rompu : les versions existantes restent
-consultables), variable vide, prime non retenue.
-
-## 3. Versions, signature et consultation
-
-- Chaque génération crée une **version** (`documents_contrat`) : PDF stocké sur le disque privé
-  `contrats_rh` (`storage/app/private/contrats-rh`, jamais public), empreinte SHA-256 et
-  **instantané figé** (textes rendus, valeurs, champs saisis, primes, révision du modèle). Une
-  modification ultérieure du dossier, du contrat ou du modèle ne change jamais une version.
-- Statuts : **à signer** → **signé** ; une version à signer devient **remplacée** quand une
-  nouvelle version est générée (« Régénérer »).
+- Chaque PDF est une **version** (`documents_contrat`) : fichier sur le disque privé `contrats_rh`
+  (`storage/app/private/contrats-rh`, jamais public), empreinte SHA-256 et **instantané figé**
+  (textes rendus, valeurs, primes, révision du modèle). Une version ne change jamais.
+- **Jamais de doublon** : une nouvelle version n'est créée que si son contenu diffère de la
+  dernière (valeurs, parties et primes ; ni le numéro ni la date de génération), sous verrou du
+  contrat — deux enregistrements simultanés ne produisent qu'une version.
+- **Dernière version non signée** : à l'enregistrement d'une modification du contrat, à
+  l'ouverture de la page du contrat ou de son PDF (gestionnaire), elle est remplacée par une
+  version à jour si une information a changé (contrat, fiche du salarié, primes, PDG, modèle).
+  L'ancienne passe « remplacée » et reste consultable. On n'ouvre jamais un ancien PDF d'un
+  contrat modifié.
+- **Dernière version signée** : conservée telle quelle, jamais remplacée. Si une **clause du
+  contrat** est modifiée (type, dates, salaire, période d'essai, heures, motif, salarié), une
+  nouvelle version **à faire signer** est préparée. Un changement hors contrat (fiche, primes, PDG)
+  est seulement signalé (« La version N est signée … préparez une nouvelle version ») avec le
+  bouton « Préparer une nouvelle version ».
+- **Limite actuelle — pas d'avenant** : la nouvelle version après signature est un contrat
+  **complet** à faire signer, pas un avenant (document court ne reprenant que la clause modifiée).
+  La version signée et son PDF restent conservés. Un vrai processus d'avenant est probablement
+  nécessaire ; il reste à décider (ADR 0048, « Hors périmètre »).
 - **Marquer comme signé** : date de signature du papier (entre la date de génération et
-  aujourd'hui), seulement sur la dernière version à signer. La version est alors figée ; une
-  nouvelle génération crée une version de plus, la version signée reste conservée telle quelle.
+  aujourd'hui), seulement sur la dernière version à signer. Générer le PDF ne vaut pas signature.
   La signature électronique et le dépôt du scan signé sont prévus en V2.
-- Liste des contrats : colonne « Contrat de travail » (V2 · À signer, Non généré). Menu ⋮ :
-  **Voir le contrat (PDF)** (nouvel onglet) et **Télécharger le PDF** ouvrent la dernière version
-  (`GET /backoffice/contrats/{contrat}/pdf`, `?preview=1` = aperçu, 404 sans version) ; **Versions,
-  régénérer, signer** ouvre la page du contrat ; chaque version y est consultable
-  (`contrats.documents.pdf`).
-- Nom du fichier : `CTR-{matricule}-{AAAAMMJJ début}-V{version}.pdf`.
-- Si le fichier a disparu du disque, le PDF est reconstruit depuis l'instantané (incident
-  journalisé).
+- Un contrat terminé ou rompu n'est plus mis à jour ; ses versions restent consultables.
+- Nom du fichier : `CTR-{matricule}-{AAAAMMJJ début}-V{version}.pdf`. Si le fichier a disparu du
+  disque, le PDF est reconstruit depuis l'instantané (incident journalisé).
 
-## 4. Accès
+## 4. Écrans
+
+- **Page du contrat** (`GET /backoffice/contrats/{contrat}/document`, `contrats.document`) :
+  « Voir le PDF », « Télécharger », « Modifier le contrat » ; bandeau d'état (vert « à jour »,
+  orange « à mettre à jour » / « signé mais différent », rouge « à compléter » avec la raison) ;
+  informations reprises (lecture seule) ; versions (voir, télécharger, marquer signé).
+  « Mettre à jour le PDF » (`POST /backoffice/contrats/{contrat}/documents`) n'apparaît que s'il
+  y a quelque chose à faire.
+- **Liste des contrats** : colonne « Contrat de travail » (V2 · À signer, « PDF à préparer » pour
+  un contrat actif sans PDF, ex. contrat importé). Menu ⋮ : **Voir** (01/11/2026 : seule action
+  de consultation, plus de « Télécharger le PDF » ; ouvre
+  `GET /backoffice/contrats/{contrat}/pdf?preview=1` dans un nouvel onglet, servi en
+  `Content-Disposition: inline` pour le lecteur PDF du navigateur, qui permet zoom, impression et
+  téléchargement ; sans `?preview` la même route sert le fichier en `attachment` ; 404 sans
+  version), **Fiche du contrat, signature**, **Préparer le PDF** (contrat actif sans PDF),
+  Modifier, Supprimer. Colonne **« Primes »** : nombre de primes attribuées au salarié
+  (docs/primes-avantages.md, AFF-004 ter).
+- **Modèles de contrat** (Paramètres → RH, `rh-referentiels.gerer`) : inchangés (un modèle par
+  type, brouillon → actif, révision, texte brut, variables `{{cle}}` refusées si inconnues ou
+  réservées aux CDD). Toutes les variables sont désormais reprises automatiquement. Une variable
+  utilisée et vide bloque le PDF : rien n'est jamais inventé.
+
+## 5. Accès
 
 | Action | Règle (serveur, `Rh\Contrats\VerifieAccesContrat`) |
 |---|---|
-| Consulter la page, voir/télécharger une version | `rh-contrats.read` + `rh-remunerations.read` (le PDF contient le salaire, masqué dans la liste sans ce droit), même organisation, agence du salarié dans le périmètre de consultation (sauf vision toutes agences) |
-| Générer, marquer signé | `rh-contrats.update` + `rh-remunerations.read` (le contrat contient le salaire), même organisation, agence du salarié dans les agences de rattachement (sauf administrateur ou superviseur) |
+| Consulter la page, voir/télécharger une version | `rh-contrats.read` + `rh-remunerations.read` (le PDF contient le salaire), même organisation, agence du salarié dans le périmètre de consultation (sauf vision toutes agences) |
+| Mettre à jour le PDF, marquer signé | `rh-contrats.update` + `rh-remunerations.read`, même organisation, agence du salarié dans les agences de rattachement (sauf administrateur ou superviseur) |
+| Créer / modifier le contrat (PDF produit automatiquement) | droits du contrat (`rh-contrats.create` / `.update`) et agence de rattachement ; la redirection mène à la page du contrat si l'utilisateur peut la consulter, sinon à la fiche du salarié |
+| Désigner le PDG | `rh-referentiels.gerer`, même organisation, employé actif |
 | Modèles de contrat | `rh-referentiels.gerer` |
 
 - Organisation et agence vérifiées explicitement (le `Gate::before` du super administrateur
-  court-circuite les policies). Salarié sans agence : génération réservée aux profils sans
-  restriction d'agence.
-- Les boutons sont masqués sans le droit réel (`peut_generer` calculé par le serveur, y compris
-  l'agence de rattachement dans la liste).
-- Données de paie : seuls le salaire de base et les primes **cochées** figurent ; jamais de
+  court-circuite les policies). Le PDG d'une autre organisation n'est jamais repris.
+- Les boutons sont masqués sans le droit réel (`peut_generer`, `peut_designer_pdg` calculés par
+  le serveur).
+- Données de paie : seuls le salaire de base et les primes validées figurent ; jamais de
   coordonnées de paiement ni de n° CNSS.
 
-## 5. Tests
+## 6. Tests
 
-`tests/Feature/DocumentContratTest.php` (génération, instantané figé, informations manquantes,
-versions, signature, primes, accès), `tests/Feature/ModeleContratTest.php` (trame, variables,
-activation, permission, isolation), `tests/Feature/Documents/ModeleDocumentPdfTest.php` (rendu
-dans le modèle partagé, échappement des articles).
+`tests/Feature/DocumentContratTest.php` (création avec PDF, PDG absent ou d'une autre organisation,
+informations manquantes et où les compléter, validation période d'essai/heures, mise à jour sans
+doublon, version signée conservée, primes validées, accès, isolation),
+`tests/Feature/ContratPrimesTest.php` (primes à la création : une ou plusieurs, doublons, montants,
+dates, tout ou rien, droits, isolation, modification, version signée),
+`resources/js/lib/__tests__/primesAttribuees.spec.ts` (règle « déjà attribuée », dates proposées),
+`tests/Feature/PdgOrganisationTest.php` (désignation, remplacement, permission, organisation,
+départ et suppression), `tests/Feature/ModeleContratTest.php` (trame, variables, activation),
+`tests/Feature/Documents/ModeleDocumentPdfTest.php` (rendu dans le modèle partagé, échappement).

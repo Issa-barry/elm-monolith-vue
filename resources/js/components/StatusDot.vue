@@ -40,6 +40,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Partage Livreur d'un véhicule (liste des véhicules, PartageConformiteVehiculesService).
     fait: 'bg-emerald-500',
     non_requis: 'bg-zinc-400 dark:bg-zinc-500',
+    // Statut d'un employé (StatutEmploye) : suspendu = attention, sorti = parti de l'entreprise.
+    suspendu: 'bg-amber-400',
+    sorti: 'bg-zinc-400 dark:bg-zinc-500',
     // Anomalie du contrôle des encaissements close sans régularisation (motif obligatoire).
     fausse_alerte: 'bg-zinc-400 dark:bg-zinc-500',
     // Monitoring des commissions (CommissionAnomalieStatut) : commission finalement générée.
@@ -104,6 +107,15 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Contrat de travail généré : version à signer remplacée par une nouvelle génération (ADR 0044).
     remplace: 'bg-zinc-400 dark:bg-zinc-500',
     abandonnee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Validation RH d'une transmission de paie annulée (version conservée, ADR 0047).
+    validation_annulee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Étape de la paie du mois vue de la Comptabilité (ReprisePaieService::etape, ADR 0047).
+    paie_aucune: 'bg-zinc-400 dark:bg-zinc-500',
+    paie_a_recalculer: 'bg-orange-500',
+    paie_brouillon: 'bg-orange-500',
+    paie_prete_a_valider: 'bg-blue-500',
+    paie_validee_rh: 'bg-emerald-500',
+    paie_reprise: 'bg-emerald-500',
     // Monitoring des commissions : plus aucune commission due (opération annulée, barème retiré).
     sans_objet: 'bg-zinc-400 dark:bg-zinc-500',
     // Encaissement inter-agences retenu dans un règlement en préparation (ADR 0012).

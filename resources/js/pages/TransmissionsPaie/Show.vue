@@ -3,6 +3,7 @@ import AuditDrawer from '@/components/AuditDrawer.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import InfoTooltip from '@/components/InfoTooltip.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -20,6 +21,7 @@ import {
     Loader2,
     Lock,
     RefreshCw,
+    RotateCcw,
     Send,
     ShieldAlert,
 } from 'lucide-vue-next';
@@ -58,6 +60,10 @@ interface Transmission extends Resume {
     organisation_complete: boolean;
     total_verse_organisation: number | null;
     total_valorise_organisation: number | null;
+    // Brouillon : reflète-t-il les données RH du moment ? (null pour une version validée)
+    a_jour: boolean | null;
+    // « Annuler la validation » : calculé par le serveur (ADR 0047).
+    peut_annuler_validation: boolean;
 }
 
 interface Ligne {
@@ -160,7 +166,7 @@ const filterFields = computed((): FilterField[] => [
         key: 'salarie',
         label: 'Salarié (nom ou matricule)',
         type: 'text',
-        inline: true,
+        placeholder: 'Nom ou matricule',
     },
 ]);
 
@@ -210,7 +216,7 @@ const LIBELLES: Record<Action, string> = {
     recalculer: 'Recalculer',
     abandonner: 'Abandonner le brouillon',
     valider: 'Valider et figer',
-    transmettre: 'Transmettre à la Comptabilité',
+    transmettre: 'Mettre à disposition de la Comptabilité',
 };
 
 const EXPLICATIONS: Record<Action, string> = {
@@ -219,9 +225,9 @@ const EXPLICATIONS: Record<Action, string> = {
     abandonner:
         'Le brouillon est abandonné. Son numéro de version reste dans l’historique.',
     valider:
-        'La version est figée : ses montants ne changeront plus. Toute correction ultérieure passera par une nouvelle version.',
+        'Les montants de cette version ne changeront plus et le mois est fermé aux modifications RH (primes, montants mensuels, fins d’effet, départs). La version est aussitôt disponible pour la Comptabilité, qui la contrôle avant de payer : aucun paiement ni aucune écriture n’est déclenché. Vérifiez les salaires, les primes et le total. Tant que la Comptabilité ne l’a pas reprise, vous pourrez annuler la validation avec un motif.',
     transmettre:
-        'La Comptabilité lira cette version pour la paie du mois. Si une version avait déjà été transmise, elle est remplacée.',
+        'Version validée avant la mise à disposition automatique : la Comptabilité la lira pour la paie du mois. Si une version était déjà disponible, elle est remplacée.',
 };
 
 const confirmation = ref<Action | null>(null);
@@ -283,6 +289,25 @@ function nouvelleVersion() {
         });
 }
 
+// Annuler la validation (ADR 0047) : motif obligatoire, version conservée, nouveau brouillon.
+const showAnnulation = ref(false);
+const formAnnulation = useForm({ motif: '' });
+const erreurAnnulation = computed(() => {
+    const erreurs = formAnnulation.errors as Record<string, string>;
+    return erreurs.motif ?? erreurs.transmission ?? erreurs.mois ?? '';
+});
+
+function annulerValidation() {
+    formAnnulation
+        .transform((data) => ({ motif: data.motif.trim() }))
+        .post(`${url.value}/annuler-validation`, {
+            onSuccess: () => {
+                showAnnulation.value = false;
+                formAnnulation.reset();
+            },
+        });
+}
+
 const historiqueVisible = ref(false);
 
 function periodeLigne(l: Ligne): string {
@@ -296,23 +321,27 @@ function periodeLigne(l: Ligne): string {
     <AppLayout :breadcrumbs="breadcrumbs">
         <Head :title="`Transmission ${t.libelle_mois} v${t.version}`" />
 
-        <div class="w-full space-y-5 p-4 sm:p-6">
+        <div class="w-full space-y-6 p-4 sm:p-6">
             <!-- En-tête -->
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
+            <section
+                class="flex flex-col gap-5 rounded-xl border bg-card p-4 sm:p-5 xl:flex-row xl:items-start xl:justify-between"
+            >
+                <div class="min-w-0">
                     <p
                         class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
                     >
                         Transmission de paie
                     </p>
-                    <h1 class="mt-0.5 text-xl font-semibold">
+                    <h1 class="mt-1 text-2xl font-semibold tracking-tight">
                         {{ t.libelle_mois }} — version {{ t.version }}
                     </h1>
-                    <div class="mt-1 flex flex-wrap items-center gap-3 text-sm">
+                    <div
+                        class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm"
+                    >
                         <StatusDot :status="t.statut" :label="t.statut_label" />
                         <span
                             v-if="t.statut_comptabilite"
-                            class="text-xs text-muted-foreground"
+                            class="border-l pl-3 text-xs text-muted-foreground"
                         >
                             {{ t.statut_comptabilite }}
                         </span>
@@ -324,7 +353,9 @@ function periodeLigne(l: Ligne): string {
                         Motif : {{ t.motif }}
                     </p>
                 </div>
-                <div class="flex flex-wrap gap-2">
+                <div
+                    class="flex flex-wrap items-center gap-2 xl:max-w-[58%] xl:justify-end"
+                >
                     <Button
                         variant="outline"
                         size="sm"
@@ -368,7 +399,17 @@ function periodeLigne(l: Ligne): string {
                         @click="confirmation = 'transmettre'"
                     >
                         <Send class="mr-1.5 h-3.5 w-3.5" />
-                        Transmettre à la Comptabilité
+                        Mettre à disposition de la Comptabilité
+                    </Button>
+                    <Button
+                        v-if="t.peut_annuler_validation"
+                        variant="outline"
+                        size="sm"
+                        data-testid="transmission-annuler-validation"
+                        @click="showAnnulation = true"
+                    >
+                        <RotateCcw class="mr-1.5 h-3.5 w-3.5" />
+                        Annuler la validation
                     </Button>
                     <Button
                         v-if="peutNouvelleVersion"
@@ -379,21 +420,34 @@ function periodeLigne(l: Ligne): string {
                         Nouvelle version (correction)
                     </Button>
                 </div>
-            </div>
+            </section>
 
             <!-- État de la version : calculée, figée, transmise -->
             <div
                 v-if="estBrouillon"
-                class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"
+                class="rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3.5 text-sm leading-relaxed text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"
             >
-                <strong>Brouillon — montants calculés, non figés.</strong>
-                Calculés le {{ t.preparee_le
-                }}<template v-if="t.preparee_par">
-                    par {{ t.preparee_par }}</template
+                <p>
+                    <strong>Brouillon : montants calculés, non figés.</strong>
+                    Calculés le {{ t.preparee_le
+                    }}<template v-if="t.preparee_par">
+                        par {{ t.preparee_par }}</template
+                    >
+                    à partir des contrats et affectations validées.
+                </p>
+                <p class="mt-1 text-sm">
+                    Recalculé automatiquement à l’ouverture et avant la
+                    validation. La Comptabilité le voit comme provisoire ; il ne
+                    devient sa paie qu’une fois validé et figé.
+                </p>
+                <p
+                    v-if="t.a_jour === false"
+                    class="mt-1 font-medium"
+                    data-testid="transmission-a-recalculer"
                 >
-                à partir des contrats et des affectations validées. Ils peuvent
-                encore changer : recalculez après toute correction RH, puis
-                validez pour figer la version.
+                    Des données RH ont changé depuis le dernier calcul : ce
+                    brouillon est à recalculer.
+                </p>
                 <span
                     v-if="peutValider && bloquantes.length > 0"
                     class="mt-1 block font-medium"
@@ -418,8 +472,8 @@ function periodeLigne(l: Ligne): string {
                         {{ t.validee_par }} : les montants ci-dessous sont
                         définitifs pour cette version.
                         <template v-if="t.transmise_le">
-                            Transmise le {{ t.transmise_le }} par
-                            {{ t.transmise_par }}.
+                            Disponible pour la Comptabilité depuis le
+                            {{ t.transmise_le }}.
                         </template>
                         <template v-if="t.prise_en_charge_le">
                             Reprise par la Comptabilité le
@@ -480,28 +534,32 @@ function periodeLigne(l: Ligne): string {
 
             <!-- Totaux -->
             <div class="grid gap-3 sm:grid-cols-3">
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">Salariés</p>
+                <div class="rounded-xl border bg-card p-4 sm:p-5">
+                    <p class="text-sm text-muted-foreground">Salariés</p>
                     <p class="mt-1 text-2xl font-semibold tabular-nums">
                         {{ totaux_visibles.nb_salaries }}
                     </p>
                 </div>
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">
-                        Total versé (salaires, primes, indemnités, allocations)
-                    </p>
+                <div class="rounded-xl border bg-card p-4 sm:p-5">
+                    <p class="text-sm text-muted-foreground">Total à verser</p>
                     <p class="mt-1 text-2xl font-semibold tabular-nums">
                         {{ gnf(totaux_visibles.verse) }}
                     </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Salaires, primes, indemnités et allocations
+                    </p>
                 </div>
-                <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">
-                        Avantages en nature valorisés (hors net à payer)
+                <div class="rounded-xl border bg-card p-4 sm:p-5">
+                    <p class="text-sm text-muted-foreground">
+                        Avantages en nature
                     </p>
                     <p
                         class="mt-1 text-2xl font-semibold text-muted-foreground tabular-nums"
                     >
                         {{ gnf(totaux_visibles.valorise) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Valorisation hors net à payer
                     </p>
                 </div>
             </div>
@@ -546,7 +604,10 @@ function periodeLigne(l: Ligne): string {
             </div>
 
             <!-- Écarts avec la version précédente -->
-            <div v-if="t.version_precedente" class="rounded-xl border bg-card">
+            <div
+                v-if="t.version_precedente"
+                class="overflow-hidden rounded-xl border bg-card"
+            >
                 <div class="border-b px-4 py-3">
                     <h2 class="text-sm font-semibold">
                         Écarts avec la version {{ t.version_precedente }}
@@ -558,135 +619,172 @@ function periodeLigne(l: Ligne): string {
                 >
                     Aucun écart de montant.
                 </p>
-                <table v-else class="w-full text-sm">
-                    <thead class="text-xs text-muted-foreground">
-                        <tr>
-                            <th class="px-4 py-2 text-left font-medium">
-                                Salarié
-                            </th>
-                            <th class="px-4 py-2 text-left font-medium">
-                                Élément
-                            </th>
-                            <th class="px-4 py-2 text-right font-medium">
-                                v{{ t.version_precedente }}
-                            </th>
-                            <th class="px-4 py-2 text-right font-medium">
-                                v{{ t.version }}
-                            </th>
-                            <th class="px-4 py-2 text-right font-medium">
-                                Écart
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr v-for="(e, i) in ecarts_precedente" :key="i">
-                            <td class="px-4 py-2">{{ e.salarie }}</td>
-                            <td class="px-4 py-2">{{ e.element }}</td>
-                            <td class="px-4 py-2 text-right tabular-nums">
-                                {{ gnf(e.avant) }}
-                            </td>
-                            <td class="px-4 py-2 text-right tabular-nums">
-                                {{ gnf(e.apres) }}
-                            </td>
-                            <td
-                                class="px-4 py-2 text-right font-medium tabular-nums"
-                                :class="
-                                    e.ecart < 0
-                                        ? 'text-red-600 dark:text-red-400'
-                                        : 'text-emerald-700 dark:text-emerald-400'
-                                "
-                            >
-                                {{ e.ecart > 0 ? '+' : '' }}{{ gnf(e.ecart) }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full min-w-[680px] text-sm">
+                        <thead class="text-xs text-muted-foreground">
+                            <tr>
+                                <th class="px-4 py-2 text-left font-medium">
+                                    Salarié
+                                </th>
+                                <th class="px-4 py-2 text-left font-medium">
+                                    Élément
+                                </th>
+                                <th class="px-4 py-2 text-right font-medium">
+                                    v{{ t.version_precedente }}
+                                </th>
+                                <th class="px-4 py-2 text-right font-medium">
+                                    v{{ t.version }}
+                                </th>
+                                <th class="px-4 py-2 text-right font-medium">
+                                    Écart
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="(e, i) in ecarts_precedente" :key="i">
+                                <td class="px-4 py-2">{{ e.salarie }}</td>
+                                <td class="px-4 py-2">{{ e.element }}</td>
+                                <td class="px-4 py-2 text-right tabular-nums">
+                                    {{ gnf(e.avant) }}
+                                </td>
+                                <td class="px-4 py-2 text-right tabular-nums">
+                                    {{ gnf(e.apres) }}
+                                </td>
+                                <td
+                                    class="px-4 py-2 text-right font-medium tabular-nums"
+                                    :class="
+                                        e.ecart < 0
+                                            ? 'text-red-600 dark:text-red-400'
+                                            : 'text-emerald-700 dark:text-emerald-400'
+                                    "
+                                >
+                                    {{ e.ecart > 0 ? '+' : ''
+                                    }}{{ gnf(e.ecart) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Récapitulatif par élément -->
-            <div class="rounded-xl border bg-card">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <div class="border-b px-4 py-3">
                     <h2 class="text-sm font-semibold">
                         Récapitulatif par élément
                     </h2>
                 </div>
-                <table class="w-full text-sm">
-                    <thead class="text-xs text-muted-foreground">
-                        <tr>
-                            <th class="px-4 py-2 text-left font-medium">
-                                Élément
-                            </th>
-                            <th class="px-4 py-2 text-left font-medium">
-                                Catégorie
-                            </th>
-                            <th class="px-4 py-2 text-right font-medium">
-                                Salariés
-                            </th>
-                            <th class="px-4 py-2 text-right font-medium">
-                                Total du mois
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr v-for="r in recapitulatif" :key="r.cle">
-                            <td class="px-4 py-2">
-                                {{ r.element }}
-                                <span
-                                    v-if="r.code"
-                                    class="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                                    >{{ r.code }}</span
+                <div class="overflow-x-auto">
+                    <table class="w-full min-w-[640px] text-sm">
+                        <thead class="text-xs text-muted-foreground">
+                            <tr>
+                                <th class="px-4 py-2 text-left font-medium">
+                                    Élément
+                                </th>
+                                <th class="px-4 py-2 text-left font-medium">
+                                    Catégorie
+                                </th>
+                                <th class="px-4 py-2 text-right font-medium">
+                                    Salariés
+                                </th>
+                                <th class="px-4 py-2 text-right font-medium">
+                                    Total du mois
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="r in recapitulatif" :key="r.cle">
+                                <td class="px-4 py-2">
+                                    {{ r.element }}
+                                    <span
+                                        v-if="r.code"
+                                        class="ml-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                                        >{{ r.code }}</span
+                                    >
+                                </td>
+                                <td class="px-4 py-2 text-muted-foreground">
+                                    {{ r.categorie_label }}
+                                    <template v-if="r.versement === 'valorise'">
+                                        · valorisé</template
+                                    >
+                                </td>
+                                <td class="px-4 py-2 text-right tabular-nums">
+                                    {{ r.nb_salaries }}
+                                </td>
+                                <td
+                                    class="px-4 py-2 text-right font-medium tabular-nums"
                                 >
-                            </td>
-                            <td class="px-4 py-2 text-muted-foreground">
-                                {{ r.categorie_label }}
-                                <template v-if="r.versement === 'valorise'">
-                                    · valorisé</template
+                                    {{ gnf(r.total) }}
+                                </td>
+                            </tr>
+                            <tr v-if="recapitulatif.length === 0">
+                                <td
+                                    colspan="4"
+                                    class="px-4 py-6 text-center text-muted-foreground"
                                 >
-                            </td>
-                            <td class="px-4 py-2 text-right tabular-nums">
-                                {{ r.nb_salaries }}
-                            </td>
-                            <td
-                                class="px-4 py-2 text-right font-medium tabular-nums"
-                            >
-                                {{ gnf(r.total) }}
-                            </td>
-                        </tr>
-                        <tr v-if="recapitulatif.length === 0">
-                            <td
-                                colspan="4"
-                                class="px-4 py-6 text-center text-muted-foreground"
-                            >
-                                Aucun élément.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                    Aucun élément.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Détail par salarié -->
-            <div class="space-y-3">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <h2 class="text-sm font-semibold">Détail par salarié</h2>
+            <div class="space-y-4">
+                <div class="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-lg font-semibold tracking-tight">
+                                Détail par salarié
+                            </h2>
+                            <InfoTooltip
+                                label="À propos des éléments de rémunération"
+                            >
+                                Primes, indemnités, allocations et avantages en
+                                nature attribués à chaque salarié, avec leurs
+                                dates d’effet. Le salaire de base reste porté
+                                par le contrat.
+                            </InfoTooltip>
+                        </div>
+                    </div>
+                    <p class="text-sm text-muted-foreground">
+                        {{ salaries.length }} résultat{{
+                            salaries.length === 1 ? '' : 's'
+                        }}
+                    </p>
                 </div>
                 <DataFilters
+                    trigger-only
                     :url="url"
                     :values="filters"
                     :fields="filterFields"
                     :sites="sites"
                     :result-count="salaries.length"
                 />
-                <p class="text-xs text-muted-foreground">
-                    <strong>Montant validé (RH)</strong> : salaire du contrat,
-                    montant attribué ou montant saisi du mois, tel que validé
-                    côté RH. <strong>Montant du mois</strong> : montant calculé
-                    pour la partie du mois (prorata, pourcentage).
-                    {{
-                        t.est_figee
-                            ? 'Ces montants sont figés dans cette version.'
-                            : 'Ils seront figés à la validation.'
-                    }}
-                </p>
+                <div
+                    class="grid gap-3 rounded-xl border bg-muted/20 p-4 text-sm sm:grid-cols-2"
+                >
+                    <div>
+                        <p class="font-medium">Montant validé (RH)</p>
+                        <p class="mt-1 leading-relaxed text-muted-foreground">
+                            Montant du contrat, de l’affectation ou saisi pour
+                            le mois.
+                        </p>
+                    </div>
+                    <div>
+                        <p class="font-medium">Montant du mois</p>
+                        <p class="mt-1 leading-relaxed text-muted-foreground">
+                            Montant calculé selon la période travaillée ou le
+                            pourcentage attribué.
+                            {{
+                                t.est_figee
+                                    ? 'Il est figé dans cette version.'
+                                    : 'Il sera figé à la validation.'
+                            }}
+                        </p>
+                    </div>
+                </div>
 
                 <div
                     v-for="s in salaries"
@@ -694,7 +792,7 @@ function periodeLigne(l: Ligne): string {
                     class="overflow-hidden rounded-xl border bg-card"
                 >
                     <div
-                        class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3"
+                        class="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3.5"
                     >
                         <div>
                             <p class="font-medium">{{ s.salarie }}</p>
@@ -720,36 +818,40 @@ function periodeLigne(l: Ligne): string {
                         </div>
                     </div>
                     <div class="overflow-x-auto">
-                        <table class="w-full min-w-[760px] text-sm">
+                        <table class="w-full min-w-[900px] text-sm">
                             <thead class="text-xs text-muted-foreground">
                                 <tr>
-                                    <th class="px-4 py-2 text-left font-medium">
+                                    <th class="px-4 py-3 text-left font-medium">
                                         Élément
                                     </th>
-                                    <th class="px-4 py-2 text-left font-medium">
+                                    <th class="px-4 py-3 text-left font-medium">
                                         Origine
                                     </th>
-                                    <th class="px-4 py-2 text-left font-medium">
+                                    <th class="px-4 py-3 text-left font-medium">
                                         Période
                                     </th>
                                     <th
-                                        class="px-4 py-2 text-right font-medium"
+                                        class="px-4 py-3 text-right font-medium"
                                     >
                                         Montant validé (RH)
                                     </th>
-                                    <th class="px-4 py-2 text-left font-medium">
+                                    <th class="px-4 py-3 text-left font-medium">
                                         Calcul
                                     </th>
                                     <th
-                                        class="px-4 py-2 text-right font-medium"
+                                        class="px-4 py-3 text-right font-medium"
                                     >
                                         Montant du mois
                                     </th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
-                                <tr v-for="l in s.lignes" :key="l.id">
-                                    <td class="px-4 py-2">
+                                <tr
+                                    v-for="l in s.lignes"
+                                    :key="l.id"
+                                    class="align-top"
+                                >
+                                    <td class="px-4 py-3">
                                         {{ l.libelle }}
                                         <p
                                             class="text-[11px] text-muted-foreground"
@@ -764,16 +866,16 @@ function periodeLigne(l: Ligne): string {
                                             >
                                         </p>
                                     </td>
-                                    <td class="px-4 py-2 text-muted-foreground">
+                                    <td class="px-4 py-3 text-muted-foreground">
                                         {{ l.source }}
                                     </td>
                                     <td
-                                        class="px-4 py-2 whitespace-nowrap text-muted-foreground"
+                                        class="px-4 py-3 whitespace-nowrap text-muted-foreground"
                                     >
                                         {{ periodeLigne(l) }}
                                     </td>
                                     <td
-                                        class="px-4 py-2 text-right tabular-nums"
+                                        class="px-4 py-3 text-right tabular-nums"
                                     >
                                         <template
                                             v-if="l.montant_reference !== null"
@@ -789,12 +891,12 @@ function periodeLigne(l: Ligne): string {
                                         >
                                     </td>
                                     <td
-                                        class="px-4 py-2 text-xs text-muted-foreground"
+                                        class="max-w-[320px] px-4 py-3 text-xs leading-relaxed text-muted-foreground"
                                     >
                                         {{ l.detail_calcul }}
                                     </td>
                                     <td
-                                        class="px-4 py-2 text-right font-medium tabular-nums"
+                                        class="px-4 py-3 text-right font-medium tabular-nums"
                                         :class="{
                                             'text-muted-foreground':
                                                 l.versement === 'valorise',
@@ -816,7 +918,7 @@ function periodeLigne(l: Ligne): string {
             </div>
 
             <!-- Versions du mois -->
-            <div class="rounded-xl border bg-card">
+            <div class="overflow-hidden rounded-xl border bg-card">
                 <div class="border-b px-4 py-3">
                     <h2 class="text-sm font-semibold">
                         Versions de {{ t.libelle_mois.toLowerCase() }}
@@ -827,12 +929,14 @@ function periodeLigne(l: Ligne): string {
                         v-for="v in versions"
                         :key="v.id"
                         :href="`/backoffice/transmissions-paie/${v.id}`"
-                        class="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm hover:bg-muted/40"
+                        class="grid grid-cols-[auto_auto_1fr] items-center gap-3 px-4 py-3 text-sm hover:bg-muted/40 max-sm:grid-cols-[auto_1fr]"
                         :class="{ 'bg-muted/30': v.id === t.id }"
                     >
                         <span class="font-medium">Version {{ v.version }}</span>
                         <StatusDot :status="v.statut" :label="v.statut_label" />
-                        <span class="text-xs text-muted-foreground">
+                        <span
+                            class="text-right text-xs text-muted-foreground max-sm:col-span-2 max-sm:text-left"
+                        >
                             {{ v.motif ?? `Préparée ${v.preparee_le ?? ''}` }}
                         </span>
                     </Link>
@@ -880,6 +984,68 @@ function periodeLigne(l: Ligne): string {
                 </Button>
             </div>
         </template>
+    </Dialog>
+
+    <!-- Annuler la validation -->
+    <Dialog
+        v-model:visible="showAnnulation"
+        modal
+        header="Annuler la validation"
+        :style="{ width: 'min(30rem, 95vw)' }"
+        :draggable="false"
+        :closable="!formAnnulation.processing"
+    >
+        <form class="space-y-3" @submit.prevent="annulerValidation">
+            <p class="text-sm text-muted-foreground">
+                La version {{ t.version }} est conservée telle quelle dans
+                l’historique (« Validation annulée ») et n’est plus la paie de
+                la Comptabilité. Le mois redevient modifiable côté RH, et une
+                nouvelle version s’ouvre en brouillon : corrigez, vérifiez, puis
+                validez-la à nouveau.
+            </p>
+            <div>
+                <Label for="av-motif" class="mb-1.5 block text-xs font-medium">
+                    Motif <span class="text-destructive">*</span>
+                </Label>
+                <textarea
+                    id="av-motif"
+                    v-model="formAnnulation.motif"
+                    rows="2"
+                    class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+                <p
+                    v-if="erreurAnnulation"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ erreurAnnulation }}
+                </p>
+            </div>
+            <div class="flex justify-end gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    :disabled="formAnnulation.processing"
+                    @click="showAnnulation = false"
+                    >Fermer</Button
+                >
+                <Button
+                    type="submit"
+                    size="sm"
+                    :disabled="
+                        formAnnulation.processing ||
+                        !formAnnulation.motif.trim()
+                    "
+                    data-testid="transmission-annuler-validation-confirmer"
+                >
+                    <Loader2
+                        v-if="formAnnulation.processing"
+                        class="mr-1.5 h-3.5 w-3.5 animate-spin"
+                    />
+                    Annuler la validation
+                </Button>
+            </div>
+        </form>
     </Dialog>
 
     <!-- Nouvelle version -->

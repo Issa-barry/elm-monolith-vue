@@ -3,12 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutContrat;
+use App\Enums\StatutTypeRemuneration;
 use App\Enums\TypeContrat;
+use App\Http\Controllers\Rh\Contrats\VerifieAccesContrat;
+use App\Models\AffectationRemuneration;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Site;
+use App\Models\TypeRemuneration;
+use App\Services\Rh\AffectationRemunerationService;
 use App\Services\Rh\ContratService;
+use App\Services\Rh\DocumentContratService;
+use App\Services\Rh\Paie\CalendrierPaieService;
+use App\Services\Rh\PdgService;
 use App\Services\SiteScopeService;
+use App\Support\Rh\PerimetreEmploye;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +27,8 @@ use Inertia\Response;
 
 class ContratController extends Controller
 {
+    use VerifieAccesContrat;
+
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', Contrat::class);
@@ -49,15 +60,20 @@ class ContratController extends Controller
             $query->where('type_contrat', $filters['type_contrat']);
         }
 
-        // Générer un contrat de travail (ADR 0044) : permissions et agence de rattachement du salarié,
-        // mêmes règles que Rh\Contrats\VerifieAccesContrat — le lien n'est jamais affiché pour rien.
+        // Mettre à jour le PDF (ADR 0048) : permissions et agence de rattachement du salarié, mêmes
+        // règles que Rh\Contrats\VerifieAccesContrat — le lien n'est jamais affiché pour rien.
         $peutGenerer = $user->can('rh-contrats.update') && $user->can('rh-remunerations.read');
         $sitesEcriture = $user->agitSurToutesLesAgences() ? null : app(SiteScopeService::class)->assignedSiteIds($user);
 
-        $contrats = $query->orderByDesc('date_debut')->get()
+        $contrats = $query->orderByDesc('date_debut')->get();
+        $primes = $user->can('rh-affectations-remuneration.read') ? $this->nombrePrimesParEmploye($orgId, $contrats->pluck('employe_id')->unique()->values()->all()) : null;
+
+        $contrats = $contrats
             ->map(fn (Contrat $c) => [
                 ...$this->toRow($c),
                 'peut_generer' => $peutGenerer && ($sitesEcriture === null || ($c->employe?->site_id !== null && $sitesEcriture->contains($c->employe->site_id))),
+                // null sans le droit de consulter les primes : la colonne n'est pas affichée.
+                'primes_count' => $primes === null ? null : (int) ($primes[$c->employe_id] ?? 0),
             ]);
 
         $sites = $user->voitToutesLesAgences()
@@ -79,9 +95,12 @@ class ContratController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
+        // Salariés actifs des agences de rattachement : ceux pour qui la création serait acceptée.
+        $user = auth()->user();
         $employes = Employe::with('personne')
             ->where('organization_id', $orgId)
             ->where('statut', 'actif')
+            ->when(! $user->agitSurToutesLesAgences(), fn ($q) => $q->whereIn('site_id', app(SiteScopeService::class)->assignedSiteIds($user)))
             ->get(['id', 'personne_id', 'matricule'])
             ->sortBy('nom')
             ->map(fn ($e) => [
@@ -89,12 +108,60 @@ class ContratController extends Controller
                 'label' => "{$e->prenom} {$e->nom} ({$e->matricule})",
             ])->values();
 
+        $pdg = app(PdgService::class)->actuel($orgId);
+
         return Inertia::render('Contrats/Create', [
             'employes' => $employes,
             'type_contrat_options' => TypeContrat::options(),
             'statut_contrat_options' => StatutContrat::options(),
+            'unites_periode_essai' => $this->unitesPeriodeEssai(),
             'employe_id_prefill' => $request->query('employe_id'),
+            // Signataire repris automatiquement ; sans PDG, la création est refusée (ADR 0048).
+            'pdg' => $pdg ? ['nom' => PdgService::nom($pdg), 'qualite' => PdgService::QUALITE] : null,
+            'message_pdg_absent' => PdgService::MESSAGE_ABSENT,
+            'primes_contrat' => $this->peutAjouterPrimes() ? $this->optionsPrimes($orgId, $employes->pluck('value')->all()) : null,
         ]);
+    }
+
+    /**
+     * Primes ajoutées à la création du contrat : toujours validées d'emblée (décision du
+     * 01/11/2026), donc réservées à qui peut à la fois attribuer et valider une prime.
+     */
+    private function peutAjouterPrimes(): bool
+    {
+        return auth()->user()->can('create', AffectationRemuneration::class)
+            && auth()->user()->can(AffectationRemunerationService::PERMISSION_VALIDATION);
+    }
+
+    /**
+     * @param  list<string>  $employeIds
+     * @return array<string, mixed>
+     */
+    private function optionsPrimes(string $orgId, array $employeIds): array
+    {
+        return [
+            'premier_jour_modifiable' => app(CalendrierPaieService::class)->premierJourModifiable($orgId)?->toDateString(),
+            'par_employe' => (object) app(AffectationRemunerationService::class)->primesOccupeesParEmploye($orgId, $employeIds),
+            // Seuls les types actifs sont attribuables (assertTypeAttribuable).
+            'types' => TypeRemuneration::where('organization_id', $orgId)
+                ->where('statut', StatutTypeRemuneration::ACTIF->value)
+                ->orderBy('libelle')
+                ->get()
+                ->map(fn (TypeRemuneration $t) => [
+                    'value' => $t->id,
+                    'label' => $t->libelle,
+                    'valorise' => $t->categorie->estValorise(),
+                    'mode_calcul' => $t->mode_calcul->value,
+                    'periodicite' => $t->periodicite->value,
+                    'periodicite_label' => $t->periodicite->label(),
+                    'nature_montant' => $t->nature_montant->value,
+                    'cumul_autorise' => $t->cumul_autorise,
+                    'montant_defaut' => $t->montant_defaut !== null ? (float) $t->montant_defaut : null,
+                    'taux_defaut' => $t->taux_defaut !== null ? (float) $t->taux_defaut : null,
+                ])
+                ->values()
+                ->all(),
+        ];
     }
 
     public function store(Request $request): RedirectResponse
@@ -104,18 +171,38 @@ class ContratController extends Controller
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403);
 
-        $data = $this->sansSalaireNonAutorise($request->validate($this->rules($request), $this->messages()));
+        $data = $this->sansSalaireNonAutorise($request->validate($this->rules($request, creation: true), $this->messages()));
+        $this->exigerPerimetre(Employe::where('organization_id', $orgId)->find($data['employe_id']));
 
+        // Pas de contrat sans PDG désigné, signataire de tous les contrats (ADR 0048) : le PDF
+        // ne pourrait pas être produit, aucun autre salarié n'est pris à sa place.
+        app(PdgService::class)->exiger($orgId);
+
+        $primes = array_values($data['primes'] ?? []);
+        unset($data['primes']);
+        abort_if($primes !== [] && ! $this->peutAjouterPrimes(), 403);
+
+        // Contrat et primes en une seule opération : si une prime est refusée, rien n'est enregistré.
         // Règle « un seul contrat actif », sous verrou de l'employé : commune avec l'import RH.
-        $contrat = app(ContratService::class)->creer($data, $orgId);
+        $contrat = app(ContratService::class)->creerAvecPrimes($this->normaliserConditions($data), $primes, $orgId, auth()->user());
 
-        return redirect()->route('employes.edit', $contrat->employe_id)
-            ->with('success', 'Contrat créé avec succès.');
+        // PDF produit tout de suite ; un échec n'annule pas le contrat (nouvelle tentative possible).
+        $erreur = app(DocumentContratService::class)->genererAutomatiquement($contrat, auth()->user());
+
+        $nombre = count($primes);
+        $succes = match (true) {
+            $nombre === 0 => 'Contrat créé.',
+            $nombre === 1 => 'Contrat créé avec 1 prime validée.',
+            default => "Contrat créé avec {$nombre} primes validées.",
+        };
+
+        return $this->apresEnregistrement($contrat, $succes, $erreur);
     }
 
     public function edit(Contrat $contrat): Response
     {
         $this->authorize('update', $contrat);
+        $this->exigerPerimetre($contrat->employe);
 
         $orgId = auth()->user()->organization_id;
 
@@ -133,18 +220,28 @@ class ContratController extends Controller
             'employes' => $employes,
             'type_contrat_options' => TypeContrat::options(),
             'statut_contrat_options' => StatutContrat::options(),
+            'unites_periode_essai' => $this->unitesPeriodeEssai(),
+            // Lecture seule ici : un montant se change dans « Primes des salariés », qui garde
+            // l'historique (AFF-006, AFF-007). null sans le droit de voir les primes.
+            'primes' => auth()->user()->can('rh-affectations-remuneration.read')
+                ? app(DocumentContratService::class)->avantagesDisponibles($contrat)
+                    ->map(fn (AffectationRemuneration $a) => app(DocumentContratService::class)->texteAvantage($a))
+                    ->values()
+                : null,
         ]);
     }
 
     public function update(Request $request, Contrat $contrat): RedirectResponse
     {
         $this->authorize('update', $contrat);
+        $this->exigerPerimetre($contrat->employe);
 
         // Organisation du contrat, pas celle de l'acteur : le Gate::before du super administrateur
         // laisse passer la Policy, l'employé cible doit rester dans l'organisation du contrat.
         $orgId = $contrat->organization_id;
 
-        $data = $this->sansSalaireNonAutorise($request->validate($this->rules($request), $this->messages()));
+        $data = $this->normaliserConditions($this->sansSalaireNonAutorise($request->validate($this->rules($request), $this->messages())));
+        $this->exigerPerimetre(Employe::where('organization_id', $orgId)->find($data['employe_id']));
 
         // CDI => date_fin null
         if ($data['type_contrat'] === TypeContrat::CDI->value) {
@@ -164,6 +261,10 @@ class ContratController extends Controller
             $statutFinal = $data['statut_contrat'] ?? $contrat->statut_contrat->value;
             if ($statutFinal === StatutContrat::ACTIF->value) {
                 $contrats->assertAucunAutreContratActif($employe->id, $contrat->id);
+                // Réactiver un contrat d'un salarié sorti équivaudrait à une réembauche non définie.
+                if ($contrat->statut_contrat !== StatutContrat::ACTIF) {
+                    $contrats->assertPasSorti($employe);
+                }
             }
             // Un contrat terminé sans date de fin n'a pas de période connue (ignoré comme dans la paie).
             if ($statutFinal === StatutContrat::ACTIF->value || ($data['date_fin'] ?? null) !== null) {
@@ -173,13 +274,57 @@ class ContratController extends Controller
             $contrat->update($data);
         });
 
-        return redirect()->route('employes.edit', $contrat->employe_id)
-            ->with('success', 'Contrat mis à jour.');
+        // PDF remis à jour tout de suite. Après une version signée, une nouvelle version (à faire
+        // signer) n'est préparée que si une clause du contrat a réellement changé.
+        $erreur = $contrat->statut_contrat === StatutContrat::ACTIF
+            ? app(DocumentContratService::class)->genererAutomatiquement($contrat, auth()->user(), apresSignature: $contrat->wasChanged(DocumentContratService::CHAMPS_CONTRACTUELS))
+            : null;
+
+        return $this->apresEnregistrement($contrat, 'Contrat mis à jour.', $erreur);
+    }
+
+    /**
+     * Vers la page du contrat (PDF, versions) pour qui peut la consulter, sinon vers la fiche du
+     * salarié comme avant. Un échec du PDF est dit en clair, le contrat reste enregistré.
+     */
+    private function apresEnregistrement(Contrat $contrat, string $succes, ?string $erreurPdf): RedirectResponse
+    {
+        $redirection = $this->aAccesContrat(auth()->user(), $contrat)
+            ? redirect()->route('contrats.document', $contrat)
+            : redirect()->route('employes.edit', $contrat->employe_id);
+
+        if ($erreurPdf !== null) {
+            return $redirection->with('success', $succes)->with('error', 'Le PDF du contrat n’a pas pu être préparé. '.$erreurPdf);
+        }
+
+        return $redirection->with('success', $contrat->statut_contrat === StatutContrat::ACTIF
+            ? $succes.' Le PDF du contrat est prêt ; il reste à le faire signer.'
+            : $succes);
+    }
+
+    /** Sans période d'essai (0), l'unité n'a pas de sens : elle est vidée. */
+    private function normaliserConditions(array $data): array
+    {
+        if (array_key_exists('periode_essai_duree', $data) && in_array($data['periode_essai_duree'], [null, 0, '0'], true)) {
+            $data['periode_essai_unite'] = null;
+        }
+        if (($data['type_contrat'] ?? null) === TypeContrat::CDI->value) {
+            $data['motif_cdd'] = null;
+        }
+
+        return $data;
+    }
+
+    /** @return list<array{value: string, label: string}> */
+    private function unitesPeriodeEssai(): array
+    {
+        return collect(Contrat::UNITES_PERIODE_ESSAI)->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])->values()->all();
     }
 
     public function destroy(Contrat $contrat): RedirectResponse
     {
         $this->authorize('delete', $contrat);
+        $this->exigerPerimetre($contrat->employe);
 
         $employeId = $contrat->employe_id;
         $contrat->delete();
@@ -189,14 +334,33 @@ class ContratController extends Controller
     }
 
     /**
+     * Créer, modifier ou supprimer un contrat : salarié d'une agence de rattachement (PerimetreEmploye),
+     * comme la fiche employé. Un employé introuvable est laissé à ContratService (404).
+     */
+    private function exigerPerimetre(?Employe $employe): void
+    {
+        abort_if($employe !== null && ! PerimetreEmploye::peutModifier(auth()->user(), $employe), 403);
+    }
+
+    /**
      * L'appartenance de l'employé à l'organisation est contrôlée par ContratService::verrouillerEmploye() (404, comme
      * à la création), pas ici.
      */
-    private function rules(Request $request): array
+    private function rules(Request $request, bool $creation = false): array
     {
         $isCdd = $request->input('type_contrat') === TypeContrat::CDD->value;
+        // Conditions reprises dans le PDF (ADR 0048) : obligatoires à la création ; facultatives en
+        // modification pour les contrats antérieurs (le PDF signale alors ce qui manque).
+        $requis = $creation ? 'required' : 'nullable';
 
         return [
+            'periode_essai_duree' => [$requis, 'integer', 'min:0', 'max:99'],
+            'periode_essai_unite' => [
+                Rule::requiredIf(fn () => (int) $request->input('periode_essai_duree') > 0),
+                'nullable', Rule::in(array_keys(Contrat::UNITES_PERIODE_ESSAI)),
+            ],
+            'heures_hebdomadaires' => [$requis, 'numeric', 'gt:0', 'max:168', 'decimal:0,2'],
+            'motif_cdd' => [$creation && $isCdd ? 'required' : 'nullable', 'string', 'max:255'],
             'employe_id' => ['required', 'exists:employes,id'],
             'type_contrat' => ['required', Rule::in(TypeContrat::values())],
             'date_debut' => 'required|date',
@@ -205,6 +369,14 @@ class ContratController extends Controller
                 : ['nullable', 'date', 'after_or_equal:date_debut'],
             'salaire_base' => 'nullable|numeric|min:0',
             'statut_contrat' => ['nullable', Rule::in(StatutContrat::values())],
+            // Primes ajoutées à la création seulement : ensuite, « Primes des salariés » (AFF-006).
+            ...($creation ? [
+                'primes' => ['nullable', 'array', 'max:20'],
+                'primes.*.type_remuneration_id' => ['required', 'string'],
+                'primes.*.date_debut' => ['required', 'date_format:Y-m-d'],
+                'primes.*.montant' => ['nullable', 'numeric', 'gt:0', 'max:9999999999999'],
+                'primes.*.taux' => ['nullable', 'numeric', 'gt:0', 'max:100'],
+            ] : []),
         ];
     }
 
@@ -220,7 +392,54 @@ class ContratController extends Controller
             'date_fin.after_or_equal' => 'La date de fin doit être égale ou postérieure à la date de début.',
             'salaire_base.numeric' => 'Le salaire doit être un nombre.',
             'salaire_base.min' => 'Le salaire ne peut pas être négatif.',
+            'periode_essai_duree.required' => 'Indiquez la durée de la période d’essai (0 s’il n’y en a pas).',
+            'periode_essai_duree.integer' => 'La durée de la période d’essai doit être un nombre entier, sans lettres.',
+            'periode_essai_duree.min' => 'La durée de la période d’essai ne peut pas être négative.',
+            'periode_essai_duree.max' => 'La durée de la période d’essai ne peut pas dépasser 99.',
+            'periode_essai_unite.required' => 'Choisissez « Semaines » ou « Mois » pour la période d’essai.',
+            'periode_essai_unite.in' => 'Choisissez « Semaines » ou « Mois » pour la période d’essai.',
+            'heures_hebdomadaires.required' => 'Indiquez le nombre d’heures de travail par semaine.',
+            'heures_hebdomadaires.numeric' => 'Le nombre d’heures doit être un nombre, sans lettres.',
+            'heures_hebdomadaires.gt' => 'Le nombre d’heures doit être supérieur à 0.',
+            'heures_hebdomadaires.max' => 'Le nombre d’heures par semaine ne peut pas dépasser 168.',
+            'heures_hebdomadaires.decimal' => 'Le nombre d’heures accepte au plus deux chiffres après la virgule.',
+            'motif_cdd.required' => 'Indiquez le motif du CDD (ex. remplacement d’un salarié absent).',
+            'motif_cdd.max' => 'Le motif du CDD est limité à 255 caractères.',
+            'primes.*.type_remuneration_id.required' => 'Choisissez la prime, ou retirez cette ligne.',
+            'primes.*.date_debut.required' => 'Indiquez la date d’effet de cette prime.',
+            'primes.*.date_debut.date_format' => 'La date d’effet de cette prime est invalide.',
+            'primes.*.montant.numeric' => 'Le montant doit être un nombre, sans lettres.',
+            'primes.*.montant.gt' => 'Le montant doit être supérieur à 0.',
+            'primes.*.montant.max' => 'Le montant est trop élevé.',
+            'primes.*.taux.numeric' => 'Le taux doit être un nombre, sans lettres.',
+            'primes.*.taux.gt' => 'Le taux doit être supérieur à 0.',
+            'primes.*.taux.max' => 'Le taux ne peut pas dépasser 100 %.',
         ];
+    }
+
+    /**
+     * Colonne « Primes » de la liste (docs/primes-avantages.md, AFF-004 ter) : primes retenues
+     * dans le contrat PDF (validées, en cours ou à venir), une fois par type — un changement de
+     * montant ou un versement mensuel ne compte pas en plus. Une seule requête pour la liste.
+     *
+     * @param  list<string>  $employeIds
+     * @return array<string, int>
+     */
+    private function nombrePrimesParEmploye(string $orgId, array $employeIds): array
+    {
+        if ($employeIds === []) {
+            return [];
+        }
+
+        return AffectationRemuneration::query()
+            ->where('organization_id', $orgId)
+            ->whereIn('employe_id', $employeIds)
+            ->valideesEnCoursOuAVenir()
+            ->groupBy('employe_id')
+            ->selectRaw('employe_id, COUNT(DISTINCT type_remuneration_id) as nombre')
+            ->pluck('nombre', 'employe_id')
+            ->map(fn ($n) => (int) $n)
+            ->all();
     }
 
     private function toRow(Contrat $c): array
@@ -240,6 +459,10 @@ class ContratController extends Controller
             'date_fin' => $c->date_fin?->format('Y-m-d'),
             // Salaire : seulement avec `rh-remunerations.read`.
             'salaire_base' => auth()->user()?->can('rh-remunerations.read') ? $c->salaire_base : null,
+            'periode_essai_duree' => $c->periode_essai_duree,
+            'periode_essai_unite' => $c->periode_essai_unite,
+            'heures_hebdomadaires' => $c->heures_hebdomadaires,
+            'motif_cdd' => $c->motif_cdd,
             // Dernière version générée du contrat de travail (ADR 0044), null tant qu'aucune.
             'document_courant' => $c->relationLoaded('documentCourant') && $c->documentCourant ? [
                 'version' => $c->documentCourant->version,

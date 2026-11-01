@@ -9,6 +9,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed } from 'vue';
+import ConditionsContrat from './partials/ConditionsContrat.vue';
 
 // Salaire : saisi et affiché seulement avec rh-remunerations.read (ignoré par le serveur sinon).
 const { can } = usePermissions();
@@ -26,6 +27,10 @@ interface ContratData {
     date_debut: string | null;
     date_fin: string | null;
     salaire_base: string | null;
+    periode_essai_duree: number | null;
+    periode_essai_unite: string | null;
+    heures_hebdomadaires: string | null;
+    motif_cdd: string | null;
 }
 
 const props = defineProps<{
@@ -33,6 +38,9 @@ const props = defineProps<{
     employes: Option[];
     type_contrat_options: Option[];
     statut_contrat_options: Option[];
+    unites_periode_essai: Option[];
+    // Primes reprises au contrat, en lecture seule ; null sans le droit de les voir.
+    primes: string[] | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -51,6 +59,13 @@ const form = useForm({
             ? null
             : Number(props.contrat.salaire_base),
     statut_contrat: props.contrat.statut_contrat,
+    periode_essai_duree: props.contrat.periode_essai_duree,
+    periode_essai_unite: props.contrat.periode_essai_unite,
+    heures_hebdomadaires:
+        props.contrat.heures_hebdomadaires === null
+            ? null
+            : Number(props.contrat.heures_hebdomadaires),
+    motif_cdd: props.contrat.motif_cdd,
 });
 
 const isCdd = computed(() => form.type_contrat === 'cdd');
@@ -230,6 +245,56 @@ function submit() {
                             </p>
                         </div>
                     </div>
+
+                    <ConditionsContrat
+                        v-model:duree="form.periode_essai_duree"
+                        v-model:unite="form.periode_essai_unite"
+                        v-model:heures="form.heures_hebdomadaires"
+                        v-model:motif="form.motif_cdd"
+                        :unites="unites_periode_essai"
+                        :est-cdd="isCdd"
+                        :requis="false"
+                        :errors="form.errors"
+                    />
+
+                    <!-- Lecture seule : « Primes des salariés » garde l'historique des montants. -->
+                    <div
+                        v-if="primes"
+                        class="space-y-1 border-t pt-5"
+                        data-testid="primes-contrat-lecture"
+                    >
+                        <div
+                            class="flex flex-wrap items-center justify-between gap-2"
+                        >
+                            <h4 class="text-sm font-medium">
+                                Primes et avantages
+                            </h4>
+                            <Link
+                                :href="`/backoffice/affectations-remuneration?employe_id=${contrat.employe_id}`"
+                                class="text-xs underline underline-offset-2"
+                            >
+                                Gérer dans Primes des salariés
+                            </Link>
+                        </div>
+                        <p
+                            v-if="!primes.length"
+                            class="text-xs text-muted-foreground"
+                        >
+                            Aucune prime ni aucun avantage.
+                        </p>
+                        <ul v-else class="list-inside list-disc text-sm">
+                            <li v-for="prime in primes" :key="prime">
+                                {{ prime }}
+                            </li>
+                        </ul>
+                    </div>
+
+                    <p class="text-xs text-muted-foreground">
+                        À l’enregistrement, le PDF du contrat est mis à jour
+                        automatiquement. Une version déjà signée est conservée
+                        telle quelle : si une clause change, une nouvelle
+                        version à faire signer est préparée.
+                    </p>
                 </div>
 
                 <div class="flex items-center justify-between">

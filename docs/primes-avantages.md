@@ -58,10 +58,22 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
 - **PRIME-006** — Suppression (`rh-types-remuneration.delete`) : possible **tant que le type n'a
   jamais été attribué** (décision du 28/10/2026) — une affectation, même annulée, compte ; sinon il
   se désactive. Un type déjà validé exige en plus le droit de validation.
-- **PRIME-007** — Un type déjà attribué garde ses caractéristiques de calcul (code, mode de calcul,
-  périodicité, nature du montant ; la catégorie, elle, ne se modifie jamais) : il faut créer un
-  nouveau type. Libellé, description,
-  valeurs par défaut et période restent modifiables.
+- **PRIME-007** — Type déjà attribué (révision du 31/10/2026, remplace le gel total) :
+  - le **code** ne change plus (il identifie les montants déjà transmis) ; la catégorie ne se
+    modifie jamais (ADR 0046) ;
+  - **ponctuelle → mensuelle** : toujours possible, sans effet sur les montants (une attribution
+    ponctuelle couvre un mois complet, ses dates restent les mêmes) ; les nouvelles attributions
+    suivent la périodicité mensuelle ;
+  - **mensuelle → ponctuelle, nature du montant, mode de calcul** : possibles seulement si aucune
+    attribution (hors annulées) ne porte sur un mois de paie encore ouvert (en cours, à venir, ou
+    terminée après le dernier mois figé — `CalendrierPaieService`). Sinon refus expliqué : la prime
+    continuerait d'être versée chaque mois, une attribution resterait sans montant (passage de
+    variable à fixe), ou un montant changerait de calcul. Terminer ou annuler ces attributions, ou
+    créer un nouveau type ;
+  - les mois figés ne sont jamais recalculés (transmission copiée) : aucun montant transmis, aucun
+    montant mensuel saisi ou validé n'est modifié ni dupliqué ;
+  - libellé, description, valeurs par défaut, période d'application, prorata et cumul restent
+    modifiables. Modifier un type validé exige toujours le droit de validation (PRIME-005).
 - **PRIME-008** — *Fermer* maintient les bénéficiaires actuels (leurs affectations continuent, un
   changement de montant reste possible) et refuse toute nouvelle attribution, y compris la
   validation d'une proposition en attente. *Désactiver* exige une **date d'effet** dès qu'une
@@ -104,6 +116,34 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
   refusé, propositions à valider comprises, **sauf si le type autorise le cumul**. Contrôle en
   transaction, sous verrou du salarié, par une lecture verrouillante : deux attributions
   simultanées ne passent pas toutes les deux (vérifié sous MySQL).
+- **AFF-004 bis (01/11/2026)** — Fenêtre « Attribuer » : dès qu'un salarié est choisi, une ligne
+  discrète affiche ses primes **déjà attribuées** (en cours ou à venir, validées ou « à valider »,
+  une fois chacune) ou « Aucune prime attribuée ». La liste « Prime ou avantage » **ne propose plus
+  les types qu'il a déjà sur la période visée** (même règle qu'AFF-004 : mois choisi pour une
+  prime ponctuelle, dates saisies — sinon aujourd'hui — pour une prime mensuelle) ; un type à
+  cumul autorisé reste toujours proposé, et une prime terminée n'empêche pas d'en attribuer une
+  nouvelle après sa fin. Changer de salarié désélectionne un type qu'il a déjà ; « Ce salarié
+  possède déjà toutes les primes disponibles sur cette période » si plus rien n'est proposé.
+  Simple aide à la saisie : le refus serveur d'AFF-004 reste l'autorité. Données : `primes` de
+  chaque salarié dans les options de la page (même périmètre que la liste, organisation de
+  l'utilisateur).
+- **AFF-004 ter (01/11/2026)** — Liste **RH → Contrats**, colonne **« Primes »** (« 0 prime »,
+  « 1 prime », « 3 primes ») : les primes **reprises dans le contrat PDF** — affectations du
+  salarié, de l'organisation, **validées**, **en cours ou à venir** (scope commun
+  `AffectationRemuneration::valideesEnCoursOuAVenir`, utilisé aussi par le PDF) — comptées
+  **une fois par type** (`COUNT(DISTINCT type_remuneration_id)`). Un changement de montant
+  (AFF-007) ou les montants mensuels (AFF-010) n'ajoutent rien ; propositions à valider,
+  annulées et terminées exclues. Une seule requête pour toute la liste
+  (`ContratController::nombrePrimesParEmploye`). Colonne affichée seulement avec
+  `rh-affectations-remuneration.read` (sinon `primes_count` = null).
+  - **Écarts voulus** : le récapitulatif de la fenêtre « Attribuer » (AFF-004 bis) inclut aussi
+    les propositions à valider, car il sert à éviter un chevauchement (AFF-004) ; le PDF du
+    contrat liste une ligne par affectation (un changement de montant à venir, ou un type à cumul
+    autorisé, y figure deux fois) alors que la colonne compte des types de prime.
+- **AFF-004 quater (01/11/2026)** — **Nouveau contrat** : des primes peuvent être ajoutées à la
+  création du contrat, avec les droits d'attribuer **et** de valider. Elles sont toujours validées
+  d'emblée et passent par `affecter()`, donc par les mêmes règles ; contrat et primes sont
+  enregistrés ensemble ou pas du tout. Détail : [rh-contrat-pdf.md](rh-contrat-pdf.md).
 - **AFF-005** — Montants : la valeur par défaut du type est **proposée** dans le formulaire, jamais
   reprise d'office ; le montant attribué est toujours celui saisi. Un élément **saisi chaque mois**
   n'a pas de montant permanent : son montant vient des montants mensuels (AFF-010).
@@ -121,12 +161,18 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
 - **AFF-009** — **Mois figés** : aucun début d'effet, changement de montant, fin d'effet (sauf au
   dernier jour du dernier mois figé), annulation ni montant mensuel ne peut toucher un mois figé. Un
   mois est figé dès qu'une version de sa transmission est validée, ou que la Comptabilité a validé
-  sa paie (`CalendrierPaieService`). Le message indique la première date possible.
+  sa paie (`CalendrierPaieService`). Annuler la validation (ADR 0047) le rouvre si aucune autre
+  version validée ne le fige. Le message indique la première date possible.
 - **AFF-010** — **Montants mensuels** (nature « saisi chaque mois ») : un montant (ou un taux) par
   mois, sur une affectation validée en vigueur ce mois-là ; « à valider » puis validé. Un montant
   validé ne se corrige ou ne se supprime qu'avec le droit de validation. Un mois sans montant validé
   n'est pas transmis (avertissement dans la transmission) ; un montant à valider bloque la
-  transmission du mois. Montant 0 accepté (rien ce mois-là).
+  transmission du mois. Montant 0 accepté (rien ce mois-là). **Préremplissage (31/10/2026)** :
+  la fenêtre propose le premier mois de la période d'effet encore sans montant, et la valeur du
+  dernier mois saisi, à défaut la valeur par défaut du type ; tout reste modifiable et suit la
+  validation habituelle (« Enregistrer le montant » = à valider, « Enregistrer et valider » =
+  validé tout de suite, réservé au droit de validation). Un type à montant **fixe** n'a jamais de
+  saisie mensuelle : son montant d'attribution est repris chaque mois.
 - **AFF-011** — **Avantage en nature** : attribué comme les autres, mais toujours **valorisé** —
   transmis à part, jamais dans le total versé.
 - **AFF-012** — **Annulation** : une proposition s'annule avec `rh-affectations-remuneration.delete`.

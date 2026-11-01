@@ -15,6 +15,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Concerns\DesigneUnPdg;
 use Tests\TestCase;
 
 /**
@@ -24,6 +25,7 @@ use Tests\TestCase;
  */
 class DepartEmployeTest extends TestCase
 {
+    use DesigneUnPdg;
     use RefreshDatabase;
 
     private const DROITS = ['rh-employes.read', 'rh-employes.update', 'rh-contrats.update'];
@@ -38,6 +40,7 @@ class DepartEmployeTest extends TestCase
         Carbon::setTestNow('2026-10-20 10:00:00');
         app(PermissionRegistrar::class)->forgetCachedPermissions();
         $this->org = Organization::factory()->create();
+        $this->designerPdg($this->org);
         $this->site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'depot']);
     }
 
@@ -241,6 +244,43 @@ class DepartEmployeTest extends TestCase
 
         $this->assertSame('actif', $employe->fresh()->statut->value);
         $this->partir($this->utilisateur(self::DROITS, 'manager'), $employe)->assertSessionHasNoErrors();
+    }
+
+    public function test_aucun_contrat_ne_peut_etre_cree_ou_reactive_pour_un_salarie_sorti(): void
+    {
+        $employe = $this->employe();
+        $ancien = $this->contrat($employe);
+        $user = $this->utilisateur([...self::DROITS, 'rh-contrats.read', 'rh-contrats.create']);
+        $this->partir($user, $employe)->assertSessionHasNoErrors();
+
+        $this->actingAs($user)->post(route('contrats.store'), [
+            ...$this->conditionsContrat(), 'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2026-10-19',
+        ])->assertSessionHasErrors('employe_id');
+        $this->assertSame(1, Contrat::where('employe_id', $employe->id)->count());
+
+        // Rendre « actif » le contrat terminé par le départ reviendrait à une réembauche implicite.
+        $this->actingAs($user)->put(route('contrats.update', $ancien), [
+            'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2025-01-15', 'statut_contrat' => 'actif',
+        ])->assertSessionHasErrors('employe_id');
+        $this->assertSame('termine', $ancien->fresh()->statut_contrat->value);
+        $this->assertSame('sorti', $employe->fresh()->statut->value);
+
+        // Le salarié sorti n'est pas proposé dans le formulaire de création.
+        $this->actingAs($user)->get(route('contrats.create'))
+            ->assertInertia(fn (Assert $page) => $page->where('employes', fn ($e) => ! collect($e)->contains('value', $employe->id)));
+    }
+
+    public function test_les_contrats_successifs_d_un_salarie_actif_restent_possibles(): void
+    {
+        $employe = $this->employe();
+        $this->contrat($employe, ['type_contrat' => 'cdd', 'date_fin' => '2026-06-30', 'statut_contrat' => 'termine']);
+        $user = $this->utilisateur([...self::DROITS, 'rh-contrats.read', 'rh-contrats.create']);
+
+        $this->actingAs($user)->post(route('contrats.store'), [
+            ...$this->conditionsContrat(), 'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2026-07-01',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(2, Contrat::where('employe_id', $employe->id)->count());
     }
 
     public function test_la_fiche_n_affiche_le_bouton_qu_avec_le_droit_reel(): void

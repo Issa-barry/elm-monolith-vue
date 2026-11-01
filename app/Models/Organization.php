@@ -170,6 +170,15 @@ class Organization extends Model
         return $this->belongsTo(Proprietaire::class, 'proprietaire_interne_id');
     }
 
+    /**
+     * PDG : employé RH désigné, signataire de tous les contrats de travail (ADR 0048). Jamais
+     * assignable en masse : seulement par App\Services\Rh\PdgService.
+     */
+    public function pdg(): BelongsTo
+    {
+        return $this->belongsTo(Employe::class, 'pdg_employe_id');
+    }
+
     public function sites(): HasMany
     {
         return $this->hasMany(Site::class);

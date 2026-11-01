@@ -105,8 +105,19 @@ const props = defineProps<{
     reprise: {
         courante: VersionTransmission | null;
         reprise: VersionTransmission | null;
+        // Brouillon RH en lecture seule : provisoire, jamais repris ni payé (ADR 0047).
+        brouillon: {
+            version: number;
+            nb_salaries: number;
+            total_verse: number;
+            total_valorise: number;
+            nb_anomalies_bloquantes: number;
+            a_jour: boolean;
+            preparee_le: string | null;
+        } | null;
         a_jour: boolean;
         a_reprendre: boolean;
+        etape: { code: string; label: string };
     };
     can_reprendre: boolean;
     can_valider_periode: boolean;
@@ -434,15 +445,58 @@ const periodeCourante = computed(
                 </div>
             </div>
 
-            <!-- Transmission RH du mois -->
+            <!-- Paie RH du mois : étape et brouillon provisoire (ADR 0047) -->
             <div
-                v-if="!reprise.courante"
+                class="flex flex-wrap items-center gap-2 text-sm"
+                data-testid="salaire-etape-paie"
+            >
+                <span class="text-muted-foreground">Paie RH du mois :</span>
+                <StatusDot
+                    :status="reprise.etape.code"
+                    :label="reprise.etape.label"
+                />
+            </div>
+            <div
+                v-if="!reprise.courante && reprise.brouillon"
+                class="rounded-lg border bg-muted/40 px-4 py-3 text-sm"
+                data-testid="salaire-brouillon-rh"
+            >
+                <p>
+                    <strong>Provisoire</strong> — version
+                    {{ reprise.brouillon.version }} en brouillon côté RH :
+                    {{ reprise.brouillon.nb_salaries }} salarié{{
+                        reprise.brouillon.nb_salaries !== 1 ? 's' : ''
+                    }}, {{ fmt(reprise.brouillon.total_verse) }} à
+                    verser<template v-if="reprise.brouillon.total_valorise > 0"
+                        >,
+                        {{ fmt(reprise.brouillon.total_valorise) }} d’avantages
+                        en nature</template
+                    >.
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    <template v-if="!reprise.brouillon.a_jour"
+                        >Des données RH ont changé depuis le dernier calcul :
+                        les RH doivent le recalculer. </template
+                    ><template
+                        v-else-if="
+                            reprise.brouillon.nb_anomalies_bloquantes > 0
+                        "
+                        >{{
+                            reprise.brouillon.nb_anomalies_bloquantes
+                        }}
+                        anomalie(s) bloquante(s) à corriger côté RH. </template
+                    >Ces montants ne peuvent être ni repris ni payés avant leur
+                    validation par les RH.
+                </p>
+            </div>
+            <div
+                v-else-if="!reprise.courante"
                 class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"
                 data-testid="salaire-transmission-etat"
             >
-                Aucune transmission RH pour {{ periodeCourante }}. La paie se
-                prépare à partir de la version validée et transmise par les RH
-                (RH → Transmission de paie).
+                Aucune paie RH pour {{ periodeCourante }}. La paie se prépare à
+                partir de la version validée par les RH (RH → Transmission de
+                paie) : elle apparaît ici dès sa validation.
             </div>
             <div
                 v-else-if="reprise.a_reprendre"
@@ -450,15 +504,15 @@ const periodeCourante = computed(
                 data-testid="salaire-transmission-etat"
             >
                 <template v-if="reprise.reprise">
-                    Les RH ont transmis la version
+                    Les RH ont validé la version
                     {{ reprise.courante.version }} le
                     {{ reprise.courante.transmise_le }}. La paie affichée vient
                     encore de la version {{ reprise.reprise.version }} :
                     reprenez la nouvelle version avant de valider la période.
                 </template>
                 <template v-else>
-                    Version {{ reprise.courante.version }} transmise par les RH
-                    le {{ reprise.courante.transmise_le }} :
+                    Version {{ reprise.courante.version }} validée par les RH le
+                    {{ reprise.courante.transmise_le }} :
                     {{ reprise.courante.nb_salaries }} salarié{{
                         reprise.courante.nb_salaries !== 1 ? 's' : ''
                     }}, {{ fmt(reprise.courante.total_verse) }} à verser. Elle
@@ -471,7 +525,7 @@ const periodeCourante = computed(
                 data-testid="salaire-transmission-etat"
             >
                 Paie préparée à partir de la version
-                {{ reprise.reprise.version }} transmise par les RH, reprise le
+                {{ reprise.reprise.version }} validée par les RH, reprise le
                 {{ reprise.reprise.reprise_le
                 }}{{
                     reprise.reprise.reprise_par

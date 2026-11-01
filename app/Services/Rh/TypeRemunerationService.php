@@ -5,10 +5,13 @@ namespace App\Services\Rh;
 use App\Enums\AuditEvent;
 use App\Enums\CategorieTypeRemuneration;
 use App\Enums\ModeCalculRemuneration;
+use App\Enums\PeriodiciteRemuneration;
+use App\Enums\StatutAffectationRemuneration;
 use App\Enums\StatutTypeRemuneration;
 use App\Models\TypeRemuneration;
 use App\Models\User;
 use App\Services\AuditLogService;
+use App\Services\Rh\Paie\CalendrierPaieService;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -33,10 +36,17 @@ class TypeRemunerationService
     private const LONGUEUR_CODE = 30;
 
     /**
-     * Caractéristiques de calcul, figées dès que le type a servi (il faut alors créer un nouveau type).
-     * La catégorie n'y figure plus : elle n'est jamais modifiée par le formulaire (ADR 0046).
+     * Caractéristiques de calcul d'un type déjà attribué (PRIME-007, révision du 31/10/2026) : le
+     * code ne change jamais ; les autres ne changent que si aucune attribution ne porte sur un mois
+     * de paie encore modifiable, sauf le passage de ponctuelle à mensuelle, toujours sans effet sur
+     * les montants (une attribution ponctuelle couvre un mois complet). La catégorie ne figure pas
+     * ici : elle n'est jamais modifiée par le formulaire (ADR 0046).
      */
-    private const CHAMPS_FIGES_APRES_USAGE = ['code', 'mode_calcul', 'periodicite', 'nature_montant'];
+    private const CHAMPS_CALCUL = [
+        'nature_montant' => 'un montant fixe se fixe à l’attribution, un montant variable se saisit chaque mois : ces attributions resteraient sans montant',
+        'mode_calcul' => 'elles portent un montant ou un taux selon le mode de calcul actuel',
+        'periodicite' => 'devenue ponctuelle, la prime continuerait d’être versée sur plusieurs mois ou changerait de calcul (prorata)',
+    ];
 
     private const CHAMPS_JOURNAL = [
         'code', 'libelle', 'description', 'categorie', 'mode_calcul', 'periodicite', 'nature_montant',
@@ -311,14 +321,50 @@ class TypeRemunerationService
             return;
         }
 
-        foreach (self::CHAMPS_FIGES_APRES_USAGE as $champ) {
-            $actuel = $type->{$champ} instanceof \BackedEnum ? $type->{$champ}->value : $type->{$champ};
-            if ((string) $actuel !== (string) $attributs[$champ]) {
-                throw ValidationException::withMessages([
-                    $champ => 'Ce type a déjà été attribué : ses caractéristiques de calcul ne changent plus. Créez un nouveau type.',
-                ]);
-            }
+        if ((string) $type->code !== (string) $attributs['code']) {
+            throw ValidationException::withMessages([
+                'code' => 'Ce type a déjà été attribué : son code ne change plus (il identifie les montants déjà transmis).',
+            ]);
         }
+
+        $modifies = array_values(array_filter(array_keys(self::CHAMPS_CALCUL), fn (string $champ) => (string) $type->{$champ}->value !== (string) $attributs[$champ]));
+        $versMensuelle = $modifies === ['periodicite']
+            && $type->periodicite === PeriodiciteRemuneration::PONCTUELLE
+            && $attributs['periodicite'] === PeriodiciteRemuneration::MENSUELLE->value;
+        if ($modifies === [] || $versMensuelle) {
+            return;
+        }
+
+        $nb = $this->nbAttributionsSurMoisModifiables($type);
+        if ($nb === 0) {
+            return;
+        }
+
+        $champ = reset($modifies);
+        throw ValidationException::withMessages([
+            $champ => sprintf(
+                'Impossible pour l’instant : %d attribution(s) de cette prime portent sur des mois de paie encore ouverts et %s. '
+                .'Terminez ou annulez ces attributions, ou créez un nouveau type. Les montants déjà transmis ne changent jamais.',
+                $nb,
+                self::CHAMPS_CALCUL[$champ],
+            ),
+        ]);
+    }
+
+    /**
+     * Attributions (hors annulées) qui touchent un mois que la paie peut encore calculer : en cours,
+     * à venir, ou terminées après le dernier mois figé (CalendrierPaieService). Un changement de
+     * calcul ne les toucherait qu'à ces mois-là ; les mois figés restent copiés tels quels.
+     */
+    private function nbAttributionsSurMoisModifiables(TypeRemuneration $type): int
+    {
+        $premierJour = app(CalendrierPaieService::class)->premierJourModifiable($type->organization_id);
+
+        return $type->affectations()
+            ->where('statut', '!=', StatutAffectationRemuneration::ANNULEE->value)
+            ->when($premierJour !== null, fn ($q) => $q->where(fn ($q2) => $q2->whereNull('date_fin')
+                ->orWhereDate('date_fin', '>=', $premierJour->toDateString())))
+            ->count();
     }
 
     private function assertLibelleLibre(string $libelle, string $organizationId, ?string $ignoreId): void

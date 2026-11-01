@@ -81,7 +81,7 @@ class TransmissionPaieLigne extends Model
     {
         $garde = function (self $ligne, string $action) {
             $statut = TransmissionPaie::whereKey($ligne->transmission_paie_id)->toBase()->value('statut');
-            if ($statut !== null && StatutTransmissionPaie::from($statut)->estFigee()) {
+            if ($statut !== null && StatutTransmissionPaie::from($statut)->estConservee()) {
                 throw new LogicException("Ligne d'une version de transmission figée : {$action} refusée.");
             }
         };

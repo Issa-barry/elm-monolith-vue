@@ -42,6 +42,8 @@ interface ContratActif {
 
 interface Employe {
     id: string;
+    // Modifier / supprimer / nouveau contrat : agence de rattachement (calculé par le serveur).
+    dans_perimetre_ecriture: boolean;
     matricule: string | null;
     nom_complet: string;
     nom: string;
@@ -54,6 +56,7 @@ interface Employe {
     statut_label: string;
     site: string | null;
     service_libelle: string | null;
+    fonction_libelle: string | null;
     contrat_actif: ContratActif | null;
 }
 
@@ -287,23 +290,17 @@ function confirmDelete(e: Employe) {
                         </template>
                     </Column>
 
-                    <!-- Matricule -->
+                    <!-- Fonction RH (le matricule reste visible sur la fiche et sert toujours à la recherche) -->
                     <Column
-                        field="matricule"
-                        header="Matricule"
+                        field="fonction_libelle"
+                        header="Fonction"
                         sortable
-                        style="width: 110px"
+                        style="width: 170px"
                     >
                         <template #body="{ data }">
-                            <span
-                                v-if="data.matricule"
-                                class="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
-                            >
-                                {{ data.matricule }}
-                            </span>
-                            <span v-else class="text-xs text-muted-foreground"
-                                >—</span
-                            >
+                            <span class="text-sm">{{
+                                data.fonction_libelle ?? '—'
+                            }}</span>
                         </template>
                     </Column>
 
@@ -416,7 +413,10 @@ function confirmDelete(e: Employe) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            v-if="can('rh-employes.update')"
+                                            v-if="
+                                                can('rh-employes.update') &&
+                                                data.dans_perimetre_ecriture
+                                            "
                                             as-child
                                         >
                                             <Link
@@ -429,7 +429,11 @@ function confirmDelete(e: Employe) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            v-if="can('rh-contrats.create')"
+                                            v-if="
+                                                can('rh-contrats.create') &&
+                                                data.dans_perimetre_ecriture &&
+                                                data.statut !== 'sorti'
+                                            "
                                             as-child
                                         >
                                             <Link
@@ -442,10 +446,16 @@ function confirmDelete(e: Employe) {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator
-                                            v-if="can('rh-employes.delete')"
+                                            v-if="
+                                                can('rh-employes.delete') &&
+                                                data.dans_perimetre_ecriture
+                                            "
                                         />
                                         <DropdownMenuItem
-                                            v-if="can('rh-employes.delete')"
+                                            v-if="
+                                                can('rh-employes.delete') &&
+                                                data.dans_perimetre_ecriture
+                                            "
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >

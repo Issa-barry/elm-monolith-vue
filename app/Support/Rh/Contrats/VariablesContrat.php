@@ -7,9 +7,10 @@ use App\Enums\TypeContrat;
 /**
  * Variables utilisables dans le texte d'un modèle de contrat (ADR 0044), écrites `{{cle}}`.
  *
- * - `dossier` : reprise du dossier RH et du contrat à la génération ;
- * - `saisie` : complétée par l'utilisateur au moment de la génération (absente de l'application) ;
- * - `avantages` : primes et avantages validés du salarié, cochés à la génération.
+ * - `dossier` : reprise automatiquement du dossier RH, du contrat (conditions saisies à sa
+ *   création : période d'essai, heures par semaine, motif du CDD), du PDG désigné et de l'agence
+ *   du salarié (ADR 0048) — plus aucune saisie au moment de la génération ;
+ * - `avantages` : toutes les primes et tous les avantages validés du salarié, en cours ou à venir.
  *
  * Une variable inconnue est refusée à l'enregistrement du modèle ; une variable utilisée et vide
  * bloque la génération : le document n'est jamais produit avec un trou ou une valeur inventée.
@@ -19,8 +20,8 @@ final class VariablesContrat
     /** @var array<string, array{libelle: string, groupe: string, source: string, types?: list<string>}> */
     public const CATALOGUE = [
         'employeur.nom' => ['libelle' => 'Nom de l’employeur (organisation)', 'groupe' => 'Employeur', 'source' => 'dossier'],
-        'employeur.representant_nom' => ['libelle' => 'Représentant de l’employeur — nom', 'groupe' => 'Employeur', 'source' => 'saisie'],
-        'employeur.representant_qualite' => ['libelle' => 'Représentant de l’employeur — qualité', 'groupe' => 'Employeur', 'source' => 'saisie'],
+        'employeur.representant_nom' => ['libelle' => 'Représentant de l’employeur — nom du PDG', 'groupe' => 'Employeur', 'source' => 'dossier'],
+        'employeur.representant_qualite' => ['libelle' => 'Représentant de l’employeur — qualité (« Président-directeur général »)', 'groupe' => 'Employeur', 'source' => 'dossier'],
 
         'salarie.civilite' => ['libelle' => 'Civilité', 'groupe' => 'Salarié', 'source' => 'dossier'],
         'salarie.nom_complet' => ['libelle' => 'Prénom et nom', 'groupe' => 'Salarié', 'source' => 'dossier'],
@@ -36,30 +37,19 @@ final class VariablesContrat
         'poste.fonction' => ['libelle' => 'Fonction', 'groupe' => 'Poste', 'source' => 'dossier'],
         'poste.service' => ['libelle' => 'Service', 'groupe' => 'Poste', 'source' => 'dossier'],
         'poste.agence' => ['libelle' => 'Agence', 'groupe' => 'Poste', 'source' => 'dossier'],
-        'poste.lieu_travail' => ['libelle' => 'Lieu de travail', 'groupe' => 'Poste', 'source' => 'saisie'],
+        'poste.lieu_travail' => ['libelle' => 'Lieu de travail (agence du salarié et sa ville)', 'groupe' => 'Poste', 'source' => 'dossier'],
 
         'contrat.type' => ['libelle' => 'Nature du contrat (« contrat à durée indéterminée »)', 'groupe' => 'Contrat', 'source' => 'dossier'],
         'contrat.date_debut' => ['libelle' => 'Date de début', 'groupe' => 'Contrat', 'source' => 'dossier'],
         'contrat.date_fin' => ['libelle' => 'Date de fin', 'groupe' => 'Contrat', 'source' => 'dossier', 'types' => ['cdd']],
-        'contrat.motif_cdd' => ['libelle' => 'Motif du recours au CDD', 'groupe' => 'Contrat', 'source' => 'saisie', 'types' => ['cdd']],
-        'contrat.periode_essai' => ['libelle' => 'Période d’essai', 'groupe' => 'Contrat', 'source' => 'saisie'],
-        'contrat.horaires' => ['libelle' => 'Durée et horaires de travail', 'groupe' => 'Contrat', 'source' => 'saisie'],
+        'contrat.motif_cdd' => ['libelle' => 'Motif du recours au CDD', 'groupe' => 'Contrat', 'source' => 'dossier', 'types' => ['cdd']],
+        'contrat.periode_essai' => ['libelle' => 'Période d’essai (« 3 mois », « aucune »)', 'groupe' => 'Contrat', 'source' => 'dossier'],
+        'contrat.horaires' => ['libelle' => 'Heures de travail par semaine (« 40 heures par semaine »)', 'groupe' => 'Contrat', 'source' => 'dossier'],
         'contrat.salaire_base' => ['libelle' => 'Salaire de base mensuel', 'groupe' => 'Contrat', 'source' => 'dossier'],
-        'contrat.avantages' => ['libelle' => 'Primes et avantages retenus', 'groupe' => 'Contrat', 'source' => 'avantages'],
+        'contrat.avantages' => ['libelle' => 'Primes et avantages validés du salarié', 'groupe' => 'Contrat', 'source' => 'avantages'],
 
-        'document.lieu_signature' => ['libelle' => 'Lieu de signature (« Fait à … »)', 'groupe' => 'Document', 'source' => 'saisie'],
+        'document.lieu_signature' => ['libelle' => 'Lieu de signature (laissé en blanc, écrit à la main à la signature)', 'groupe' => 'Document', 'source' => 'dossier'],
         'document.date' => ['libelle' => 'Date de génération', 'groupe' => 'Document', 'source' => 'dossier'],
-    ];
-
-    /** Champ du formulaire de génération => variable alimentée. */
-    public const CHAMPS_SAISIS = [
-        'representant_nom' => 'employeur.representant_nom',
-        'representant_qualite' => 'employeur.representant_qualite',
-        'lieu_travail' => 'poste.lieu_travail',
-        'periode_essai' => 'contrat.periode_essai',
-        'horaires' => 'contrat.horaires',
-        'motif_cdd' => 'contrat.motif_cdd',
-        'lieu_signature' => 'document.lieu_signature',
     ];
 
     private const MOTIF = '/\{\{\s*([^{}]*?)\s*\}\}/u';
@@ -126,5 +116,42 @@ final class VariablesContrat
     public static function libelle(string $cle): string
     {
         return self::CATALOGUE[$cle]['libelle'] ?? $cle;
+    }
+
+    /** Libellé sans l'exemple entre parenthèses : « Période d’essai ». */
+    public static function libelleCourt(string $cle): string
+    {
+        return trim((string) preg_replace('/\s*\(.*\)$/u', '', self::libelle($cle)));
+    }
+
+    /** Où compléter une information manquante, par groupe de variables. */
+    private const OU_CORRIGER = [
+        'Employeur' => 'Paramètres → Organisation',
+        'Salarié' => 'fiche du salarié : RH → Employés → Modifier',
+        'Poste' => 'fiche du salarié : RH → Employés → Modifier',
+        'Contrat' => 'contrat : RH → Contrats → Modifier',
+        'Document' => 'modèle : Paramètres → RH → Modèles de contrat',
+    ];
+
+    /**
+     * « Informations manquantes pour le PDF : date de naissance (fiche du salarié : …) ; motif du
+     * recours au CDD (contrat : …). » — ce qui manque et l'écran où le compléter.
+     *
+     * @param  list<string>  $cles
+     */
+    public static function messageManquantes(array $cles): string
+    {
+        $parEcran = [];
+        foreach ($cles as $cle) {
+            $ou = self::OU_CORRIGER[self::CATALOGUE[$cle]['groupe'] ?? ''] ?? 'dossier';
+            $libelle = self::libelleCourt($cle);
+            $parEcran[$ou][] = mb_strtolower(mb_substr($libelle, 0, 1)).mb_substr($libelle, 1);
+        }
+
+        return 'Informations manquantes pour le PDF : '.implode(' ; ', array_map(
+            fn (string $ou, array $libelles) => implode(', ', $libelles).' ('.$ou.')',
+            array_keys($parEcran),
+            $parEcran,
+        )).'.';
     }
 }

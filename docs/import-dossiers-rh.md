@@ -31,6 +31,12 @@ Employés → Mettre à jour par fichier → Exporter pour mise à jour → modi
   colonnes doivent lui correspondre (inchangé), sinon **erreur** — un contrat existant se modifie
   dans l'écran Contrats, jamais par l'import. CDD : fin obligatoire et ≥ début ; CDI : pas de fin.
   Salarié sorti : création refusée. Début antérieur à l'embauche : avertissement non bloquant.
+- **IMPRH-006 bis** — **Sans PDG désigné** (signataire des contrats, ADR 0048) : aucun contrat
+  n'est créé. La ligne n'est **pas** en erreur (une erreur bloquerait tout le fichier) : le dossier
+  (embauche, service, fonction) est mis à jour, le contrat et son salaire sont écartés avec un
+  avertissement qui dit où désigner le PDG. Une fois le PDG désigné, la même ligne réimportée
+  crée le contrat. Un contrat importé n'a ni période d'essai ni heures par semaine : son PDF est
+  « à compléter » jusqu'à ce que le contrat soit complété dans RH → Contrats → Modifier.
 - **IMPRH-007** — Salaire de base, avec `rh-remunerations.read` uniquement : pris **seulement à la
   création du contrat**. Sur un contrat actif existant, il doit être identique au salaire du contrat
   (inchangé) ; absent ou différent : erreur — un contrat existant, salaire compris, se modifie dans

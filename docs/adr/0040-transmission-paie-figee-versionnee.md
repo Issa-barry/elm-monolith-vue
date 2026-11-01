@@ -1,7 +1,7 @@
 # ADR 0040 — Transmission mensuelle RH → Comptabilité, figée et versionnée
 
 - **Date** : 2026-10-29
-- **Statut** : accepté — lot 4 livré le 2026-10-29 (non commité)
+- **Statut** : accepté — lot 4 livré le 2026-10-29 ; **révisé par l'[ADR 0047](0047-validation-rh-met-a-disposition-comptabilite.md)** (31/10/2026) : la validation met la version à disposition de la Comptabilité, plus de transmission manuelle
 - **Périmètre** : RH et Comptabilité, éléments de rémunération du mois — cf.
   [transmission-paie.md](../transmission-paie.md)
 

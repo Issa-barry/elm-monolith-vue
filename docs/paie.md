@@ -29,7 +29,11 @@ le lot 5. Son retrait (ADR 0037) reste à décider.
 1. **RH** prépare, valide (fige) et transmet la version du mois (*RH → Transmission de paie*).
 2. **Comptabilité → Paiement salaire**, mois choisi : un bandeau indique l'état de la transmission
    (aucune, version N à reprendre, version N reprise, version plus récente à reprendre).
-3. **Reprendre la transmission RH** : les lignes de paie sont créées depuis la version transmise.
+3. **Reprendre la transmission RH** : les lignes de paie sont créées depuis la version validée par
+   les RH (disponible dès sa validation, ADR 0047). Avant, l'écran montre l'étape de la paie du mois
+   (aucune paie, brouillon provisoire, à recalculer, prête à valider côté RH, validée par les RH,
+   reprise, validée par la Comptabilité, payée, clôturée) et le brouillon RH en lecture seule, jamais
+   repris ni payé.
 4. **Valider la période** : les salaires deviennent payables ; le mois est figé côté RH.
 5. **Payer** (inchangé).
 

@@ -12,6 +12,7 @@ use App\Services\ImportFlotte\Normalizers\ImportDateNormalizer;
 use App\Services\ImportFlotte\Normalizers\ImportMontantNormalizer;
 use App\Services\ImportFlotte\Normalizers\ImportTextNormalizer;
 use App\Services\ImportFlotte\Normalizers\ReferenceValueResolver;
+use App\Services\Rh\PdgService;
 use App\Services\SiteScopeService;
 use Illuminate\Support\Collection;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -29,7 +30,10 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * - contrat : créé seulement si le salarié n'a pas de contrat actif ; un contrat actif existant
  *   n'est jamais modifié (différent du fichier = erreur) ;
  * - salaire : lu seulement avec `rh-remunerations.read`, pris seulement à la création du contrat.
- *   Les changements de salaire sont marqués `sensible` et aucun message d'erreur ne cite un montant.
+ *   Les changements de salaire sont marqués `sensible` et aucun message d'erreur ne cite un montant ;
+ * - sans PDG désigné (ADR 0048) : aucun contrat n'est créé ; la ligne n'est PAS en erreur (une
+ *   erreur bloquerait tout le fichier) : le dossier est mis à jour, le contrat et son salaire sont
+ *   écartés avec un avertissement.
  *
  * L'exécution (ImportRhExecutor) relance cette analyse au moment de confirmer.
  */
@@ -40,7 +44,12 @@ class ImportRhParser
 
     private const FORMAT_DATE = 'd/m/Y';
 
-    public function __construct(private readonly SiteScopeService $siteScope) {}
+    public const AVERTISSEMENT_SANS_PDG = 'Contrat (et son salaire) non créé : aucun PDG n’est désigné pour l’organisation (signataire des contrats). Le dossier est bien mis à jour. Désignez le PDG (RH → Employés → fiche de la personne → « Désigner comme PDG »), puis créez le contrat dans RH → Contrats ou réimportez cette ligne.';
+
+    public function __construct(
+        private readonly SiteScopeService $siteScope,
+        private readonly PdgService $pdg,
+    ) {}
 
     /**
      * @return array{nb_lignes_total: int, erreur_globale: ?string, colonne_salaire_ignoree: bool, lignes: list<array>}
@@ -85,6 +94,7 @@ class ImportRhParser
             'acteur' => $acteur,
             'lit_salaire' => $voitSalaires && $colonneSalaire,
             'peut_creer_contrat' => $acteur->can('rh-contrats.create'),
+            'pdg_designe' => $this->pdg->actuel($acteur->organization_id) !== null,
             'sites_ecriture' => $this->siteScope->assignedSiteIds($acteur),
             'employes' => Employe::with(['personne', 'service', 'fonction', 'contratActif'])
                 ->where('organization_id', $acteur->organization_id)
@@ -137,8 +147,10 @@ class ImportRhParser
 
         $dateEmbauche = $this->analyserDossier($ligne, $employe, $contexte, $resultat);
         $contratCree = $this->analyserContrat($ligne, $employe, $contexte, $dateEmbauche, $resultat);
+        $contratEcarteSansPdg = in_array(self::AVERTISSEMENT_SANS_PDG, $resultat['avertissements'], true);
 
-        if ($contexte['lit_salaire']) {
+        // Contrat écarté faute de PDG : son salaire l'est aussi (il n'est pris qu'à la création).
+        if ($contexte['lit_salaire'] && ! $contratEcarteSansPdg) {
             $this->analyserSalaire($ligne, $employe, $contratCree, $resultat);
         }
 
@@ -304,6 +316,12 @@ class ImportRhParser
 
         if (! $contexte['peut_creer_contrat']) {
             $resultat['erreurs'][] = 'Droit manquant pour créer un contrat (permission « Contrats — créer »).';
+
+            return false;
+        }
+
+        if (! $contexte['pdg_designe']) {
+            $resultat['avertissements'][] = self::AVERTISSEMENT_SANS_PDG;
 
             return false;
         }
