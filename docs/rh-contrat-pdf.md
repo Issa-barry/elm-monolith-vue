@@ -42,6 +42,33 @@ L'utilisateur saisit seulement ce que l'application ne connaît pas :
 - **« Créer le contrat »** enregistre le contrat **puis produit le PDF** (version 1, « à signer »)
   et ouvre la page du contrat. Le PDF est associé au contrat et à son organisation.
 
+### Primes ajoutées à la création (01/11/2026)
+
+Section facultative **« Primes et avantages »**, bouton **« Ajouter une prime »**, autant de lignes
+que nécessaire. Visible seulement avec `rh-affectations-remuneration.create` **et**
+`rh-affectations-remuneration.valider` ; le serveur refuse (403) des lignes envoyées sans ces deux
+droits. Le reste du contrat ne change pas pour les autres utilisateurs.
+
+- **Uniquement des primes validées** (décision du 01/11/2026) : une prime créée ici est validée à
+  l'enregistrement, jamais « à valider », et figure donc dans le PDF. Seuls les types actifs sont
+  proposés.
+- **Une ligne** : prime, montant (ou taux en % du salaire de base, ou rien pour un montant saisi
+  chaque mois), date « À partir du » (ou mois de versement pour une prime ponctuelle). La périodicité
+  est celle du type, affichée sans être choisie. Montant et taux par défaut du type sont proposés.
+- **Date proposée** : le début du contrat, ou le premier jour modifiable si ce mois est figé ; le
+  mois suivant pour une prime ponctuelle si le contrat commence en cours de mois (elle couvre le mois
+  entier). Modifiable ; une date non modifiée suit celle du contrat.
+- **Fin** : une prime mensuelle s'arrête à la fin du CDD, ou plus tôt si le type prend fin avant.
+  Refus si elle commence avant le contrat ou après la fin du CDD.
+- **Doublons** : une prime déjà attribuée au salarié sur la période, ou déjà choisie sur une autre
+  ligne, n'est pas proposée (`resources/js/lib/primesAttribuees.ts`). Le serveur applique les règles
+  de `AffectationRemunerationService::affecter()` (AFF-002 à AFF-005, AFF-009).
+- **Une seule opération** (`ContratService::creerAvecPrimes`) : si une ligne est refusée, ni le
+  contrat ni aucune prime n'est enregistré, et l'erreur s'affiche sur la ligne concernée.
+- **En modification** : pas de lignes de saisie. La page montre les primes reprises au contrat en
+  lecture seule (droit `rh-affectations-remuneration.read`), avec un lien vers « Primes des
+  salariés », qui garde l'historique des montants (AFF-006, AFF-007).
+
 ### Données reprises automatiquement
 
 | Source | Variables |
@@ -103,10 +130,14 @@ L'utilisateur saisit seulement ce que l'application ne connaît pas :
   « Mettre à jour le PDF » (`POST /backoffice/contrats/{contrat}/documents`) n'apparaît que s'il
   y a quelque chose à faire.
 - **Liste des contrats** : colonne « Contrat de travail » (V2 · À signer, « PDF à préparer » pour
-  un contrat actif sans PDF, ex. contrat importé). Menu ⋮ : **Voir le contrat (PDF)** et
-  **Télécharger le PDF** (`GET /backoffice/contrats/{contrat}/pdf`, `?preview=1` = aperçu, 404
-  sans version), **Fiche du contrat, signature**, **Préparer le PDF** (contrat actif sans PDF),
-  Modifier, Supprimer.
+  un contrat actif sans PDF, ex. contrat importé). Menu ⋮ : **Voir** (01/11/2026 : seule action
+  de consultation, plus de « Télécharger le PDF » ; ouvre
+  `GET /backoffice/contrats/{contrat}/pdf?preview=1` dans un nouvel onglet, servi en
+  `Content-Disposition: inline` pour le lecteur PDF du navigateur, qui permet zoom, impression et
+  téléchargement ; sans `?preview` la même route sert le fichier en `attachment` ; 404 sans
+  version), **Fiche du contrat, signature**, **Préparer le PDF** (contrat actif sans PDF),
+  Modifier, Supprimer. Colonne **« Primes »** : nombre de primes attribuées au salarié
+  (docs/primes-avantages.md, AFF-004 ter).
 - **Modèles de contrat** (Paramètres → RH, `rh-referentiels.gerer`) : inchangés (un modèle par
   type, brouillon → actif, révision, texte brut, variables `{{cle}}` refusées si inconnues ou
   réservées aux CDD). Toutes les variables sont désormais reprises automatiquement. Une variable
@@ -134,6 +165,9 @@ L'utilisateur saisit seulement ce que l'application ne connaît pas :
 `tests/Feature/DocumentContratTest.php` (création avec PDF, PDG absent ou d'une autre organisation,
 informations manquantes et où les compléter, validation période d'essai/heures, mise à jour sans
 doublon, version signée conservée, primes validées, accès, isolation),
+`tests/Feature/ContratPrimesTest.php` (primes à la création : une ou plusieurs, doublons, montants,
+dates, tout ou rien, droits, isolation, modification, version signée),
+`resources/js/lib/__tests__/primesAttribuees.spec.ts` (règle « déjà attribuée », dates proposées),
 `tests/Feature/PdgOrganisationTest.php` (désignation, remplacement, permission, organisation,
 départ et suppression), `tests/Feature/ModeleContratTest.php` (trame, variables, activation),
 `tests/Feature/Documents/ModeleDocumentPdfTest.php` (rendu dans le modèle partagé, échappement).

@@ -77,6 +77,32 @@ export function randomDigits(length: number): string {
     return `${array[0] % max}`.padStart(length, '0');
 }
 
+/**
+ * Mobile guinéen valide (libphonenumber GN) : 6[0-356]\d{7} — le 2e chiffre ne peut JAMAIS être
+ * 4/7/8/9, sous peine de rejet légitime côté backend (numéro invalide).
+ */
+export function numeroGuineeAleatoire(): string {
+    return `6${['0', '1', '2', '3', '5', '6'][Math.floor(Math.random() * 6)]}${randomDigits(7)}`;
+}
+
+/**
+ * « Nouvel employé » commence toujours par le téléphone : ouvre le formulaire, recherche un numéro
+ * guinéen inconnu et attend que la suite du formulaire (prénom, nom…) s'affiche.
+ */
+export async function ouvrirNouvelEmploye(
+    page: Page,
+    numero: string = numeroGuineeAleatoire(),
+): Promise<string> {
+    await page.goto('/backoffice/employes/create');
+    await page.locator('#telephone').fill(numero);
+    await page.getByTestId('rechercher-telephone').click();
+    await page
+        .getByTestId('resultat-nouveau')
+        .waitFor({ state: 'visible', timeout: 15_000 });
+
+    return numero;
+}
+
 function normalizeE164Phone(rawPhone: string): string {
     const trimmed = rawPhone.trim();
     if (!trimmed) return '';

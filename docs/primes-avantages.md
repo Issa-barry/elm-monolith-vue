@@ -116,6 +116,34 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
   refusé, propositions à valider comprises, **sauf si le type autorise le cumul**. Contrôle en
   transaction, sous verrou du salarié, par une lecture verrouillante : deux attributions
   simultanées ne passent pas toutes les deux (vérifié sous MySQL).
+- **AFF-004 bis (01/11/2026)** — Fenêtre « Attribuer » : dès qu'un salarié est choisi, une ligne
+  discrète affiche ses primes **déjà attribuées** (en cours ou à venir, validées ou « à valider »,
+  une fois chacune) ou « Aucune prime attribuée ». La liste « Prime ou avantage » **ne propose plus
+  les types qu'il a déjà sur la période visée** (même règle qu'AFF-004 : mois choisi pour une
+  prime ponctuelle, dates saisies — sinon aujourd'hui — pour une prime mensuelle) ; un type à
+  cumul autorisé reste toujours proposé, et une prime terminée n'empêche pas d'en attribuer une
+  nouvelle après sa fin. Changer de salarié désélectionne un type qu'il a déjà ; « Ce salarié
+  possède déjà toutes les primes disponibles sur cette période » si plus rien n'est proposé.
+  Simple aide à la saisie : le refus serveur d'AFF-004 reste l'autorité. Données : `primes` de
+  chaque salarié dans les options de la page (même périmètre que la liste, organisation de
+  l'utilisateur).
+- **AFF-004 ter (01/11/2026)** — Liste **RH → Contrats**, colonne **« Primes »** (« 0 prime »,
+  « 1 prime », « 3 primes ») : les primes **reprises dans le contrat PDF** — affectations du
+  salarié, de l'organisation, **validées**, **en cours ou à venir** (scope commun
+  `AffectationRemuneration::valideesEnCoursOuAVenir`, utilisé aussi par le PDF) — comptées
+  **une fois par type** (`COUNT(DISTINCT type_remuneration_id)`). Un changement de montant
+  (AFF-007) ou les montants mensuels (AFF-010) n'ajoutent rien ; propositions à valider,
+  annulées et terminées exclues. Une seule requête pour toute la liste
+  (`ContratController::nombrePrimesParEmploye`). Colonne affichée seulement avec
+  `rh-affectations-remuneration.read` (sinon `primes_count` = null).
+  - **Écarts voulus** : le récapitulatif de la fenêtre « Attribuer » (AFF-004 bis) inclut aussi
+    les propositions à valider, car il sert à éviter un chevauchement (AFF-004) ; le PDF du
+    contrat liste une ligne par affectation (un changement de montant à venir, ou un type à cumul
+    autorisé, y figure deux fois) alors que la colonne compte des types de prime.
+- **AFF-004 quater (01/11/2026)** — **Nouveau contrat** : des primes peuvent être ajoutées à la
+  création du contrat, avec les droits d'attribuer **et** de valider. Elles sont toujours validées
+  d'emblée et passent par `affecter()`, donc par les mêmes règles ; contrat et primes sont
+  enregistrés ensemble ou pas du tout. Détail : [rh-contrat-pdf.md](rh-contrat-pdf.md).
 - **AFF-005** — Montants : la valeur par défaut du type est **proposée** dans le formulaire, jamais
   reprise d'office ; le montant attribué est toujours celui saisi. Un élément **saisi chaque mois**
   n'a pas de montant permanent : son montant vient des montants mensuels (AFF-010).

@@ -19,6 +19,13 @@ import { Label } from '@/components/ui/label';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    libellesPrimesActuelles,
+    periodeDuMois,
+    primeDejaAttribuee,
+    SANS_FIN,
+    type PrimeOccupee,
+} from '@/lib/primesAttribuees';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import {
@@ -39,7 +46,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface Option {
     value: string;
@@ -51,6 +58,7 @@ interface EmployeOption extends Option {
     date_embauche: string | null;
     date_sortie: string | null;
     attribuable: boolean;
+    primes: PrimeOccupee[];
 }
 
 interface TypeOption extends Option {
@@ -379,6 +387,63 @@ const typeChoisi = computed((): TypeOption | undefined => {
 
 const typePonctuel = computed(
     () => typeChoisi.value?.periodicite === 'ponctuelle',
+);
+
+// ── Primes déjà attribuées au salarié choisi ────────────────────────────────────
+// Même règle que le serveur (assertSansChevauchement) : un type sans cumul autorisé ne peut pas
+// être attribué deux fois sur des périodes qui se chevauchent, propositions à valider comprises.
+// Le serveur reste l'autorité ; ici on évite seulement de proposer un doublon.
+const aujourdhuiIso = new Date().toLocaleDateString('en-CA');
+const employeChoisi = computed(() =>
+    props.employes.find((e) => e.value === form.employe_id),
+);
+
+/** Période que couvrirait la nouvelle attribution pour ce type (dates saisies, sinon aujourd'hui). */
+function periodeVisee(t: TypeOption): [string, string] {
+    if (t.periodicite === 'ponctuelle') {
+        return periodeDuMois(form.mois_versement || aujourdhuiIso.slice(0, 7));
+    }
+    return [form.date_debut || aujourdhuiIso, form.date_fin || SANS_FIN];
+}
+
+function dejaAttribue(t: TypeOption): boolean {
+    const [du, au] = periodeVisee(t);
+    return primeDejaAttribuee(
+        employeChoisi.value?.primes ?? [],
+        t.value,
+        t.cumul_autorise,
+        du,
+        au,
+    );
+}
+
+// Types proposés : ceux que le salarié n'a pas déjà sur la période (tous tant qu'aucun salarié).
+// Le type déjà choisi reste dans la liste pour que le champ ne se vide pas sous les yeux.
+const typesProposes = computed(() =>
+    employeChoisi.value
+        ? typesAttribuables.value.filter(
+              (t) => t.value === form.type_remuneration_id || !dejaAttribue(t),
+          )
+        : typesAttribuables.value,
+);
+
+const primesActuelles = computed(() =>
+    libellesPrimesActuelles(employeChoisi.value?.primes ?? [], aujourdhuiIso),
+);
+
+// Changement de salarié : un type qu'il a déjà est désélectionné. Pendant la saisie des dates, on
+// ne retire rien sous les yeux de l'utilisateur : le serveur explique un éventuel chevauchement.
+watch(
+    () => form.employe_id,
+    () => {
+        if (
+            !enEdition.value &&
+            typeChoisi.value &&
+            dejaAttribue(typeChoisi.value)
+        ) {
+            form.type_remuneration_id = '';
+        }
+    },
 );
 const typeVariable = computed(
     () => typeChoisi.value?.nature_montant === 'variable',
@@ -1070,6 +1135,19 @@ const champSelect =
                     >
                         {{ form.errors.employe_id }}
                     </p>
+                    <p
+                        v-if="!enEdition && employeChoisi"
+                        class="mt-1 text-xs text-muted-foreground"
+                        data-testid="primes-actuelles"
+                    >
+                        <template v-if="primesActuelles.length">
+                            Déjà attribuées :
+                            <span class="text-foreground">{{
+                                primesActuelles.join(' · ')
+                            }}</span>
+                        </template>
+                        <template v-else>Aucune prime attribuée.</template>
+                    </p>
                 </div>
                 <div>
                     <Label
@@ -1094,7 +1172,7 @@ const champSelect =
                             Choisir un type validé
                         </option>
                         <option
-                            v-for="t in enEdition ? types : typesAttribuables"
+                            v-for="t in enEdition ? types : typesProposes"
                             :key="t.value"
                             :value="t.value"
                         >
@@ -1114,6 +1192,24 @@ const champSelect =
                     >
                         Aucun type actif : un type doit être validé dans
                         Paramètres → Primes et avantages.
+                    </p>
+                    <p
+                        v-else-if="
+                            !enEdition && typeChoisi && dejaAttribue(typeChoisi)
+                        "
+                        class="mt-1 text-xs text-amber-700 dark:text-amber-300"
+                        data-testid="prime-deja-attribuee"
+                    >
+                        Cette prime est déjà attribuée à ce salarié sur cette
+                        période.
+                    </p>
+                    <p
+                        v-else-if="!enEdition && typesProposes.length === 0"
+                        class="mt-1 text-xs text-muted-foreground"
+                        data-testid="toutes-primes-attribuees"
+                    >
+                        Ce salarié possède déjà toutes les primes disponibles
+                        sur cette période.
                     </p>
                 </div>
             </div>

@@ -280,6 +280,36 @@ class AffectationRemunerationTest extends TestCase
         $this->affecter([...$base, 'type_remuneration_id' => $this->type()->id, 'date_debut' => '2026-11-01'])->assertSessionHasNoErrors();
     }
 
+    public function test_la_fenetre_attribuer_connait_les_primes_deja_attribuees_de_chaque_salarie(): void
+    {
+        $employe = $this->employe();
+        $sansPrime = $this->employe();
+        $transport = $this->type(['libelle' => 'Transport']);
+        $logement = $this->type(['libelle' => 'Logement']);
+        $this->affectationValidee($employe, $transport, ['date_debut' => '2026-10-01']);
+        $this->affectationValidee($employe, $logement, ['date_debut' => '2026-11-01', 'statut' => StatutAffectationRemuneration::A_VALIDER->value]);
+        // Annulée : n'occupe plus la période, jamais proposée comme « déjà attribuée ».
+        $this->affectationValidee($employe, $this->type(['libelle' => 'Téléphone']), ['statut' => StatutAffectationRemuneration::ANNULEE->value]);
+        // Autre organisation : jamais visible.
+        $autreOrg = Organization::factory()->create();
+        Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Ailleurs', 'type' => 'depot']);
+        $this->affectationValidee($this->employe([], $autreOrg), $this->type([], $autreOrg));
+
+        $this->actingAs($this->user)->get(route('affectations-remuneration.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('employes', function ($employes) use ($employe, $sansPrime, $transport, $logement, $autreOrg) {
+                    $parId = collect($employes)->keyBy('value');
+                    $primes = collect($parId[$employe->id]['primes']);
+
+                    return $primes->count() === 2
+                        && $primes->pluck('type_id')->sort()->values()->all() === collect([$transport->id, $logement->id])->sort()->values()->all()
+                        && $primes->firstWhere('type_id', $logement->id)['a_valider'] === true
+                        && $primes->firstWhere('type_id', $transport->id)['date_fin'] === null
+                        && $parId[$sansPrime->id]['primes'] === []
+                        && ! $parId->contains(fn ($e) => Employe::find($e['value'])?->organization_id === $autreOrg->id);
+                }));
+    }
+
     public function test_le_cumul_autorise_permet_plusieurs_affectations_simultanees(): void
     {
         $employe = $this->employe();

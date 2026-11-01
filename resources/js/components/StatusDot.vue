@@ -40,6 +40,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Partage Livreur d'un véhicule (liste des véhicules, PartageConformiteVehiculesService).
     fait: 'bg-emerald-500',
     non_requis: 'bg-zinc-400 dark:bg-zinc-500',
+    // Statut d'un employé (StatutEmploye) : suspendu = attention, sorti = parti de l'entreprise.
+    suspendu: 'bg-amber-400',
+    sorti: 'bg-zinc-400 dark:bg-zinc-500',
     // Anomalie du contrôle des encaissements close sans régularisation (motif obligatoire).
     fausse_alerte: 'bg-zinc-400 dark:bg-zinc-500',
     // Monitoring des commissions (CommissionAnomalieStatut) : commission finalement générée.

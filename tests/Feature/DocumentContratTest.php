@@ -602,6 +602,33 @@ class DocumentContratTest extends TestCase
         $this->assertSame(1, DocumentContrat::count());
     }
 
+    public function test_voir_le_contrat_l_affiche_dans_le_navigateur_sans_le_telecharger(): void
+    {
+        $this->activerModele();
+        $contrat = $this->contrat($this->site);
+        $this->generer($this->utilisateur(self::GENERATION), $contrat)->assertSessionHasNoErrors();
+        $lecteur = $this->utilisateur(['rh-contrats.read', 'rh-remunerations.read']);
+
+        $reponse = $this->actingAs($lecteur)->get(route('contrats.pdf', [$contrat, 'preview' => 1]));
+
+        $reponse->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('inline;', $reponse->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('.pdf', $reponse->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('no-store', $reponse->headers->get('Cache-Control'));
+        $this->assertStringContainsString('private', $reponse->headers->get('Cache-Control'));
+        $this->assertStringStartsWith('%PDF', $reponse->getContent());
+
+        // Le téléchargement direct reste disponible pour les autres écrans.
+        $this->assertStringStartsWith('attachment;', $this->actingAs($lecteur)->get(route('contrats.pdf', $contrat))->headers->get('Content-Disposition'));
+
+        // L'aperçu garde les mêmes contrôles d'accès.
+        $this->actingAs($this->utilisateur(['rh-contrats.read']))->get(route('contrats.pdf', [$contrat, 'preview' => 1]))->assertForbidden();
+        $autreOrg = Organization::factory()->create();
+        $intrus = $this->utilisateur(['rh-contrats.read', 'rh-remunerations.read'], org: $autreOrg);
+        $intrus->sites()->sync([Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Kaloum', 'type' => 'depot'])->id => ['role' => 'employe', 'is_default' => true]]);
+        $this->actingAs($intrus)->get(route('contrats.pdf', [$contrat, 'preview' => 1]))->assertForbidden();
+    }
+
     public function test_sans_version_le_pdf_du_contrat_est_introuvable_en_lecture_seule(): void
     {
         $this->activerModele();

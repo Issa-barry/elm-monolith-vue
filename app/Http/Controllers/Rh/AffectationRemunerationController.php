@@ -255,8 +255,12 @@ class AffectationRemunerationController extends Controller
         app(SiteScopeService::class)->applyToQuery($query, $user);
         $toutes = $user->agitSurToutesLesAgences();
         $sites = $toutes ? [] : $user->sites()->pluck('sites.id')->all();
+        $employes = $query->get();
 
-        return $query->get()
+        // Fenêtre « Attribuer » : récapitulatif du salarié et types déjà pris retirés de la liste.
+        $occupations = $this->service->primesOccupeesParEmploye($orgId, $employes->pluck('id'));
+
+        return $employes
             ->sortBy('nom_complet')
             ->map(fn (Employe $e) => [
                 'value' => $e->id,
@@ -266,6 +270,7 @@ class AffectationRemunerationController extends Controller
                 'date_sortie' => $e->date_sortie?->toDateString(),
                 'attribuable' => ($toutes || ($e->site_id !== null && in_array($e->site_id, $sites, true)))
                     && ! ($e->statut === StatutEmploye::SORTI && $e->date_sortie === null),
+                'primes' => $occupations[$e->id] ?? [],
             ])
             ->values()
             ->all();

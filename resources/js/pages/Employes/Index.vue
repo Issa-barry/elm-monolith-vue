@@ -56,6 +56,7 @@ interface Employe {
     statut_label: string;
     site: string | null;
     service_libelle: string | null;
+    fonction_libelle: string | null;
     contrat_actif: ContratActif | null;
 }
 
@@ -289,23 +290,17 @@ function confirmDelete(e: Employe) {
                         </template>
                     </Column>
 
-                    <!-- Matricule -->
+                    <!-- Fonction RH (le matricule reste visible sur la fiche et sert toujours à la recherche) -->
                     <Column
-                        field="matricule"
-                        header="Matricule"
+                        field="fonction_libelle"
+                        header="Fonction"
                         sortable
-                        style="width: 110px"
+                        style="width: 170px"
                     >
                         <template #body="{ data }">
-                            <span
-                                v-if="data.matricule"
-                                class="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
-                            >
-                                {{ data.matricule }}
-                            </span>
-                            <span v-else class="text-xs text-muted-foreground"
-                                >—</span
-                            >
+                            <span class="text-sm">{{
+                                data.fonction_libelle ?? '—'
+                            }}</span>
                         </template>
                     </Column>
 

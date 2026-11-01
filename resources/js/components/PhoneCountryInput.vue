@@ -71,6 +71,11 @@ const props = withDefaults(
          * est laissé vide : aucune requête n'est envoyée, aucune erreur JS, le bouton "submit"
          * semble simplement ne rien faire. */
         required?: boolean;
+        /** Pays imposé (code ISO, ex. « GN ») : remplace le pays par défaut et suit ses changements. */
+        country?: string;
+        /** Le pays reste affiché (drapeau + indicatif) mais ne peut pas être changé (ex. contact
+         * d'urgence d'un employé : même pays que le téléphone de l'employé). */
+        countryLocked?: boolean;
     }>(),
     {
         modelValue: '',
@@ -85,6 +90,8 @@ const props = withDefaults(
         countries: undefined,
         rememberChoice: true,
         required: true,
+        country: undefined,
+        countryLocked: false,
     },
 );
 
@@ -95,6 +102,8 @@ const paysOptions = computed(() =>
 const emit = defineEmits<{
     'update:modelValue': [string];
     'update:valid': [boolean];
+    /** Pays choisi (code ISO), pour un champ qui doit suivre ce pays. */
+    'update:country': [string];
 }>();
 
 const STORAGE_KEY = 'login_country_code';
@@ -122,17 +131,49 @@ const selectedPays = computed(
 const phoneDigits = ref('');
 const phoneTouched = ref(false);
 
+if (props.country && paysOptions.value.some((p) => p.code === props.country)) {
+    selectedCountryCode.value = props.country;
+}
+
 // Réhydratation depuis modelValue (ex: erreur de validation renvoyée avec le formulaire déjà
-// rempli) — best-effort : si le préfixe correspond à un des pays supportés, on en repart.
+// rempli) — best-effort : si le préfixe correspond à un des pays supportés, on en repart. Pays
+// imposé : seul un numéro de ce pays est repris tel quel ; une ancienne saisie libre est réduite
+// à ses chiffres nationaux.
 if (props.modelValue) {
     const match = paysOptions.value.find((p) =>
         props.modelValue!.startsWith(p.prefix),
     );
-    if (match) {
+    if (
+        match &&
+        (!props.countryLocked || match.code === selectedCountryCode.value)
+    ) {
         selectedCountryCode.value = match.code;
         phoneDigits.value = props.modelValue!.slice(match.prefix.length);
+    } else if (props.countryLocked) {
+        const indicatif = selectedPays.value.prefix.slice(1);
+        let chiffres = props.modelValue.replace(/\D/g, '').replace(/^00/, '');
+        if (
+            chiffres.startsWith(indicatif) &&
+            chiffres.length > selectedPays.value.localLength
+        ) {
+            chiffres = chiffres.slice(indicatif.length);
+        }
+        phoneDigits.value = chiffres;
     }
 }
+
+watch(
+    () => props.country,
+    (code) => {
+        if (code && paysOptions.value.some((p) => p.code === code)) {
+            selectedCountryCode.value = code;
+        }
+    },
+);
+
+watch(selectedCountryCode, (code) => emit('update:country', code), {
+    immediate: true,
+});
 
 const fullPhone = computed(() => {
     if (!phoneDigits.value) return '';
@@ -165,6 +206,8 @@ function flagUrl(code: string): string {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
 }
 
+// Seule limite de longueur du champ : un attribut maxlength couperait un numéro collé avant que son
+// "0" initial soit reconnu ("0612345678" deviendrait "061234567", donc trop court).
 function handlePhoneInput(e: Event) {
     const input = e.target as HTMLInputElement;
     const raw = input.value.replace(/\D/g, '');
@@ -211,7 +254,22 @@ defineExpose({ phoneIsValid, phoneClientError });
         <input v-if="name" type="hidden" :name="name" :value="fullPhone" />
 
         <div class="flex gap-2">
+            <!-- Pays imposé : drapeau et indicatif visibles, sans liste à ouvrir. -->
+            <div
+                v-if="countryLocked"
+                class="flex h-10 shrink-0 items-center gap-2 rounded-md border border-input bg-muted/40 px-3"
+                :title="`${selectedPays.label} (non modifiable)`"
+                data-testid="pays-impose"
+            >
+                <img
+                    :src="flagUrl(selectedPays.code)"
+                    :alt="selectedPays.label"
+                    class="h-4 w-auto rounded-sm shadow-sm"
+                />
+                <span class="font-mono text-sm">{{ selectedPays.prefix }}</span>
+            </div>
             <Select
+                v-else
                 v-model="selectedCountryCode"
                 :options="paysOptions"
                 option-label="label"
@@ -261,11 +319,6 @@ defineExpose({ phoneIsValid, phoneClientError });
                 inputmode="numeric"
                 :autofocus="autofocus"
                 :required="required"
-                :maxlength="
-                    phoneDigits.startsWith('0')
-                        ? selectedPays.localLength + 1
-                        : selectedPays.localLength
-                "
                 :placeholder="`${selectedPays.localLength} chiffres`"
                 class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
