@@ -106,7 +106,13 @@ class UserTest extends TestCase
      * `rh-employes.donnees_sensibles`, `rh-remunerations.read` et `rh-referentiels.gerer`
      * (27/10/2026, dossier salarié — cf. EmployeController, ContratController, docs/rh-employes-identite.md) = 228,
      * puis `imports-rh.create` et `imports-rh.read` (27/10/2026, import des dossiers et contrats RH —
-     * cf. ImportRhPolicy, docs/import-dossiers-rh.md) = 230.
+     * cf. ImportRhPolicy, docs/import-dossiers-rh.md) = 230, puis la ressource `rh-types-remuneration`
+     * (4 actions) et `rh-types-remuneration.valider` (28/10/2026, primes et avantages — cf.
+     * TypeRemunerationService, ADR 0038) = 235, puis la ressource `rh-affectations-remuneration`
+     * (4 actions), `rh-affectations-remuneration.valider` et les 4 droits `rh-transmissions-paie.*`
+     * (29/10/2026, primes des salariés et transmission de paie — ADR 0039, ADR 0040) = 244, puis
+     * `ventes.regulariser_apres_encaissement` (30/10/2026, régularisation d'une vente déjà
+     * encaissée — cf. CommandeVentePolicy::regulariserApresEncaissement(), ADR 0043) = 245.
      */
     public function test_permissions_map_returns_211_keys(): void
     {
@@ -116,7 +122,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(230, $map);
+        $this->assertCount(245, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

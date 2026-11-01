@@ -162,8 +162,9 @@ class PdvCheckoutService
         // PDV n'a jamais exigé de chargement complet (contrairement à la vente web, cf.
         // Parametre::isVentesAutorisationSaisieDessousQteMax) — comportement historique
         // préservé tel quel. Le dépassement de capacité, lui, n'est plus tolérable pour
-        // personne (cf. VehiculeCapaciteService), PDV compris.
-        $this->vehiculeCapaciteService->verifier($vehicule, $data['lignes'], 'quantite', false);
+        // personne (cf. VehiculeCapaciteService), PDV compris, pas plus que la vente d'une
+        // catégorie exigeant une capacité absente du véhicule (ADR 0042).
+        $this->vehiculeCapaciteService->verifier($vehicule, $data['lignes'], 'quantite', false, exigerCapaciteObligatoire: true);
     }
 
     /**

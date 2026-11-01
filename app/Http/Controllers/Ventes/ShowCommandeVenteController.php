@@ -8,13 +8,17 @@ use App\Enums\StatutCommission;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CommandeVente;
+use App\Models\CommissionEcartRegularisation;
+use App\Models\RegularisationVente;
 use App\Models\Site;
+use App\Models\User;
 use App\Services\AnnulationExceptionnelleService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
 use App\Services\Tresorerie\CaisseAgentResolver;
 use App\Services\Tresorerie\DetteInterAgencesService;
 use App\Services\Tresorerie\MoyensEncaissementResolver;
 use App\Services\VehiculeCapaciteService;
+use App\Services\Ventes\Regularisation\RegularisationVenteService;
 use App\Support\Ventes\CommandeVenteCommissionStatus;
 use App\Support\Ventes\PrecommandeEcran;
 use Illuminate\Support\Collection;
@@ -110,6 +114,7 @@ class ShowCommandeVenteController extends Controller
 
         $retours = $commande->retours->map(fn ($r) => [
             'id' => $r->id,
+            'nature' => $r->nature,
             'created_at' => $r->created_at->format('d/m/Y H:i'),
             'created_by' => $r->createdBy?->name ?? 'Système',
             'motif' => $r->motif->value,
@@ -257,6 +262,10 @@ class ShowCommandeVenteController extends Controller
                 // récapitulatif du dialogue, pas ici.
                 'can_annuler_exceptionnel' => AnnulationExceptionnelleService::raisonStatutNonEligible($commande) === null
                     && $user->can('annulerExceptionnel', $commande),
+                // Régularisation après encaissement (ADR 0043) : état explicite + permission (même
+                // raison : Gate::before du super admin). Les refus fins sont dans le récapitulatif.
+                'can_regulariser' => RegularisationVenteService::raisonNonEligible($commande) === null
+                    && $user->can('regulariserApresEncaissement', $commande),
                 // Permission dédiée `factures.encaisser` depuis le 13/09/2026, indépendante de
                 // ventes.update — même séparation que demarrerChargement/validerChargement/
                 // validerReception dans CommandeVentePolicy (cf. docs/grossiste.md). L'org est
@@ -308,9 +317,81 @@ class ShowCommandeVenteController extends Controller
                 ])->values(),
             ] : null,
             'precommande' => app(PrecommandeEcran::class)->pour($commande, $user),
+            'regularisations' => $this->regularisations($commande, $user),
+            'regularisation_remboursement' => $this->remboursementRegularisation($commande, $user),
             'commission_statut' => $this->getCommissionStatutGlobal($commande),
             'commission_generation_statut' => CommandeVenteCommissionStatus::getCommissionGenerationStatut($commande),
         ]);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function regularisations(CommandeVente $commande, User $user): array
+    {
+        $peutRegulariser = $user->can('regulariserApresEncaissement', $commande);
+
+        return $commande->regularisations()
+            ->with(['user', 'ecartsCommission.regularisePar'])
+            ->get()
+            ->map(fn (RegularisationVente $r) => [
+                'id' => $r->id,
+                'confirmee_at' => $r->confirmee_at?->format('d/m/Y H:i'),
+                'par' => $r->user?->name ?? 'Système',
+                'motif' => $r->motif,
+                'montant_avant' => (float) $r->montant_avant,
+                'montant_apres' => (float) $r->montant_apres,
+                'excedent' => (float) $r->excedent,
+                'traitement_excedent_label' => RegularisationVente::libelleTraitementExcedent($r->traitement_excedent),
+                'commissions_avant' => (float) $r->commissions_avant,
+                'commissions_apres' => (float) $r->commissions_apres,
+                'lignes' => collect($r->recapitulatif['lignes'] ?? [])
+                    ->filter(fn (array $l) => ($l['quantite_retiree'] ?? 0) > 0)
+                    ->map(fn (array $l) => [
+                        'produit' => $l['produit'],
+                        'quantite_avant' => $l['quantite_avant'],
+                        'quantite_apres' => $l['quantite_apres'],
+                    ])->values(),
+                'ecarts' => $r->ecartsCommission->map(fn (CommissionEcartRegularisation $e) => [
+                    'id' => $e->id,
+                    'beneficiaire' => $e->beneficiaire_libelle,
+                    'montant_avant' => (float) $e->montant_avant,
+                    'montant_apres' => (float) $e->montant_apres,
+                    'montant_verse' => (float) $e->montant_verse,
+                    'ecart' => (float) $e->ecart,
+                    'sens' => $e->sens,
+                    'sens_label' => $e->sensLabel(),
+                    'statut' => $e->statut,
+                    'statut_label' => $e->statutLabel(),
+                    'commentaire' => $e->commentaire_regularisation,
+                    'regularise_par' => $e->regularisePar?->name,
+                    'regularise_at' => $e->regularise_at?->format('d/m/Y H:i'),
+                    'can_marquer_regularise' => $e->peutEtreMarqueRegularise() && $peutRegulariser,
+                ])->values(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Trop-perçu laissé par une régularisation « montant reçu » (ADR 0043), à rembourser par
+     * l'action de remboursement existante (permission `ventes.rembourser`).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function remboursementRegularisation(CommandeVente $commande, User $user): ?array
+    {
+        $facture = $commande->facture;
+        if ($commande->est_precommande || ! $facture || $facture->tropPercu() <= 0 || ! $commande->regularisations()->exists()) {
+            return null;
+        }
+
+        $peutRembourser = $user->can('rembourser', $commande);
+
+        return [
+            'trop_percu' => $facture->tropPercu(),
+            'rembourse' => $facture->montantRembourse(),
+            'can_rembourser' => $peutRembourser,
+            'decaissement' => $peutRembourser ? app(PrecommandeEcran::class)->decaissement($commande, $user) : null,
+        ];
     }
 
     private function getCommissionStatutGlobal(CommandeVente $commande): ?array

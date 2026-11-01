@@ -24,12 +24,19 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     comptabilisee: 'bg-emerald-500',
     reception: 'bg-emerald-500',
     termine: 'bg-emerald-500',
+    // Contrat de travail généré et signé : version figée (ADR 0044).
+    signe: 'bg-emerald-500',
     disponible: 'bg-emerald-500',
     couvert: 'bg-emerald-500',
     recu: 'bg-emerald-500',
     verse: 'bg-emerald-500',
     // Partage préparé conforme au nouveau barème (reconfiguration groupée, ADR 0006).
     conforme: 'bg-emerald-500',
+    // Écart de commission après régularisation de vente, réglé (ADR 0043).
+    regularise: 'bg-emerald-500',
+    // Écart de commission encore à régulariser (ADR 0043) : attention, rien n'est bloqué
+    // hormis le paiement de la fiche concernée.
+    a_regulariser: 'bg-amber-500',
     // Partage Livreur d'un véhicule (liste des véhicules, PartageConformiteVehiculesService).
     fait: 'bg-emerald-500',
     non_requis: 'bg-zinc-400 dark:bg-zinc-500',
@@ -44,6 +51,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',
+    // Affectation de prime validée qui n'a pas encore commencé (ADR 0039).
+    a_venir: 'bg-sky-400',
+    // Transmission de paie transmise à la Comptabilité (ADR 0040).
+    transmise: 'bg-emerald-500',
     chargement: 'bg-blue-500',
     chargement_en_cours: 'bg-blue-500',
     livraison_en_cours: 'bg-blue-500',
@@ -83,6 +94,16 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     rompu: 'bg-zinc-400 dark:bg-zinc-500',
     // Import RH abandonné avant confirmation (StatutImportRh::ABANDONNE) : rien n'a été appliqué.
     abandonne: 'bg-zinc-400 dark:bg-zinc-500',
+    // Type de prime fermé aux nouvelles attributions (StatutTypeRemuneration::FERME) : les
+    // bénéficiaires actuels sont maintenus, ce n'est pas une anomalie.
+    ferme: 'bg-zinc-400 dark:bg-zinc-500',
+    // Affectation de prime terminée à sa date de fin (état dérivé des dates, ADR 0039).
+    terminee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Transmission de paie : version remplacée par une suivante, ou brouillon abandonné (ADR 0040).
+    remplacee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Contrat de travail généré : version à signer remplacée par une nouvelle génération (ADR 0044).
+    remplace: 'bg-zinc-400 dark:bg-zinc-500',
+    abandonnee: 'bg-zinc-400 dark:bg-zinc-500',
     // Monitoring des commissions : plus aucune commission due (opération annulée, barème retiré).
     sans_objet: 'bg-zinc-400 dark:bg-zinc-500',
     // Encaissement inter-agences retenu dans un règlement en préparation (ADR 0012).
@@ -131,6 +152,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     a_preparer: 'bg-orange-500',
     // Bon de commande fournisseur en attente de validation / reçu en partie (StatutCommandeAchat).
     a_valider: 'bg-orange-500',
+    // Contrat de travail généré, pas encore signé (ADR 0044) : à faire, pas une erreur.
+    a_signer: 'bg-orange-500',
     partiellement_receptionnee: 'bg-orange-500',
     // Facture fournisseur réglée en partie (StatutFactureFournisseur, lot 4).
     partiellement_payee: 'bg-orange-500',

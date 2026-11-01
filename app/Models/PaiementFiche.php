@@ -27,6 +27,7 @@ class PaiementFiche extends Model
         'total_deductions',
         'montant_net',
         'montant_paye',
+        'reduction_regularisation',
         'report_a_deduire',
         'statut',
         'validated_at',
@@ -49,6 +50,7 @@ class PaiementFiche extends Model
             'total_deductions' => 'decimal:2',
             'montant_net' => 'decimal:2',
             'montant_paye' => 'decimal:2',
+            'reduction_regularisation' => 'decimal:2',
             'report_a_deduire' => 'decimal:2',
             'rang' => 'integer',
             'validated_at' => 'datetime',
@@ -130,7 +132,7 @@ class PaiementFiche extends Model
 
     public function getMontantRestantAttribute(): float
     {
-        return max(0.0, (float) $this->montant_net - (float) $this->montant_paye);
+        return max(0.0, $this->montantDu() - (float) $this->montant_paye);
     }
 
     public function getStatutLabelAttribute(): string
@@ -173,14 +175,55 @@ class PaiementFiche extends Model
         $this->saveQuietly();
     }
 
+    /**
+     * Montant que la fiche doit réellement : son net figé, diminué de ce qu'une régularisation de
+     * vente a retiré à ses commissions (ADR 0043).
+     */
+    public function montantDu(): float
+    {
+        return max(0.0, (float) $this->montant_net - (float) $this->reduction_regularisation);
+    }
+
+    /**
+     * Part du net qui n'est plus due après la régularisation d'une vente (ADR 0043). Pour chaque
+     * commission de la fiche recalculée par une régularisation : montant de la ligne moins le
+     * montant recalculé, sans jamais retirer ce qui a déjà été versé — un trop-perçu reste suivi
+     * comme écart, il n'est pas compensé sur les autres lignes de la fiche.
+     */
+    public function recalculReductionRegularisation(): void
+    {
+        $lignes = $this->lignes()->where('source_type', CommissionEnveloppePart::class)->get(['source_id', 'montant']);
+        $reduction = 0.0;
+
+        if ($lignes->isNotEmpty()) {
+            $regularisees = CommissionEcartRegularisation::whereIn('commission_enveloppe_part_id', $lignes->pluck('source_id'))
+                ->distinct()
+                ->pluck('commission_enveloppe_part_id');
+
+            if ($regularisees->isNotEmpty()) {
+                $parts = CommissionEnveloppePart::whereIn('id', $regularisees)->get()->keyBy('id');
+                foreach ($lignes as $ligne) {
+                    $part = $parts->get($ligne->source_id);
+                    if ($part !== null) {
+                        $reduction += max(0.0, (float) $ligne->montant - max($part->montant_a_payer, (float) $part->montant_verse));
+                    }
+                }
+            }
+        }
+
+        $this->reduction_regularisation = round($reduction, 2);
+    }
+
     public function recalculStatut(): void
     {
+        $this->recalculReductionRegularisation();
+
         $paye = (float) $this->historiquePaiements()->sum('montant');
         $net = (float) $this->montant_net;
 
         $this->montant_paye = $paye;
         $this->statut = match (true) {
-            $net > 0 && $paye >= $net => StatutFichePaiement::PAYE,
+            $net > 0 && $paye >= $this->montantDu() => StatutFichePaiement::PAYE,
             $paye > 0 => StatutFichePaiement::PARTIELLEMENT_PAYE,
             default => StatutFichePaiement::A_PAYER,
         };

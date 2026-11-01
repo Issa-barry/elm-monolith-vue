@@ -31,3 +31,8 @@ export const paysOptionsByName: CountryOption[] = PAYS_DATA.map((p) => ({
     ...p,
     value: p.label,
 }));
+
+/** Drapeau d'un pays (code ISO 3166-1, ex. 'GN'), même source que PhoneCountryInput. */
+export function drapeauUrl(code: string): string {
+    return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
+}

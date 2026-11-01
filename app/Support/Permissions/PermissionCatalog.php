@@ -32,7 +32,7 @@ final class PermissionCatalog
         // Finances
         'depenses', 'comptabilite', 'journal-financier', 'tresorerie',
         // RH
-        'rh-employes', 'rh-contrats', 'rh-paie',
+        'rh-employes', 'rh-contrats', 'rh-paie', 'rh-types-remuneration', 'rh-affectations-remuneration',
         // Administration
         'users',
         // Paramètres
@@ -57,9 +57,15 @@ final class PermissionCatalog
         'rh-paie.close' => 'Paie — clôturer une période',
         'rh-employes.donnees_sensibles' => 'Employés — voir et modifier les données sensibles (n° CNSS, coordonnées de paiement)',
         'rh-remunerations.read' => 'Employés — voir les salaires et rémunérations (contrats, fiche employé)',
-        'rh-referentiels.gerer' => 'RH — gérer les fonctions et services',
+        'rh-referentiels.gerer' => 'RH — gérer les fonctions, services et modèles de contrat',
         'imports-rh.create' => 'Import RH — mettre à jour les dossiers et contrats par fichier Excel',
         'imports-rh.read' => 'Import RH — consulter les imports',
+        'rh-types-remuneration.valider' => 'Primes et avantages — valider, fermer, désactiver, réactiver un type (et modifier un type validé)',
+        'rh-affectations-remuneration.valider' => "Primes des salariés — valider une affectation, un changement de montant, une fin d'effet ou un montant mensuel",
+        'rh-transmissions-paie.read' => 'Transmission de paie — consulter les versions et leurs montants',
+        'rh-transmissions-paie.preparer' => 'Transmission de paie — préparer, recalculer, abandonner un brouillon, ouvrir une nouvelle version',
+        'rh-transmissions-paie.valider' => 'Transmission de paie — valider (figer) une version',
+        'rh-transmissions-paie.transmettre' => 'Transmission de paie — transmettre une version validée à la Comptabilité',
         'imports-flotte.create' => 'Import flotte — lancer un import',
         'imports-flotte.read' => 'Import flotte — consulter les imports',
         'imports-vehicules-maj.create' => 'Import véhicules — lancer une mise à jour en masse',
@@ -109,6 +115,7 @@ final class PermissionCatalog
         'ventes.valider_reception' => 'Ventes — valider la réception',
         'ventes.enregistrer_retour' => 'Ventes — enregistrer un retour de livraison',
         'ventes.annuler_exceptionnel' => 'Ventes — annulation exceptionnelle (commande saisie par erreur, même encaissée)',
+        'ventes.regulariser_apres_encaissement' => 'Ventes — régulariser une vente déjà encaissée (quantité saisie en trop)',
         'ventes.exporter' => 'Ventes — exporter',
         'factures.encaisser' => 'Factures — encaisser',
         'factures.encaisser_autre_agence' => "Factures — encaisser dans son agence une commande d'une autre agence",
@@ -156,7 +163,7 @@ final class PermissionCatalog
                 'Cycle de vente' => [
                     'ventes.confirmer', 'ventes.annuler', 'ventes.demarrer_chargement',
                     'ventes.valider_chargement', 'ventes.valider_reception', 'ventes.enregistrer_retour',
-                    'ventes.annuler_exceptionnel',
+                    'ventes.annuler_exceptionnel', 'ventes.regulariser_apres_encaissement',
                     'ventes.qte.update', 'ventes.prix.update',
                 ],
                 'Précommandes' => [
@@ -251,9 +258,11 @@ final class PermissionCatalog
         ],
         'rh' => [
             'label' => 'RH & Paie',
-            'resources' => ['rh-employes', 'rh-contrats', 'rh-paie'],
+            'resources' => ['rh-employes', 'rh-contrats', 'rh-paie', 'rh-types-remuneration', 'rh-affectations-remuneration'],
             'standalone' => [
                 'Dossier salarié' => ['rh-employes.donnees_sensibles', 'rh-remunerations.read', 'rh-referentiels.gerer'],
+                'Primes et avantages' => ['rh-types-remuneration.valider', 'rh-affectations-remuneration.valider'],
+                'Transmission de paie' => ['rh-transmissions-paie.read', 'rh-transmissions-paie.preparer', 'rh-transmissions-paie.valider', 'rh-transmissions-paie.transmettre'],
                 'Import RH' => ['imports-rh.create', 'imports-rh.read'],
                 'Paie' => ['rh-paie.validate', 'rh-paie.pay', 'rh-paie.close'],
             ],

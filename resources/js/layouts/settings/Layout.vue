@@ -88,14 +88,25 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
     // Référentiels RH (permission dédiée), seulement si le module RH est actif.
     const moduleRhActif =
         ((page.props as any).module_flags?.rh as boolean | undefined) !== false;
+    const rhItems: NavItem[] = [];
     if (moduleRhActif && can('rh-referentiels.gerer')) {
-        groups.push({
-            title: 'RH',
-            items: [
-                { title: 'Fonctions RH', href: '/backoffice/fonctions-rh' },
-                { title: 'Services RH', href: '/backoffice/services-rh' },
-            ],
+        rhItems.push(
+            { title: 'Fonctions RH', href: '/backoffice/fonctions-rh' },
+            { title: 'Services RH', href: '/backoffice/services-rh' },
+            {
+                title: 'Modèles de contrat',
+                href: '/backoffice/modeles-contrat',
+            },
+        );
+    }
+    if (moduleRhActif && can('rh-types-remuneration.read')) {
+        rhItems.push({
+            title: 'Primes et avantages',
+            href: '/backoffice/types-remuneration',
         });
+    }
+    if (rhItems.length > 0) {
+        groups.push({ title: 'RH', items: rhItems });
     }
 
     if (can('parametres.update')) {

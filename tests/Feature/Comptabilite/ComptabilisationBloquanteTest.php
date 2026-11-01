@@ -21,12 +21,12 @@ use App\Models\Livreur;
 use App\Models\PaieLigne;
 use App\Models\PaiementFiche;
 use App\Models\Personne;
-use App\Services\PaieCalculService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
+use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\TestCase;
 
 /**
@@ -39,7 +39,7 @@ use Tests\TestCase;
  */
 class ComptabilisationBloquanteTest extends TestCase
 {
-    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, PrepareLaPaieDepuisLesRh, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -117,8 +117,7 @@ class ComptabilisationBloquanteTest extends TestCase
             'salaire_base' => 1_000_000, 'statut_contrat' => StatutContrat::ACTIF->value,
         ]);
 
-        $periode = app(PaieCalculService::class)->getOrGenererPeriode($this->org->id, 8, 2026);
-        $periode->update(['statut' => StatutPeriodePaie::VALIDE_RH->value]);
+        $periode = $this->preparerPaieDepuisRh($this->org, 8, 2026, StatutPeriodePaie::VALIDE_RH);
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->where('employe_id', $employe->id)->firstOrFail();
 
         $this->casserMapping('paiement_salaire');

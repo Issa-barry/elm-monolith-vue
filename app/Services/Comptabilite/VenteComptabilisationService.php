@@ -134,7 +134,8 @@ class VenteComptabilisationService
             source: $retour,
             organizationId: $facture->organization_id,
             dateComptable: Carbon::parse($retour->created_at ?? now()),
-            libelle: 'Retour de livraison — facture '.$facture->reference,
+            libelle: ($retour->nature === CommandeVenteRetour::NATURE_REGULARISATION ? 'Régularisation après encaissement' : 'Retour de livraison')
+                .' — facture '.$facture->reference,
             lignes: [
                 ['role' => 'produit_vente', 'sens' => 'debit', 'montant' => $montant],
                 $ligneClient,

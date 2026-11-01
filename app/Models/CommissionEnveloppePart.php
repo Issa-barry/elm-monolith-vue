@@ -146,7 +146,9 @@ class CommissionEnveloppePart extends Model
         $this->montant_verse = $verse;
 
         $this->statut = match (true) {
-            $aPayer > 0 && $verse >= $aPayer => StatutCommission::PAYE,
+            // Montant ramené sous le déjà-versé par une régularisation de vente (ADR 0043) : rien
+            // n'est plus dû, l'excédent est suivi comme écart (CommissionEcartRegularisation).
+            $verse > 0 && $verse >= $aPayer => StatutCommission::PAYE,
             $verse > 0 => StatutCommission::PARTIEL,
             default => StatutCommission::IMPAYE,
         };

@@ -146,6 +146,10 @@ liste des régularisations. Jamais le code.
   Paramètres → Ventes contrôle `parametres.read` / `parametres.update`, que ce réglage réutilise.
 - Retour partiel, commission traitée, cashback validé et caisse déjà versée sont des refus « dans un
   premier temps » : les régulariser d'abord à la main.
+- Une vente **réelle** dont la quantité a été saisie en trop ne s'annule pas : elle se corrige par
+  la régularisation après encaissement ([regularisation-vente.md](regularisation-vente.md),
+  ADR 0043), qui accepte une commission déjà payée (écart tracé) et réutilise le même réglage de
+  confirmation.
 - **Précommandes exclues** (04/10/2026, ADR 0019) : une précommande ne s'annule jamais par cette
   procédure, qui supprimerait ses acomptes sans remboursement et ne défait ni l'imputation
   419100 → 411000 ni les remboursements. Elle a sa propre procédure, « Annuler la précommande »

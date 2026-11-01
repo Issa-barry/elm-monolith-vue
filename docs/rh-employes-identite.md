@@ -40,13 +40,50 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 
 | Bloc | Champs | Porté par |
 |---|---|---|
-| Dossier | Service, date d'embauche, date de sortie (≥ embauche), motif de sortie | `employes` |
-| Identité civile | Date de naissance (antérieure à aujourd'hui), lieu, sexe (F/M), nationalité | `personnes` (partagée avec les autres rôles) |
-| Contact d'urgence | Nom, lien, téléphone (un seul contact) | `employes` |
-| Données sensibles | N° CNSS ; coordonnées de paiement du salaire (mode espèces / Mobile Money / virement, opérateur ou banque, numéro, titulaire) | `employes.numero_cnss`, `employe_coordonnees_paiement` (numéro **chiffré**) |
+| Dossier | Service, date d'embauche (fiche seulement, pas à la création) ; date et motif de sortie en lecture seule | `employes` |
+| Identité civile | Date de naissance (antérieure à aujourd'hui), lieu, civilité (Monsieur / Madame / Mademoiselle), nationalité (liste) | `personnes` (partagée avec les autres rôles) |
+| Contact d'urgence | Nom, lien (liste + « Autre » précisé), téléphone (un seul contact) | `employes` |
+| Données sensibles | N° CNSS **du salarié** | `employes.numero_cnss` |
+
+- **Dates du dossier (31/10/2026, ADR 0045)** : la date d'embauche n'est plus saisie à la création
+  de l'employé. Le premier contrat créé la renseigne quand elle est vide (date de début du
+  contrat) ; une date déjà connue (ancienneté antérieure, import RH) n'est jamais modifiée. Elle se
+  corrige dans la fiche (pas après la date de sortie). Les dates d'un contrat (début, fin prévue) se
+  saisissent dans RH → Contrats. La date de sortie et son motif ne passent plus par le formulaire :
+  action « Enregistrer le départ » ([rh-depart-salarie.md](rh-depart-salarie.md)). Le statut
+  « Sorti » ne se choisit plus dans le formulaire ; un salarié sorti garde ce statut jusqu'à
+  l'annulation du départ.
+- **Nationalité (31/10/2026)** : liste fermée de nationalités au féminin (« Guinéenne »,
+  « Française »…), jamais un nom de pays ; Guinéenne en tête, recherche sans tenir compte des
+  accents, drapeau comme repère visuel. Source unique : `App\Support\Rh\Nationalites` (envoyée au
+  formulaire, valeur vérifiée par le serveur). Une valeur saisie avant la liste et absente de
+  celle-ci reste affichée et acceptée telle quelle tant qu'elle n'est pas remplacée (aucune
+  conversion automatique, aucune migration).
+- **Lien du contact d'urgence (31/10/2026)** : liste `App\Support\Rh\LiensContactUrgence`
+  (Conjoint(e), Père, Mère, Frère, Sœur, Fils, Fille, Oncle, Tante, Cousin(e), Ami(e), Collègue,
+  Tuteur / Tutrice, Autre). « Autre » exige une précision (50 caractères), enregistrée à la place
+  du libellé dans `contact_urgence_lien` ; choisir un autre lien efface la précision. Une ancienne
+  saisie libre se relit comme « Autre » avec cette valeur pour précision. Pas de migration.
+- **N° CNSS** : numéro personnel d'immatriculation du salarié à la Caisse nationale de sécurité
+  sociale (cnss.gov.gn), facultatif, jamais généré par l'application. Le numéro employeur de
+  l'entreprise n'est pas géré dans le dossier du salarié.
+- **Infobulles ⓘ** : composant partagé `InfoTooltip.vue` (survol, focus clavier, appui sur écran
+  tactile) sur les champs ambigus : date d'embauche, nationalité, lien, N° CNSS ; dans les contrats :
+  date de début, date de fin, salaire de base, période d'essai ; dans le départ : date et motif.
 
 - À la création, une identité civile déjà renseignée sur la Personne réutilisée est conservée ;
   seuls les champs vides sont complétés (même règle que nom/prénom/email).
+- **Civilité (30/10/2026)** : remplace la saisie du sexe (`personnes.civilite`). La colonne
+  `personnes.sexe` est conservée et reste alimentée, déduite de la civilité (Monsieur → M, Madame
+  et Mademoiselle → F). Reprise des valeurs déjà saisies par la migration
+  `2026_10_30_110000_add_civilite_to_personnes_table` : M → Monsieur, F → Madame (Mademoiselle n'est
+  jamais déduite, elle se corrige sur la fiche).
+- **Mode de paiement du salaire (30/10/2026)** : il n'est plus saisi dans le dossier RH. La
+  Comptabilité le choisit au moment du paiement (moyen de paiement de *Paiement salaire*, ADR 0005).
+  Les coordonnées déjà enregistrées (`employe_coordonnees_paiement`, numéro **chiffré**) ne sont ni
+  modifiées ni supprimées : elles restent consultables en lecture seule sur la fiche employé, avec
+  `rh-employes.donnees_sensibles`, sous « Paiement du salaire (ancienne saisie) ». Une valeur
+  `paiement_*` envoyée au serveur est ignorée.
 - **Services RH** : référentiel par organisation, comme les fonctions RH (libellé et code uniques,
   code proposé depuis le libellé, désactivation au lieu de suppression). Écran *Paramètres → RH →
   Services RH*.
@@ -56,9 +93,9 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 | Permission | Effet | Rôles servis par la migration de rattrapage |
 |---|---|---|
 | `rh-employes.read` / `.create` / `.update` / `.delete` | Dossier (hors données sensibles et salaires) | inchangé |
-| `rh-employes.donnees_sensibles` | Voir et modifier le n° CNSS et les coordonnées de paiement | super_admin, admin_entreprise |
+| `rh-employes.donnees_sensibles` | Voir et modifier le n° CNSS ; voir les coordonnées de paiement déjà enregistrées | super_admin, admin_entreprise |
 | `rh-remunerations.read` | Voir et saisir le salaire (fiche employé, contrats) | super_admin, admin_entreprise, manager |
-| `rh-referentiels.gerer` | Gérer les fonctions et services RH | super_admin, admin_entreprise |
+| `rh-referentiels.gerer` | Gérer les fonctions et services RH, et les modèles de contrat ([rh-contrat-pdf.md](rh-contrat-pdf.md)) | super_admin, admin_entreprise |
 
 - Sans la permission, la donnée n'est **pas envoyée** au navigateur, et une valeur envoyée est
   ignorée (la donnée existante reste intacte).
@@ -77,6 +114,15 @@ agences (ADR 0025) ; un employé sans agence n'apparaît qu'à ces derniers. Fil
 - Effacer le téléphone est refusé quand la Personne porte aussi un compte, ou est aussi client,
   livreur, propriétaire, fournisseur, prestataire ou parrain : ce numéro l'identifie partout. Le
   remplacer reste possible.
+
+## Saisie des montants
+
+Le salaire de base (contrats), le montant par défaut d'un type de prime, le montant d'une prime
+(attribution, changement, saisie du mois) et le montant d'une retenue utilisent le champ commun
+`resources/js/components/MontantInput.vue` : séparateurs de milliers pendant la frappe
+(« 750000 » s'affiche « 750 000 »), montant collé avec espaces ou points accepté. Le serveur reçoit
+toujours un nombre sans séparateur (null si le champ est vide) ; un texte formaté reste refusé par
+la validation. Le salaire n'est plus limité aux multiples de 1 000.
 
 ## Effet sur le compte utilisateur existant
 

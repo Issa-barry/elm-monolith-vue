@@ -120,7 +120,7 @@ final class PrecommandeEcran
      *
      * @return array{moyens: list<array<string, mixed>>, especes_disponibles: bool, solde_especes: ?float}
      */
-    private function decaissement(CommandeVente $commande, User $user): array
+    public function decaissement(CommandeVente $commande, User $user): array
     {
         $moyens = $this->moyens->pourSite($commande->organization_id, $commande->site_id);
         $supports = CompteTresorerie::whereIn('id', array_column($moyens, 'compte_tresorerie_id'))->get()->keyBy('id');

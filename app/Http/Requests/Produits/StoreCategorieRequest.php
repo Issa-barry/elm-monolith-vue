@@ -23,6 +23,7 @@ class StoreCategorieRequest extends FormRequest
             'statut' => ['nullable', Rule::in(CategorieStatut::values())],
             'parent_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
             'position' => ['nullable', 'integer', 'min:0'],
+            'capacite_vehicule_obligatoire' => ['sometimes', 'boolean'],
         ];
     }
 

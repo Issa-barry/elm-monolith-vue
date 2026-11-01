@@ -115,6 +115,7 @@ interface VehiculeData {
     type_label: string;
     type_vehicule_id: string | null;
     capacites: CapaciteRow[];
+    capacites_manquantes?: { categorie_id: string; categorie_nom: string }[];
     site_id: string | null;
     site_nom: string | null;
     categorie: 'interne' | 'partenaire';
@@ -826,7 +827,11 @@ function formatGNF(val: number): string {
                                         Capacités maximales de chargement
                                     </p>
                                     <p
-                                        v-if="vehicule.capacites.length === 0"
+                                        v-if="
+                                            vehicule.capacites.length === 0 &&
+                                            !vehicule.capacites_manquantes
+                                                ?.length
+                                        "
                                         class="mt-1 text-sm font-medium"
                                     >
                                         — (non plafonné)
@@ -838,6 +843,15 @@ function formatGNF(val: number): string {
                                     >
                                         {{ c.categorie_nom }} :
                                         {{ c.capacite_max }}
+                                    </p>
+                                    <p
+                                        v-for="m in vehicule.capacites_manquantes ??
+                                        []"
+                                        :key="`manquante-${m.categorie_id}`"
+                                        class="mt-1 text-xs font-medium text-amber-600 dark:text-amber-400"
+                                    >
+                                        {{ m.categorie_nom }} : à renseigner —
+                                        obligatoire pour vendre cette catégorie
                                     </p>
                                 </div>
                                 <div

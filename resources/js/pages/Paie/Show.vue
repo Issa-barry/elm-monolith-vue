@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MontantInput from '@/components/MontantInput.vue';
 import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -175,16 +176,20 @@ const showVariableModal = ref(false);
 const selectedLigne = ref<Ligne | null>(null);
 const editingVariable = ref<Variable | null>(null);
 
+// Retenues seulement : les gains viennent de la transmission RH (ADR 0041).
 const typeOptions = [
-    { value: 'prime', label: 'Prime' },
-    { value: 'autre_gain', label: 'Autre gain' },
     { value: 'avance', label: 'Avance sur salaire' },
     { value: 'retenue', label: 'Retenue' },
     { value: 'absence', label: 'Absence' },
     { value: 'autre_deduction', label: 'Autre déduction' },
 ];
 
-const varForm = useForm({ type: 'prime', libelle: '', montant: 0, note: '' });
+const varForm = useForm({
+    type: 'retenue',
+    libelle: '',
+    montant: null as number | null,
+    note: '',
+});
 
 function openVariableModal(ligne: Ligne, variable?: Variable) {
     selectedLigne.value = ligne;
@@ -196,7 +201,7 @@ function openVariableModal(ligne: Ligne, variable?: Variable) {
         varForm.note = variable.note ?? '';
     } else {
         varForm.reset();
-        varForm.type = 'prime';
+        varForm.type = 'retenue';
     }
     showVariableModal.value = true;
 }
@@ -717,12 +722,11 @@ function fmt(n: number) {
                 </div>
                 <div class="space-y-1">
                     <label class="text-sm font-medium">Montant</label>
-                    <input
-                        v-model.number="varForm.montant"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+                    <MontantInput
+                        v-model="varForm.montant"
+                        :decimales="2"
+                        unite="GNF"
+                        :invalid="!!varForm.errors.montant"
                     />
                     <p
                         v-if="varForm.errors.montant"

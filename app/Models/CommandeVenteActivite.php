@@ -58,6 +58,7 @@ class CommandeVenteActivite extends Model
         'annulee_erreur_saisie' => 'a annulé exceptionnellement la commande (erreur de saisie)',
         'retour_enregistre' => 'a enregistré un retour de livraison',
         'retournee' => 'a enregistré le retour total de la commande',
+        'regularisee' => 'a régularisé la vente après encaissement',
         'comptabilisation_retour_echouee' => 'Comptabilisation du retour en échec — à régulariser (comptabilite:rattraper)',
         'encaissement_recu' => 'a enregistré un encaissement',
         'commission_generee' => 'a généré la commission',

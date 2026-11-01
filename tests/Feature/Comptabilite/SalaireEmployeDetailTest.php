@@ -8,7 +8,6 @@ use App\Enums\TypeVariablePaie;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\PaieLigne;
-use App\Models\PaiePeriode;
 use App\Models\PaieVariable;
 use App\Models\Personne;
 use App\Services\PaieCalculService;
@@ -17,11 +16,12 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
+use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\TestCase;
 
 class SalaireEmployeDetailTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, PrepareLaPaieDepuisLesRh, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -63,16 +63,7 @@ class SalaireEmployeDetailTest extends TestCase
 
     private function makeLignePeriode(Employe $employe, int $mois, int $annee): PaieLigne
     {
-        $periode = PaiePeriode::create([
-            'organization_id' => $this->org->id,
-            'mois' => $mois,
-            'annee' => $annee,
-            'statut' => StatutPeriodePaie::VALIDE_RH,
-        ]);
-
-        $service = app(PaieCalculService::class);
-        $service->genererLignes($periode);
-        $service->calculerPeriode($periode);
+        $periode = $this->preparerPaieDepuisRh($this->org, $mois, $annee, StatutPeriodePaie::VALIDE_RH);
 
         return PaieLigne::where('paie_periode_id', $periode->id)
             ->where('employe_id', $employe->id)

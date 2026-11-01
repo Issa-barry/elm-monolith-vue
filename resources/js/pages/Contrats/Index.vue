@@ -15,7 +15,17 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Briefcase, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import {
+    Briefcase,
+    Download,
+    Eye,
+    FilePlus2,
+    History,
+    MoreVertical,
+    Pencil,
+    Plus,
+    Trash2,
+} from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
@@ -34,6 +44,14 @@ interface Contrat {
     date_debut: string | null;
     date_fin: string | null;
     salaire_base: string | null;
+    // Dernière version générée du contrat de travail (ADR 0044).
+    document_courant: {
+        version: number;
+        statut: string;
+        statut_label: string;
+    } | null;
+    // Génération autorisée (permissions + agence de rattachement), calculée par le serveur.
+    peut_generer: boolean;
 }
 
 interface Option {
@@ -57,6 +75,18 @@ const props = defineProps<{
 }>();
 
 const { can } = usePermissions();
+
+// Le menu ⋮ n'est affiché que s'il propose au moins une action.
+function aDesActions(contrat: Contrat): boolean {
+    return (
+        contrat.peut_generer ||
+        (contrat.document_courant !== null &&
+            can('rh-contrats.read') &&
+            can('rh-remunerations.read')) ||
+        can('rh-contrats.update') ||
+        can('rh-contrats.delete')
+    );
+}
 const confirm = useConfirm();
 const toast = useToast();
 
@@ -220,10 +250,23 @@ function confirmDelete(c: Contrat) {
                         </template>
                     </Column>
 
+                    <Column header="Contrat de travail" style="width: 170px">
+                        <template #body="{ data }">
+                            <StatusDot
+                                v-if="data.document_courant"
+                                :status="data.document_courant.statut"
+                                :label="`V${data.document_courant.version} · ${data.document_courant.statut_label}`"
+                            />
+                            <span v-else class="text-sm text-muted-foreground"
+                                >Non généré</span
+                            >
+                        </template>
+                    </Column>
+
                     <Column header="" style="width: 56px">
                         <template #body="{ data }">
                             <div class="flex justify-end">
-                                <DropdownMenu>
+                                <DropdownMenu v-if="aDesActions(data)">
                                     <DropdownMenuTrigger as-child>
                                         <Button
                                             variant="ghost"
@@ -234,8 +277,88 @@ function confirmDelete(c: Contrat) {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
                                         align="end"
-                                        class="w-40"
+                                        class="w-56"
                                     >
+                                        <DropdownMenuItem
+                                            v-if="
+                                                data.peut_generer &&
+                                                !data.document_courant
+                                            "
+                                            as-child
+                                            data-testid="action-generer-contrat"
+                                        >
+                                            <Link
+                                                :href="`/backoffice/contrats/${data.id}/document`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <FilePlus2
+                                                    class="h-4 w-4"
+                                                />Générer le contrat
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <template
+                                            v-if="
+                                                can('rh-contrats.read') &&
+                                                can('rh-remunerations.read') &&
+                                                data.document_courant
+                                            "
+                                        >
+                                            <DropdownMenuItem
+                                                as-child
+                                                data-testid="action-voir-contrat-pdf"
+                                            >
+                                                <a
+                                                    :href="`/backoffice/contrats/${data.id}/pdf?preview=1`"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="flex w-full cursor-pointer items-center gap-2"
+                                                >
+                                                    <Eye class="h-4 w-4" />Voir
+                                                    le contrat (PDF)
+                                                </a>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                as-child
+                                                data-testid="action-telecharger-contrat-pdf"
+                                            >
+                                                <a
+                                                    :href="`/backoffice/contrats/${data.id}/pdf`"
+                                                    class="flex w-full cursor-pointer items-center gap-2"
+                                                >
+                                                    <Download
+                                                        class="h-4 w-4"
+                                                    />Télécharger le PDF
+                                                </a>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                as-child
+                                                data-testid="action-versions-contrat"
+                                            >
+                                                <Link
+                                                    :href="`/backoffice/contrats/${data.id}/document`"
+                                                    class="flex w-full items-center gap-2"
+                                                >
+                                                    <History
+                                                        class="h-4 w-4"
+                                                    />{{
+                                                        data.peut_generer
+                                                            ? 'Versions, régénérer, signer'
+                                                            : 'Versions du contrat'
+                                                    }}
+                                                </Link>
+                                            </DropdownMenuItem>
+                                        </template>
+                                        <DropdownMenuSeparator
+                                            v-if="
+                                                ((data.document_courant &&
+                                                    can(
+                                                        'rh-remunerations.read',
+                                                    )) ||
+                                                    data.peut_generer) &&
+                                                (can('rh-contrats.update') ||
+                                                    can('rh-contrats.delete'))
+                                            "
+                                        />
                                         <DropdownMenuItem
                                             v-if="can('rh-contrats.update')"
                                             as-child

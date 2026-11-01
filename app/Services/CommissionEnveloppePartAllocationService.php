@@ -6,6 +6,7 @@ use App\Models\CommissionEnveloppePaiementItem;
 use App\Models\CommissionEnveloppePart;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
+use App\Services\Ventes\Regularisation\RegularisationCommissionService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -62,6 +63,8 @@ class CommissionEnveloppePartAllocationService
 
                 $restant = round($restant - $alloue, 2);
             }
+
+            RegularisationCommissionService::synchroniserComplements($parts->pluck('id'));
         });
     }
 
@@ -86,6 +89,8 @@ class CommissionEnveloppePartAllocationService
             foreach ($parts as $part) {
                 $part->recalculStatut();
             }
+
+            RegularisationCommissionService::synchroniserComplements($parts->pluck('id'));
         });
     }
 
