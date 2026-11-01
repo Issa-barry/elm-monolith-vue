@@ -19,6 +19,13 @@ import { Label } from '@/components/ui/label';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    libellesPrimesActuelles,
+    periodeDuMois,
+    primeDejaAttribuee,
+    SANS_FIN,
+    type PrimeOccupee,
+} from '@/lib/primesAttribuees';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import {
@@ -44,15 +51,6 @@ import { computed, ref, watch } from 'vue';
 interface Option {
     value: string;
     label: string;
-}
-
-/** Prime validée ou à valider du salarié (elle occupe sa période). */
-interface PrimeOccupee {
-    type_id: string;
-    libelle: string | null;
-    date_debut: string;
-    date_fin: string | null;
-    a_valider: boolean;
 }
 
 interface EmployeOption extends Option {
@@ -403,25 +401,19 @@ const employeChoisi = computed(() =>
 /** Période que couvrirait la nouvelle attribution pour ce type (dates saisies, sinon aujourd'hui). */
 function periodeVisee(t: TypeOption): [string, string] {
     if (t.periodicite === 'ponctuelle') {
-        const mois = form.mois_versement || aujourdhuiIso.slice(0, 7);
-        const [annee, m] = mois.split('-').map(Number);
-        const dernierJour = new Date(annee, m, 0).getDate();
-        return [
-            `${mois}-01`,
-            `${mois}-${String(dernierJour).padStart(2, '0')}`,
-        ];
+        return periodeDuMois(form.mois_versement || aujourdhuiIso.slice(0, 7));
     }
-    return [form.date_debut || aujourdhuiIso, form.date_fin || '9999-12-31'];
+    return [form.date_debut || aujourdhuiIso, form.date_fin || SANS_FIN];
 }
 
 function dejaAttribue(t: TypeOption): boolean {
-    if (t.cumul_autorise) return false;
     const [du, au] = periodeVisee(t);
-    return (employeChoisi.value?.primes ?? []).some(
-        (p) =>
-            p.type_id === t.value &&
-            p.date_debut <= au &&
-            (p.date_fin === null || p.date_fin >= du),
+    return primeDejaAttribuee(
+        employeChoisi.value?.primes ?? [],
+        t.value,
+        t.cumul_autorise,
+        du,
+        au,
     );
 }
 
@@ -435,20 +427,9 @@ const typesProposes = computed(() =>
         : typesAttribuables.value,
 );
 
-// Récapitulatif compact : primes en cours ou à venir, une fois chacune.
-const primesActuelles = computed(() => {
-    const vues = new Map<string, string>();
-    for (const p of employeChoisi.value?.primes ?? []) {
-        if (p.date_fin !== null && p.date_fin < aujourdhuiIso) continue;
-        if (!vues.has(p.type_id)) {
-            vues.set(
-                p.type_id,
-                `${p.libelle ?? 'Prime'}${p.a_valider ? ' (à valider)' : ''}`,
-            );
-        }
-    }
-    return [...vues.values()];
-});
+const primesActuelles = computed(() =>
+    libellesPrimesActuelles(employeChoisi.value?.primes ?? [], aujourdhuiIso),
+);
 
 // Changement de salarié : un type qu'il a déjà est désélectionné. Pendant la saisie des dates, on
 // ne retire rien sous les yeux de l'utilisateur : le serveur explique un éventuel chevauchement.

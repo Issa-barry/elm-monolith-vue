@@ -4,12 +4,17 @@ import MontantInput from '@/components/MontantInput.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { type PrimeOccupee } from '@/lib/primesAttribuees';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { AlertTriangle, ArrowLeft, FileText, Save } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed } from 'vue';
 import ConditionsContrat from './partials/ConditionsContrat.vue';
+import PrimesContrat, {
+    type LignePrime,
+    type TypePrime,
+} from './partials/PrimesContrat.vue';
 
 // Salaire : saisi et affiché seulement avec rh-remunerations.read (ignoré par le serveur sinon).
 const { can } = usePermissions();
@@ -27,6 +32,12 @@ const props = defineProps<{
     employe_id_prefill: string | null;
     pdg: { nom: string; qualite: string } | null;
     message_pdg_absent: string;
+    // null sans le droit d'attribuer ET de valider une prime : section masquée, refus serveur.
+    primes_contrat: {
+        types: TypePrime[];
+        premier_jour_modifiable: string | null;
+        par_employe: Record<string, PrimeOccupee[]>;
+    } | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -45,6 +56,7 @@ const form = useForm({
     periode_essai_unite: null as string | null,
     heures_hebdomadaires: null as number | null,
     motif_cdd: null as string | null,
+    primes: [] as LignePrime[],
 });
 
 const isCdd = computed(() => form.type_contrat === 'cdd');
@@ -53,8 +65,33 @@ const erreurPdg = computed(
     () => (form.errors as Record<string, string | undefined>).pdg,
 );
 
+const primesEmploye = computed(
+    () => props.primes_contrat?.par_employe[form.employe_id] ?? [],
+);
+const erreursFormulaire = computed(
+    () => form.errors as Record<string, string | undefined>,
+);
+
 function submit() {
-    form.post('/backoffice/contrats');
+    form.transform((donnees) => ({
+        ...donnees,
+        // Sur le serveur, une prime a une date de début : le 1er du mois si elle est ponctuelle.
+        primes: donnees.primes.map((ligne) => {
+            const type = props.primes_contrat?.types.find(
+                (t) => t.value === ligne.type_remuneration_id,
+            );
+            const ponctuelle = type?.periodicite === 'ponctuelle';
+
+            return {
+                type_remuneration_id: ligne.type_remuneration_id,
+                date_debut: ponctuelle
+                    ? ligne.mois && `${ligne.mois}-01`
+                    : ligne.date_debut,
+                montant: ligne.montant,
+                taux: ligne.taux,
+            };
+        }),
+    })).post('/backoffice/contrats');
 }
 </script>
 
@@ -246,6 +283,21 @@ function submit() {
                             </p>
                         </div>
                     </div>
+
+                    <PrimesContrat
+                        v-if="primes_contrat"
+                        v-model="form.primes"
+                        :types="primes_contrat.types"
+                        :premier-jour-modifiable="
+                            primes_contrat.premier_jour_modifiable
+                        "
+                        :primes-employe="primesEmploye"
+                        :employe-choisi="!!form.employe_id"
+                        :date-debut-contrat="form.date_debut"
+                        :date-fin-contrat="isCdd ? form.date_fin : ''"
+                        :errors="erreursFormulaire"
+                        @effacer-erreurs="form.clearErrors()"
+                    />
 
                     <ConditionsContrat
                         v-model:duree="form.periode_essai_duree"

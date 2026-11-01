@@ -39,6 +39,8 @@ const props = defineProps<{
     type_contrat_options: Option[];
     statut_contrat_options: Option[];
     unites_periode_essai: Option[];
+    // Primes reprises au contrat, en lecture seule ; null sans le droit de les voir.
+    primes: string[] | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -254,6 +256,38 @@ function submit() {
                         :requis="false"
                         :errors="form.errors"
                     />
+
+                    <!-- Lecture seule : « Primes des salariés » garde l'historique des montants. -->
+                    <div
+                        v-if="primes"
+                        class="space-y-1 border-t pt-5"
+                        data-testid="primes-contrat-lecture"
+                    >
+                        <div
+                            class="flex flex-wrap items-center justify-between gap-2"
+                        >
+                            <h4 class="text-sm font-medium">
+                                Primes et avantages
+                            </h4>
+                            <Link
+                                :href="`/backoffice/affectations-remuneration?employe_id=${contrat.employe_id}`"
+                                class="text-xs underline underline-offset-2"
+                            >
+                                Gérer dans Primes des salariés
+                            </Link>
+                        </div>
+                        <p
+                            v-if="!primes.length"
+                            class="text-xs text-muted-foreground"
+                        >
+                            Aucune prime ni aucun avantage.
+                        </p>
+                        <ul v-else class="list-inside list-disc text-sm">
+                            <li v-for="prime in primes" :key="prime">
+                                {{ prime }}
+                            </li>
+                        </ul>
+                    </div>
 
                     <p class="text-xs text-muted-foreground">
                         À l’enregistrement, le PDF du contrat est mis à jour

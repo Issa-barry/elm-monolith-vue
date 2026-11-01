@@ -2,11 +2,15 @@
 
 namespace App\Services\Rh;
 
+use App\Enums\PeriodiciteRemuneration;
 use App\Enums\StatutContrat;
 use App\Enums\StatutEmploye;
 use App\Enums\TypeContrat;
 use App\Models\Contrat;
 use App\Models\Employe;
+use App\Models\TypeRemuneration;
+use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -17,6 +21,69 @@ use Illuminate\Validation\ValidationException;
  */
 class ContratService
 {
+    /**
+     * « Nouveau contrat » avec ses primes, en une seule opération (ADR 0048) : si une prime est
+     * refusée, ni le contrat ni aucune prime ne reste enregistré. Les primes passent par le service
+     * des primes et ses règles (type actif, chevauchement, mois figés, agence) ; elles sont
+     * toujours validées d'emblée, jamais « à valider » : le droit de validation est exigé par
+     * AffectationRemunerationService::affecter(). Le PDF se produit après, hors de cette transaction.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<array{type_remuneration_id: string, date_debut: string, montant?: mixed, taux?: mixed}>  $primes
+     */
+    public function creerAvecPrimes(array $data, array $primes, string $organizationId, User $acteur): Contrat
+    {
+        return DB::transaction(function () use ($data, $primes, $organizationId, $acteur) {
+            $contrat = $this->creer($data, $organizationId);
+
+            foreach (array_values($primes) as $index => $prime) {
+                try {
+                    $this->ajouterPrime($contrat, $prime, $acteur);
+                } catch (ValidationException $e) {
+                    // L'erreur s'affiche sur la ligne concernée du formulaire.
+                    throw ValidationException::withMessages(collect($e->errors())
+                        ->mapWithKeys(fn (array $messages, string $champ) => ["primes.{$index}.{$champ}" => $messages])
+                        ->all());
+                }
+            }
+
+            return $contrat;
+        });
+    }
+
+    /** @param  array{type_remuneration_id: string, date_debut: string, montant?: mixed, taux?: mixed}  $prime */
+    private function ajouterPrime(Contrat $contrat, array $prime, User $acteur): void
+    {
+        $type = TypeRemuneration::where('organization_id', $contrat->organization_id)->find($prime['type_remuneration_id']);
+        if ($type === null) {
+            throw ValidationException::withMessages(['type_remuneration_id' => 'Type de prime ou d\'avantage inconnu.']);
+        }
+
+        $debut = Carbon::parse($prime['date_debut'])->startOfDay();
+        $ponctuelle = $type->periodicite === PeriodiciteRemuneration::PONCTUELLE;
+        // Une prime ponctuelle couvre tout son mois de versement.
+        $finPeriode = $ponctuelle ? $debut->copy()->endOfMonth()->startOfDay() : $debut;
+
+        if ($finPeriode->lt($contrat->date_debut)) {
+            throw ValidationException::withMessages(['date_debut' => 'La prime ne peut pas commencer avant le début du contrat ('.$contrat->date_debut->format('d/m/Y').').']);
+        }
+        if ($contrat->date_fin !== null && $debut->gt($contrat->date_fin)) {
+            throw ValidationException::withMessages(['date_debut' => 'La prime ne peut pas commencer après la fin du contrat ('.$contrat->date_fin->format('d/m/Y').').']);
+        }
+
+        // Une prime mensuelle s'arrête avec le CDD, ou plus tôt si le type lui-même prend fin.
+        $fins = array_filter([$contrat->date_fin?->toDateString(), $type->date_fin_application?->toDateString()]);
+
+        app(AffectationRemunerationService::class)->affecter([
+            'employe_id' => $contrat->employe_id,
+            'type_remuneration_id' => $type->id,
+            'date_debut' => $debut->toDateString(),
+            'date_fin' => $ponctuelle || $fins === [] ? null : min($fins),
+            'montant' => $prime['montant'] ?? null,
+            'taux' => $prime['taux'] ?? null,
+        ], $acteur, valider: true);
+    }
+
     /**
      * @param  array{employe_id: string, type_contrat: string, date_debut: string, date_fin?: ?string, salaire_base?: float|string|null}  $data
      */

@@ -3,14 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutContrat;
+use App\Enums\StatutTypeRemuneration;
 use App\Enums\TypeContrat;
 use App\Http\Controllers\Rh\Contrats\VerifieAccesContrat;
 use App\Models\AffectationRemuneration;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Site;
+use App\Models\TypeRemuneration;
+use App\Services\Rh\AffectationRemunerationService;
 use App\Services\Rh\ContratService;
 use App\Services\Rh\DocumentContratService;
+use App\Services\Rh\Paie\CalendrierPaieService;
 use App\Services\Rh\PdgService;
 use App\Services\SiteScopeService;
 use App\Support\Rh\PerimetreEmploye;
@@ -115,7 +119,49 @@ class ContratController extends Controller
             // Signataire repris automatiquement ; sans PDG, la création est refusée (ADR 0048).
             'pdg' => $pdg ? ['nom' => PdgService::nom($pdg), 'qualite' => PdgService::QUALITE] : null,
             'message_pdg_absent' => PdgService::MESSAGE_ABSENT,
+            'primes_contrat' => $this->peutAjouterPrimes() ? $this->optionsPrimes($orgId, $employes->pluck('value')->all()) : null,
         ]);
+    }
+
+    /**
+     * Primes ajoutées à la création du contrat : toujours validées d'emblée (décision du
+     * 01/11/2026), donc réservées à qui peut à la fois attribuer et valider une prime.
+     */
+    private function peutAjouterPrimes(): bool
+    {
+        return auth()->user()->can('create', AffectationRemuneration::class)
+            && auth()->user()->can(AffectationRemunerationService::PERMISSION_VALIDATION);
+    }
+
+    /**
+     * @param  list<string>  $employeIds
+     * @return array<string, mixed>
+     */
+    private function optionsPrimes(string $orgId, array $employeIds): array
+    {
+        return [
+            'premier_jour_modifiable' => app(CalendrierPaieService::class)->premierJourModifiable($orgId)?->toDateString(),
+            'par_employe' => (object) app(AffectationRemunerationService::class)->primesOccupeesParEmploye($orgId, $employeIds),
+            // Seuls les types actifs sont attribuables (assertTypeAttribuable).
+            'types' => TypeRemuneration::where('organization_id', $orgId)
+                ->where('statut', StatutTypeRemuneration::ACTIF->value)
+                ->orderBy('libelle')
+                ->get()
+                ->map(fn (TypeRemuneration $t) => [
+                    'value' => $t->id,
+                    'label' => $t->libelle,
+                    'valorise' => $t->categorie->estValorise(),
+                    'mode_calcul' => $t->mode_calcul->value,
+                    'periodicite' => $t->periodicite->value,
+                    'periodicite_label' => $t->periodicite->label(),
+                    'nature_montant' => $t->nature_montant->value,
+                    'cumul_autorise' => $t->cumul_autorise,
+                    'montant_defaut' => $t->montant_defaut !== null ? (float) $t->montant_defaut : null,
+                    'taux_defaut' => $t->taux_defaut !== null ? (float) $t->taux_defaut : null,
+                ])
+                ->values()
+                ->all(),
+        ];
     }
 
     public function store(Request $request): RedirectResponse
@@ -132,13 +178,25 @@ class ContratController extends Controller
         // ne pourrait pas être produit, aucun autre salarié n'est pris à sa place.
         app(PdgService::class)->exiger($orgId);
 
+        $primes = array_values($data['primes'] ?? []);
+        unset($data['primes']);
+        abort_if($primes !== [] && ! $this->peutAjouterPrimes(), 403);
+
+        // Contrat et primes en une seule opération : si une prime est refusée, rien n'est enregistré.
         // Règle « un seul contrat actif », sous verrou de l'employé : commune avec l'import RH.
-        $contrat = app(ContratService::class)->creer($this->normaliserConditions($data), $orgId);
+        $contrat = app(ContratService::class)->creerAvecPrimes($this->normaliserConditions($data), $primes, $orgId, auth()->user());
 
         // PDF produit tout de suite ; un échec n'annule pas le contrat (nouvelle tentative possible).
         $erreur = app(DocumentContratService::class)->genererAutomatiquement($contrat, auth()->user());
 
-        return $this->apresEnregistrement($contrat, 'Contrat créé.', $erreur);
+        $nombre = count($primes);
+        $succes = match (true) {
+            $nombre === 0 => 'Contrat créé.',
+            $nombre === 1 => 'Contrat créé avec 1 prime validée.',
+            default => "Contrat créé avec {$nombre} primes validées.",
+        };
+
+        return $this->apresEnregistrement($contrat, $succes, $erreur);
     }
 
     public function edit(Contrat $contrat): Response
@@ -163,6 +221,13 @@ class ContratController extends Controller
             'type_contrat_options' => TypeContrat::options(),
             'statut_contrat_options' => StatutContrat::options(),
             'unites_periode_essai' => $this->unitesPeriodeEssai(),
+            // Lecture seule ici : un montant se change dans « Primes des salariés », qui garde
+            // l'historique (AFF-006, AFF-007). null sans le droit de voir les primes.
+            'primes' => auth()->user()->can('rh-affectations-remuneration.read')
+                ? app(DocumentContratService::class)->avantagesDisponibles($contrat)
+                    ->map(fn (AffectationRemuneration $a) => app(DocumentContratService::class)->texteAvantage($a))
+                    ->values()
+                : null,
         ]);
     }
 
@@ -304,6 +369,14 @@ class ContratController extends Controller
                 : ['nullable', 'date', 'after_or_equal:date_debut'],
             'salaire_base' => 'nullable|numeric|min:0',
             'statut_contrat' => ['nullable', Rule::in(StatutContrat::values())],
+            // Primes ajoutées à la création seulement : ensuite, « Primes des salariés » (AFF-006).
+            ...($creation ? [
+                'primes' => ['nullable', 'array', 'max:20'],
+                'primes.*.type_remuneration_id' => ['required', 'string'],
+                'primes.*.date_debut' => ['required', 'date_format:Y-m-d'],
+                'primes.*.montant' => ['nullable', 'numeric', 'gt:0', 'max:9999999999999'],
+                'primes.*.taux' => ['nullable', 'numeric', 'gt:0', 'max:100'],
+            ] : []),
         ];
     }
 
@@ -332,6 +405,15 @@ class ContratController extends Controller
             'heures_hebdomadaires.decimal' => 'Le nombre d’heures accepte au plus deux chiffres après la virgule.',
             'motif_cdd.required' => 'Indiquez le motif du CDD (ex. remplacement d’un salarié absent).',
             'motif_cdd.max' => 'Le motif du CDD est limité à 255 caractères.',
+            'primes.*.type_remuneration_id.required' => 'Choisissez la prime, ou retirez cette ligne.',
+            'primes.*.date_debut.required' => 'Indiquez la date d’effet de cette prime.',
+            'primes.*.date_debut.date_format' => 'La date d’effet de cette prime est invalide.',
+            'primes.*.montant.numeric' => 'Le montant doit être un nombre, sans lettres.',
+            'primes.*.montant.gt' => 'Le montant doit être supérieur à 0.',
+            'primes.*.montant.max' => 'Le montant est trop élevé.',
+            'primes.*.taux.numeric' => 'Le taux doit être un nombre, sans lettres.',
+            'primes.*.taux.gt' => 'Le taux doit être supérieur à 0.',
+            'primes.*.taux.max' => 'Le taux ne peut pas dépasser 100 %.',
         ];
     }
 

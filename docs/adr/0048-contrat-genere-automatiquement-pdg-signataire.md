@@ -52,6 +52,11 @@ l'étape était oubliée, le texte libre donnait des valeurs incohérentes (« t
    version »). Un changement hors contrat (fiche du salarié, primes, PDG) après signature est
    seulement signalé.
 8. **Générer n'est pas signer** : la signature reste l'action « Marquer comme signé » (papier).
+9. **Primes à la création du contrat** (ajout du 01/11/2026) : des lignes de primes dans « Nouveau
+   contrat », **uniquement validées**, donc réservées à qui peut attribuer et valider. Elles passent
+   par le service des primes existant (pas de second système) ; contrat et primes sont enregistrés
+   dans une seule transaction, le PDF ensuite. Pas de saisie en modification : les changements de
+   montant gardent leur procédure et leur historique.
 
 ## Conséquences
 

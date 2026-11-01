@@ -52,6 +52,33 @@ class AffectationRemunerationService
         private readonly CalendrierPaieService $calendrier,
     ) {}
 
+    /**
+     * Primes qui occupent déjà une période (validées ou à valider), par salarié : même règle que le
+     * refus de chevauchement. Pour les formulaires (récapitulatif du salarié, types déjà pris
+     * retirés des listes) ; le contrôle qui fait foi reste assertSansChevauchement().
+     *
+     * @param  iterable<string>  $employeIds
+     * @return array<string, list<array{type_id: string, libelle: ?string, date_debut: string, date_fin: ?string, a_valider: bool}>>
+     */
+    public function primesOccupeesParEmploye(string $organizationId, iterable $employeIds): array
+    {
+        return AffectationRemuneration::with('type:id,libelle')
+            ->where('organization_id', $organizationId)
+            ->whereIn('employe_id', collect($employeIds))
+            ->whereIn('statut', StatutAffectationRemuneration::occupantLaPeriode())
+            ->orderBy('date_debut')
+            ->get(['id', 'employe_id', 'type_remuneration_id', 'date_debut', 'date_fin', 'statut'])
+            ->groupBy('employe_id')
+            ->map(fn ($primes) => $primes->map(fn (AffectationRemuneration $a) => [
+                'type_id' => $a->type_remuneration_id,
+                'libelle' => $a->type?->libelle,
+                'date_debut' => $a->date_debut->toDateString(),
+                'date_fin' => $a->date_fin?->toDateString(),
+                'a_valider' => $a->statut === StatutAffectationRemuneration::A_VALIDER,
+            ])->values()->all())
+            ->all();
+    }
+
     // ── Affectation ─────────────────────────────────────────────────────────────
 
     /**

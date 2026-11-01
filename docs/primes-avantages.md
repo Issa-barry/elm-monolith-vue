@@ -140,6 +140,10 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
     les propositions à valider, car il sert à éviter un chevauchement (AFF-004) ; le PDF du
     contrat liste une ligne par affectation (un changement de montant à venir, ou un type à cumul
     autorisé, y figure deux fois) alors que la colonne compte des types de prime.
+- **AFF-004 quater (01/11/2026)** — **Nouveau contrat** : des primes peuvent être ajoutées à la
+  création du contrat, avec les droits d'attribuer **et** de valider. Elles sont toujours validées
+  d'emblée et passent par `affecter()`, donc par les mêmes règles ; contrat et primes sont
+  enregistrés ensemble ou pas du tout. Détail : [rh-contrat-pdf.md](rh-contrat-pdf.md).
 - **AFF-005** — Montants : la valeur par défaut du type est **proposée** dans le formulaire, jamais
   reprise d'office ; le montant attribué est toujours celui saisi. Un élément **saisi chaque mois**
   n'a pas de montant permanent : son montant vient des montants mensuels (AFF-010).
