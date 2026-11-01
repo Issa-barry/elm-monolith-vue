@@ -10,8 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
- * « Voir / Télécharger le PDF » de la liste des contrats (docs/rh-contrat-pdf.md, ADR 0044, 0048) :
- * la dernière version, `?preview=1` pour l'aperçu. Pour qui peut mettre le contrat à jour, une
+ * PDF de la dernière version du contrat (docs/rh-contrat-pdf.md, ADR 0044, 0048) : « Voir » de la
+ * liste l'ouvre avec `?preview=1` (affiché dans le navigateur), sinon téléchargement. Pour qui peut mettre le contrat à jour, une
  * version non signée dépassée est d'abord remise à jour : on n'ouvre jamais un ancien PDF d'un
  * contrat modifié. 404 tant qu'aucune version n'existe.
  */

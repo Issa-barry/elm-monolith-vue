@@ -17,7 +17,6 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Briefcase,
-    Download,
     Eye,
     FilePlus2,
     History,
@@ -52,6 +51,8 @@ interface Contrat {
     } | null;
     // Mise à jour du PDF autorisée (permissions + agence de rattachement), calculée par le serveur.
     peut_generer: boolean;
+    // Primes attribuées au salarié, une fois par type (null sans le droit de les consulter).
+    primes_count: number | null;
 }
 
 interface Option {
@@ -113,6 +114,11 @@ const filterFields: FilterField[] = [
 ];
 
 const filteredContrats = computed(() => props.contrats);
+
+function libellePrimes(nombre: number | null): string {
+    const n = nombre ?? 0;
+    return `${n} prime${n > 1 ? 's' : ''}`;
+}
 
 // ── Styles badges ─────────────────────────────────────────────────────────────
 const TYPE_CONTRAT_CLASS: Record<string, string> = {
@@ -250,6 +256,23 @@ function confirmDelete(c: Contrat) {
                         </template>
                     </Column>
 
+                    <Column
+                        v-if="can('rh-affectations-remuneration.read')"
+                        header="Primes"
+                        style="width: 100px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                class="text-sm"
+                                :class="{
+                                    'text-muted-foreground': !data.primes_count,
+                                }"
+                                data-testid="nombre-primes"
+                                >{{ libellePrimes(data.primes_count) }}</span
+                            >
+                        </template>
+                    </Column>
+
                     <Column header="Contrat de travail" style="width: 170px">
                         <template #body="{ data }">
                             <StatusDot
@@ -321,20 +344,6 @@ function confirmDelete(c: Contrat) {
                                                     class="flex w-full cursor-pointer items-center gap-2"
                                                 >
                                                     <Eye class="h-4 w-4" />Voir
-                                                    le contrat (PDF)
-                                                </a>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                as-child
-                                                data-testid="action-telecharger-contrat-pdf"
-                                            >
-                                                <a
-                                                    :href="`/backoffice/contrats/${data.id}/pdf`"
-                                                    class="flex w-full cursor-pointer items-center gap-2"
-                                                >
-                                                    <Download
-                                                        class="h-4 w-4"
-                                                    />Télécharger le PDF
                                                 </a>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem

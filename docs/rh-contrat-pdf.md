@@ -103,10 +103,14 @@ L'utilisateur saisit seulement ce que l'application ne connaît pas :
   « Mettre à jour le PDF » (`POST /backoffice/contrats/{contrat}/documents`) n'apparaît que s'il
   y a quelque chose à faire.
 - **Liste des contrats** : colonne « Contrat de travail » (V2 · À signer, « PDF à préparer » pour
-  un contrat actif sans PDF, ex. contrat importé). Menu ⋮ : **Voir le contrat (PDF)** et
-  **Télécharger le PDF** (`GET /backoffice/contrats/{contrat}/pdf`, `?preview=1` = aperçu, 404
-  sans version), **Fiche du contrat, signature**, **Préparer le PDF** (contrat actif sans PDF),
-  Modifier, Supprimer.
+  un contrat actif sans PDF, ex. contrat importé). Menu ⋮ : **Voir** (01/11/2026 : seule action
+  de consultation, plus de « Télécharger le PDF » ; ouvre
+  `GET /backoffice/contrats/{contrat}/pdf?preview=1` dans un nouvel onglet, servi en
+  `Content-Disposition: inline` pour le lecteur PDF du navigateur, qui permet zoom, impression et
+  téléchargement ; sans `?preview` la même route sert le fichier en `attachment` ; 404 sans
+  version), **Fiche du contrat, signature**, **Préparer le PDF** (contrat actif sans PDF),
+  Modifier, Supprimer. Colonne **« Primes »** : nombre de primes attribuées au salarié
+  (docs/primes-avantages.md, AFF-004 ter).
 - **Modèles de contrat** (Paramètres → RH, `rh-referentiels.gerer`) : inchangés (un modèle par
   type, brouillon → actif, révision, texte brut, variables `{{cle}}` refusées si inconnues ou
   réservées aux CDD). Toutes les variables sont désormais reprises automatiquement. Une variable

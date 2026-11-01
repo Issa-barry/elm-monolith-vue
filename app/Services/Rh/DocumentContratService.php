@@ -6,7 +6,6 @@ use App\Enums\CategorieTypeRemuneration;
 use App\Enums\ModeCalculRemuneration;
 use App\Enums\NatureMontantRemuneration;
 use App\Enums\PeriodiciteRemuneration;
-use App\Enums\StatutAffectationRemuneration;
 use App\Enums\StatutContrat;
 use App\Enums\StatutDocumentContrat;
 use App\Enums\TypeContrat;
@@ -138,8 +137,7 @@ class DocumentContratService
         return AffectationRemuneration::with('type')
             ->where('organization_id', $contrat->organization_id)
             ->where('employe_id', $contrat->employe_id)
-            ->where('statut', StatutAffectationRemuneration::VALIDEE->value)
-            ->where(fn ($q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', today()->toDateString()))
+            ->valideesEnCoursOuAVenir()
             ->orderBy('date_debut')
             ->get();
     }

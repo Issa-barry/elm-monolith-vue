@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\StatutContrat;
 use App\Enums\TypeContrat;
 use App\Http\Controllers\Rh\Contrats\VerifieAccesContrat;
+use App\Models\AffectationRemuneration;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Site;
@@ -60,10 +61,15 @@ class ContratController extends Controller
         $peutGenerer = $user->can('rh-contrats.update') && $user->can('rh-remunerations.read');
         $sitesEcriture = $user->agitSurToutesLesAgences() ? null : app(SiteScopeService::class)->assignedSiteIds($user);
 
-        $contrats = $query->orderByDesc('date_debut')->get()
+        $contrats = $query->orderByDesc('date_debut')->get();
+        $primes = $user->can('rh-affectations-remuneration.read') ? $this->nombrePrimesParEmploye($orgId, $contrats->pluck('employe_id')->unique()->values()->all()) : null;
+
+        $contrats = $contrats
             ->map(fn (Contrat $c) => [
                 ...$this->toRow($c),
                 'peut_generer' => $peutGenerer && ($sitesEcriture === null || ($c->employe?->site_id !== null && $sitesEcriture->contains($c->employe->site_id))),
+                // null sans le droit de consulter les primes : la colonne n'est pas affichée.
+                'primes_count' => $primes === null ? null : (int) ($primes[$c->employe_id] ?? 0),
             ]);
 
         $sites = $user->voitToutesLesAgences()
@@ -327,6 +333,31 @@ class ContratController extends Controller
             'motif_cdd.required' => 'Indiquez le motif du CDD (ex. remplacement d’un salarié absent).',
             'motif_cdd.max' => 'Le motif du CDD est limité à 255 caractères.',
         ];
+    }
+
+    /**
+     * Colonne « Primes » de la liste (docs/primes-avantages.md, AFF-004 ter) : primes retenues
+     * dans le contrat PDF (validées, en cours ou à venir), une fois par type — un changement de
+     * montant ou un versement mensuel ne compte pas en plus. Une seule requête pour la liste.
+     *
+     * @param  list<string>  $employeIds
+     * @return array<string, int>
+     */
+    private function nombrePrimesParEmploye(string $orgId, array $employeIds): array
+    {
+        if ($employeIds === []) {
+            return [];
+        }
+
+        return AffectationRemuneration::query()
+            ->where('organization_id', $orgId)
+            ->whereIn('employe_id', $employeIds)
+            ->valideesEnCoursOuAVenir()
+            ->groupBy('employe_id')
+            ->selectRaw('employe_id, COUNT(DISTINCT type_remuneration_id) as nombre')
+            ->pluck('nombre', 'employe_id')
+            ->map(fn ($n) => (int) $n)
+            ->all();
     }
 
     private function toRow(Contrat $c): array

@@ -255,8 +255,20 @@ class AffectationRemunerationController extends Controller
         app(SiteScopeService::class)->applyToQuery($query, $user);
         $toutes = $user->agitSurToutesLesAgences();
         $sites = $toutes ? [] : $user->sites()->pluck('sites.id')->all();
+        $employes = $query->get();
 
-        return $query->get()
+        // Primes qui occupent déjà une période (validées ou à valider) : même règle que le refus
+        // de chevauchement du service. Sert à la fenêtre « Attribuer » : récapitulatif du salarié
+        // et types déjà pris retirés de la liste ; le serveur reste l'autorité.
+        $occupations = AffectationRemuneration::with('type:id,libelle')
+            ->where('organization_id', $orgId)
+            ->whereIn('employe_id', $employes->pluck('id'))
+            ->whereIn('statut', StatutAffectationRemuneration::occupantLaPeriode())
+            ->orderBy('date_debut')
+            ->get(['id', 'employe_id', 'type_remuneration_id', 'date_debut', 'date_fin', 'statut'])
+            ->groupBy('employe_id');
+
+        return $employes
             ->sortBy('nom_complet')
             ->map(fn (Employe $e) => [
                 'value' => $e->id,
@@ -266,6 +278,13 @@ class AffectationRemunerationController extends Controller
                 'date_sortie' => $e->date_sortie?->toDateString(),
                 'attribuable' => ($toutes || ($e->site_id !== null && in_array($e->site_id, $sites, true)))
                     && ! ($e->statut === StatutEmploye::SORTI && $e->date_sortie === null),
+                'primes' => ($occupations[$e->id] ?? collect())->map(fn (AffectationRemuneration $a) => [
+                    'type_id' => $a->type_remuneration_id,
+                    'libelle' => $a->type?->libelle,
+                    'date_debut' => $a->date_debut->toDateString(),
+                    'date_fin' => $a->date_fin?->toDateString(),
+                    'a_valider' => $a->statut === StatutAffectationRemuneration::A_VALIDER,
+                ])->values()->all(),
             ])
             ->values()
             ->all();
