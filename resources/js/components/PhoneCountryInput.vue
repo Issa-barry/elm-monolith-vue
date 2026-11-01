@@ -206,6 +206,8 @@ function flagUrl(code: string): string {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
 }
 
+// Seule limite de longueur du champ : un attribut maxlength couperait un numéro collé avant que son
+// "0" initial soit reconnu ("0612345678" deviendrait "061234567", donc trop court).
 function handlePhoneInput(e: Event) {
     const input = e.target as HTMLInputElement;
     const raw = input.value.replace(/\D/g, '');
@@ -317,11 +319,6 @@ defineExpose({ phoneIsValid, phoneClientError });
                 inputmode="numeric"
                 :autofocus="autofocus"
                 :required="required"
-                :maxlength="
-                    phoneDigits.startsWith('0')
-                        ? selectedPays.localLength + 1
-                        : selectedPays.localLength
-                "
                 :placeholder="`${selectedPays.localLength} chiffres`"
                 class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />

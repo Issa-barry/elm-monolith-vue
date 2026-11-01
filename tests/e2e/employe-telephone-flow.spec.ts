@@ -68,9 +68,10 @@ test("créer un employé à partir de son numéro guinéen, vérifier l'affichag
 
     // Préremplissage à l'édition : pays + numéro national correctement restitués, jamais
     // "+224 +224...".
+    // Depuis #telephone : le contact d'urgence a lui aussi un libellé « Téléphone ».
     const editTelephoneField = page
-        .locator('label', { hasText: /^Téléphone$/ })
-        .locator('xpath=..');
+        .locator('#telephone')
+        .locator('xpath=ancestor::div[label][1]');
     await expect(editTelephoneField.getByText('+224')).toBeVisible({
         timeout: 15_000,
     });
