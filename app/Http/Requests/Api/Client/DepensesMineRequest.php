@@ -8,8 +8,8 @@ use Illuminate\Validation\Rule;
 
 /**
  * Filtres de `GET /v1/mobile/depenses/mine` — liste consolidée (tous véhicules
- * accessibles) contrairement à `GET /v1/mobile/vehicules/{id}/frais` (un seul
- * véhicule). Pas de raccourci "period" ici (contrairement au dashboard) :
+ * accessibles + dépenses rattachées directement au livreur) contrairement à
+ * `GET /v1/mobile/vehicules/{id}/frais` (un seul véhicule). Pas de raccourci "period" ici (contrairement au dashboard) :
  * cet endpoint est une liste paginée, pas un calcul de solde, une période par
  * défaut implicite ferait disparaître des dépenses sans que l'appelant l'ait
  * demandé.

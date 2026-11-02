@@ -47,6 +47,10 @@ class DashboardController extends Controller
             - `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais négatif** (plancher à 0 — un solde négatif n'est jamais affiché comme dette du propriétaire).
             - `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.
 
+            `depenses_total` (hors `summary`, affichage seul) : `frais_depenses_total` + dépenses validées
+            rattachées directement au livreur sur la période (ex. avance sur salaire), sauf filtre
+            `vehicule_id`. **Jamais déduit de `balance`.**
+
             `par_vehicule` : même détail que `summary` mais par véhicule (schéma
             `VehiculeEarningsRow`), **toujours la liste complète du parc accessible**
             même si `vehicule_id` filtre le calcul (les véhicules hors filtre
@@ -140,9 +144,14 @@ class DashboardController extends Controller
             )
             : null;
 
+        $depensesLivreur = $vehiculeIdsContrainte === null
+            ? $this->earningsService->depensesLivreurTotal($organizationId, $livreur, $filters['date_debut'], $filters['date_fin'])
+            : 0.0;
+
         return response()->json([
             'filters' => $filters,
             'summary' => $earnings['totals'],
+            'depenses_total' => round($earnings['totals']['frais_depenses_total'] + $depensesLivreur, 2),
             'summary_evolution' => $summaryEvolution,
             'comparison_period' => $comparisonPeriod,
             'par_vehicule' => $earnings['by_vehicule'],

@@ -27,7 +27,9 @@ class VehiculesController extends Controller
             .'`capacite`/`conducteur` sont des champs hérités conservés pour compatibilité '
             .'descendante — la source canonique est désormais `capacites[]` (une entrée par '
             .'catégorie, cf. VehiculeCapacite) et `equipe[]` (tous les membres actifs, avec '
-            .'`role` = valeur réelle stockée en base : `chauffeur`/`convoyeur`, jamais traduite). '
+            .'`role` = valeur réelle stockée en base : `chauffeur`/`convoyeur`, jamais traduite ; '
+            .'`nom_complet` peut être une désignation provisoire comme `Chauffeur-1`, à remplacer '
+            .'à l\'affichage par `prenom` + `nom` quand les deux sont renseignés). '
             .'`proprietaire` est `null` si le véhicule n\'a aucun propriétaire renseigné.',
     )]
     public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
@@ -127,6 +129,10 @@ class VehiculesController extends Controller
             ->map(fn (EquipeLivreur $membre) => [
                 'id' => $membre->livreur->id,
                 'nom_complet' => $membre->livreur->nom_complet,
+                // nom_complet peut être une désignation provisoire ("Chauffeur-1") : le frontend
+                // préfère prénom + nom quand les deux sont connus.
+                'prenom' => $membre->livreur->prenom,
+                'nom' => $membre->livreur->nom,
                 'telephone' => $membre->livreur->telephone,
                 'role' => $membre->role,
                 'ordre' => $membre->ordre,

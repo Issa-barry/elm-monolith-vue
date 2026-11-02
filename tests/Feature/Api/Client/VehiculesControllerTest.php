@@ -122,6 +122,27 @@ class VehiculesControllerTest extends TestCase
         $this->assertSame(0, $data[0]['equipe'][0]['ordre']);
     }
 
+    public function test_membre_expose_prenom_et_nom_sans_toucher_a_sa_designation(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $vehicule = $this->makeVehicule($org, $user->proprietaire->id);
+        $equipe = $this->makeEquipe($org, $vehicule);
+
+        $this->addMembre($equipe, $org, 'chauffeur', 0, [
+            'nom_complet' => 'Chauffeur-1',
+            'prenom' => 'Mamadou',
+            'nom' => 'DIALLO',
+        ]);
+
+        Sanctum::actingAs($user, ['*']);
+        $membre = $this->fetch()[0]['equipe'][0];
+
+        $this->assertSame('Chauffeur-1', $membre['nom_complet']);
+        $this->assertSame('Mamadou', $membre['prenom']);
+        $this->assertSame('DIALLO', $membre['nom']);
+    }
+
     public function test_membre_inactif_est_exclu_de_lequipe(): void
     {
         $org = Organization::factory()->create();
