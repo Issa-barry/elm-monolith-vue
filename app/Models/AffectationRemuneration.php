@@ -112,6 +112,17 @@ class AffectationRemuneration extends Model
             ->where(fn (Builder $q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', $du->toDateString()));
     }
 
+    /**
+     * Primes retenues pour le salarié : validées, en cours ou à venir (jamais une proposition à
+     * valider, annulée ou terminée). Reprises dans le contrat PDF et comptées dans la liste des
+     * contrats (docs/primes-avantages.md, AFF-004 ter).
+     */
+    public function scopeValideesEnCoursOuAVenir(Builder $query): Builder
+    {
+        return $query->where('statut', StatutAffectationRemuneration::VALIDEE->value)
+            ->where(fn (Builder $q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', today()->toDateString()));
+    }
+
     /** Une proposition (affectation, changement de montant, fin d'effet) attend-elle une validation ? */
     public function attendValidation(): bool
     {

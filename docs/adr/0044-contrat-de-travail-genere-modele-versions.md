@@ -1,7 +1,7 @@
 # ADR 0044 — Contrat de travail généré : modèle par type, instantané figé, versions
 
 - **Date** : 2026-10-30
-- **Statut** : accepté — V1 livrée le 2026-10-30 (non commitée)
+- **Statut** : accepté — V1 livrée le 2026-10-30 ; **révisé par l'[ADR 0048](0048-contrat-genere-automatiquement-pdg-signataire.md)** (01/11/2026) : PDF produit automatiquement à la création et à la modification du contrat, plus de formulaire de génération, PDG désigné signataire
 - **Périmètre** : RH → Contrats, Paramètres → RH — cf. [rh-contrat-pdf.md](../rh-contrat-pdf.md),
   [documents-pdf.md](../documents-pdf.md)
 

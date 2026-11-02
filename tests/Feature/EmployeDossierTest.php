@@ -79,9 +79,13 @@ class EmployeDossierTest extends TestCase
 
     private function payload(array $surcharges = []): array
     {
+        // Téléphone obligatoire à la création, un numéro différent à chaque appel (pas de doublon).
+        static $numero = 0;
+
         return [
             'nom' => 'Diallo',
             'prenom' => 'aïssatou',
+            'telephone' => '+22462'.str_pad((string) ++$numero, 7, '0', STR_PAD_LEFT),
             'type_employe' => 'interne',
             'statut' => 'actif',
             ...$surcharges,

@@ -75,6 +75,9 @@ class AffectationRemunerationPresenter
                 'periodicite' => $type->periodicite->value,
                 'periodicite_label' => $type->periodicite->label(),
                 'nature_montant' => $type->nature_montant->value,
+                // Proposés dans « Montants mensuels » d'un montant variable (préremplissage seulement).
+                'montant_defaut' => $type->montant_defaut !== null ? (float) $type->montant_defaut : null,
+                'taux_defaut' => $type->taux_defaut !== null ? (float) $type->taux_defaut : null,
                 'proratisable' => $type->proratisable,
                 'statut' => $type->statut->value,
             ],

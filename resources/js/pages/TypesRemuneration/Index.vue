@@ -263,7 +263,6 @@ const peutEnregistrerEtValider = computed(
 const avanceOuvert = ref(false);
 const CHAMPS_AVANCES = [
     'code',
-    'nature_montant',
     'date_debut_application',
     'date_fin_application',
 ];
@@ -770,6 +769,19 @@ function ouvrirHistorique(t: TypeRemuneration) {
                 {{ categorieHistorique }}
             </p>
 
+            <p
+                v-if="editingType?.est_utilise"
+                class="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground"
+                data-testid="regles-prime-attribuee"
+            >
+                Prime déjà attribuée : son code ne change plus. Le passage de
+                ponctuelle à mensuelle est toujours possible ; les autres
+                changements de calcul (mode, nature du montant, mensuelle vers
+                ponctuelle) ne le sont que si aucune attribution ne porte sur un
+                mois de paie encore ouvert. Les montants déjà transmis ne
+                changent jamais.
+            </p>
+
             <div class="grid gap-4 sm:grid-cols-2">
                 <div>
                     <Label
@@ -825,6 +837,41 @@ function ouvrirHistorique(t: TypeRemuneration) {
                         {{ form.errors.periodicite }}
                     </p>
                 </div>
+            </div>
+
+            <div>
+                <Label for="tr-nature" class="mb-1.5 block text-xs font-medium">
+                    Nature du montant <span class="text-destructive">*</span>
+                </Label>
+                <select
+                    id="tr-nature"
+                    v-model="form.nature_montant"
+                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                >
+                    <option
+                        v-for="n in natures_montant"
+                        :key="n.value"
+                        :value="n.value"
+                    >
+                        {{ n.label }}
+                    </option>
+                </select>
+                <p
+                    class="mt-1 text-xs text-muted-foreground"
+                    data-testid="aide-nature-montant"
+                >
+                    {{
+                        form.nature_montant === 'variable'
+                            ? 'Un montant est saisi et validé pour chaque mois dans « Primes des salariés ».'
+                            : 'Le montant fixé à l’attribution est repris automatiquement chaque mois : aucune saisie mensuelle.'
+                    }}
+                </p>
+                <p
+                    v-if="form.errors.nature_montant"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.nature_montant }}
+                </p>
             </div>
 
             <div>
@@ -909,8 +956,7 @@ function ouvrirHistorique(t: TypeRemuneration) {
                 >
                     Options avancées
                     <span class="ml-1 text-xs font-normal text-muted-foreground"
-                        >code, nature du montant, période d’application,
-                        prorata, cumul</span
+                        >code, période d’application, prorata, cumul</span
                     >
                 </summary>
                 <div class="space-y-4 border-t p-3">
@@ -935,33 +981,6 @@ function ouvrirHistorique(t: TypeRemuneration) {
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.code }}
-                            </p>
-                        </div>
-                        <div>
-                            <Label
-                                for="tr-nature"
-                                class="mb-1.5 block text-xs font-medium"
-                            >
-                                Nature du montant
-                            </Label>
-                            <select
-                                id="tr-nature"
-                                v-model="form.nature_montant"
-                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                            >
-                                <option
-                                    v-for="n in natures_montant"
-                                    :key="n.value"
-                                    :value="n.value"
-                                >
-                                    {{ n.label }}
-                                </option>
-                            </select>
-                            <p
-                                v-if="form.errors.nature_montant"
-                                class="mt-1 text-xs text-destructive"
-                            >
-                                {{ form.errors.nature_montant }}
                             </p>
                         </div>
                         <div>

@@ -8,7 +8,7 @@ use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\User;
 use App\Services\Rh\Paie\CalendrierPaieService;
-use App\Services\SiteScopeService;
+use App\Support\Rh\PerimetreEmploye;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -33,17 +33,8 @@ class DepartEmployeService
      */
     public static function peutGerer(User $user, Employe $employe): bool
     {
-        if ($user->organization_id !== $employe->organization_id
-            || ! $user->can('rh-employes.update') || ! $user->can('rh-contrats.update')) {
-            return false;
-        }
-
-        if ($user->agitSurToutesLesAgences()) {
-            return true;
-        }
-
-        return $employe->site_id !== null
-            && app(SiteScopeService::class)->assignedSiteIds($user)->contains($employe->site_id);
+        return $user->can('rh-employes.update') && $user->can('rh-contrats.update')
+            && PerimetreEmploye::peutModifier($user, $employe);
     }
 
     public function enregistrer(Employe $employe, Carbon $dateSortie, string $motif): Employe
@@ -80,6 +71,8 @@ class DepartEmployeService
                 'date_sortie' => $dateSortie->toDateString(),
                 'motif_sortie' => trim($motif),
             ]);
+            // Le PDG qui part n'est plus signataire : un successeur sera à désigner (ADR 0048).
+            app(PdgService::class)->retirerSiPdg($employe);
 
             return $employe;
         });

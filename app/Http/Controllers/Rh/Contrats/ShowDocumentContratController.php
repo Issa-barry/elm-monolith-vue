@@ -15,10 +15,11 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Page « Contrat de travail » d'un contrat (ADR 0044) : données reprises, champs à compléter,
- * primes et avantages à retenir, puis historique des versions générées. La lecture suit l'accès à
- * la liste et exige de voir les salaires ; la génération exige l'accès en écriture (bouton masqué
- * sinon).
+ * Page « Contrat de travail » d'un contrat (ADR 0044, 0048) : état du PDF, informations reprises
+ * automatiquement et versions générées (voir, télécharger, marquer signé). Plus de formulaire de
+ * génération : le PDF est produit à la création et à la modification du contrat, et remis à jour
+ * à l'ouverture de cette page tant que la dernière version n'est pas signée. Lecture : accès à la
+ * liste + droit de voir les salaires ; mise à jour et signature : accès en écriture.
  */
 class ShowDocumentContratController extends Controller
 {
@@ -30,10 +31,15 @@ class ShowDocumentContratController extends Controller
         $this->verifierAccesContrat($user, $contrat);
 
         $peutGenerer = $this->aAccesContrat($user, $contrat, ecriture: true);
+        // Une information a changé depuis (dossier, primes, PDG) : la version non signée est remise
+        // à jour avant affichage, jamais une version signée.
+        if ($peutGenerer && $contrat->statut_contrat === StatutContrat::ACTIF) {
+            $documents->genererAutomatiquement($contrat, $user);
+        }
+
         $employe = $documents->employe($contrat);
         $modele = $modeles->pourType($contrat->organization_id, $contrat->type_contrat);
         $versions = $contrat->documents()->with(['auteur.personne', 'signataireEnregistreur.personne'])->get();
-        $precedente = $versions->first();
 
         $props = [
             'contrat' => [
@@ -56,6 +62,7 @@ class ShowDocumentContratController extends Controller
                 'actif' => $modele->estActif(),
                 'revision' => $modele->revision,
             ],
+            'etat' => $documents->etat($contrat),
             'versions' => $versions->map(fn (DocumentContrat $d) => [
                 'id' => $d->id,
                 'version' => $d->version,
@@ -70,33 +77,21 @@ class ShowDocumentContratController extends Controller
             ])->values(),
             'peut_generer' => $peutGenerer,
             'variables' => [],
-            'champs' => (object) [],
-            'champs_utilises' => [],
             'avantages' => [],
-            'avantages_retenus' => [],
         ];
 
-        // Données et champs seulement pour qui peut générer : elles contiennent le salaire.
-        if ($peutGenerer && $modele->estActif()) {
+        // Informations reprises (lecture seule) : celles que le modèle actif utilise.
+        if ($modele->estActif()) {
             $textes = [$modele->titre, ...collect($modele->articles)->flatMap(fn (array $a) => [$a['titre'], $a['texte']])->all()];
-            $utilisees = VariablesContrat::extraire($textes);
             $valeurs = $documents->valeursDossier($contrat, Organization::findOrFail($contrat->organization_id));
-            $champParVariable = array_flip(VariablesContrat::CHAMPS_SAISIS);
 
-            $props['variables'] = collect($utilisees)
-                ->filter(fn (string $cle) => (VariablesContrat::CATALOGUE[$cle]['source'] ?? null) === 'dossier' && $cle !== 'document.date')
-                ->map(fn (string $cle) => ['cle' => $cle, 'libelle' => VariablesContrat::libelle($cle), 'valeur' => $valeurs[$cle] ?? null])
+            $props['variables'] = collect(VariablesContrat::extraire($textes))
+                ->filter(fn (string $cle) => (VariablesContrat::CATALOGUE[$cle]['source'] ?? null) === 'dossier' && ! in_array($cle, ['document.date', 'document.lieu_signature'], true))
+                ->map(fn (string $cle) => ['cle' => $cle, 'libelle' => VariablesContrat::libelleCourt($cle), 'valeur' => $valeurs[$cle] ?? null])
                 ->values();
-            $props['champs_utilises'] = collect($utilisees)
-                ->filter(fn (string $cle) => isset($champParVariable[$cle]))
-                ->map(fn (string $cle) => ['champ' => $champParVariable[$cle], 'libelle' => VariablesContrat::libelle($cle)])
-                ->values();
-            $props['champs'] = $documents->champsProposes($contrat);
             $props['avantages'] = $documents->avantagesDisponibles($contrat)
-                ->map(fn (AffectationRemuneration $a) => ['id' => $a->id, 'texte' => $documents->texteAvantage($a)])
+                ->map(fn (AffectationRemuneration $a) => $documents->texteAvantage($a))
                 ->values();
-            $props['avantages_retenus'] = collect($precedente?->donnees['avantages'] ?? [])->pluck('affectation_id')->values();
-            $props['utilise_avantages'] = in_array('contrat.avantages', $utilisees, true);
         }
 
         return Inertia::render('Contrats/Document', $props);

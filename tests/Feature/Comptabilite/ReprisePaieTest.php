@@ -247,6 +247,34 @@ class ReprisePaieTest extends TestCase
                     && collect($elements)->where('avantage_nature', true)->pluck('montant')->all() === [150000]));
     }
 
+    public function test_la_comptabilite_suit_l_etape_de_la_paie_sans_transmission_manuelle(): void
+    {
+        $rh = app(TransmissionPaieService::class);
+        $etat = fn () => app(ReprisePaieService::class)->etat($this->periode()->fresh());
+        $acteur = $this->acteurPaie($this->org);
+        $this->salarie('DIALLO', 3000000);
+        $this->assertSame('paie_aucune', $etat()['etape']['code']);
+
+        // Brouillon RH : visible en lecture seule, ni repris ni payable.
+        $brouillon = $rh->preparer($acteur, 2026, 11);
+        $this->assertSame('paie_prete_a_valider', $etat()['etape']['code']);
+        $this->assertSame($brouillon->version, $etat()['brouillon']['version']);
+        $this->assertFalse($etat()['a_reprendre']);
+
+        // Une donnée RH change : la Comptabilité voit qu'il est à recalculer.
+        Contrat::where('organization_id', $this->org->id)->update(['salaire_base' => 4000000]);
+        $this->assertSame('paie_a_recalculer', $etat()['etape']['code']);
+
+        // Validée par les RH : aussitôt disponible, sans « Transmettre ».
+        $rh->recalculer($brouillon, $acteur);
+        $rh->valider($brouillon->fresh(), $acteur);
+        $this->assertSame('paie_validee_rh', $etat()['etape']['code']);
+        $this->assertTrue($etat()['a_reprendre']);
+
+        $this->reprendre($this->periode(), $brouillon->fresh())->assertSessionHasNoErrors();
+        $this->assertSame('paie_reprise', $etat()['etape']['code']);
+    }
+
     public function test_l_ecran_propose_la_reprise_d_une_version_transmise(): void
     {
         $this->scenarioDuGuide();
@@ -278,10 +306,8 @@ class ReprisePaieTest extends TestCase
         $brouillon = $rh->preparer($acteur, 2026, 11);
         $this->reprendre($periode, $brouillon)->assertSessionHasErrors(['reprise' => 'Seule une version transmise par les RH peut être reprise (version 1 : Brouillon).']);
 
-        $rh->valider($brouillon, $acteur);
-        $this->reprendre($periode, $brouillon->fresh())->assertSessionHasErrors('reprise');
-
-        $v1 = $rh->transmettre($brouillon->fresh(), $acteur);
+        // ADR 0047 : validée par les RH = disponible pour la Comptabilité.
+        $v1 = $rh->valider($brouillon, $acteur);
         $this->affectation($this->b, $this->type('RISQUE'), 200000, '2026-12-01');
         $v2 = $this->transmettreLeMois($this->org, 11, 2026);
 

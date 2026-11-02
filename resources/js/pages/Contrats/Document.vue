@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import InfoTooltip from '@/components/InfoTooltip.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,10 +10,14 @@ import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowLeft,
+    CheckCircle2,
     Download,
     Eye,
     FileSignature,
+    Info,
     Loader2,
+    Pencil,
+    RefreshCw,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import { computed, ref } from 'vue';
@@ -31,6 +34,14 @@ interface Version {
     signature_enregistree_par: string | null;
     modele_revision: number | null;
 }
+
+type CodeEtat =
+    | 'a_jour'
+    | 'a_mettre_a_jour'
+    | 'a_generer'
+    | 'a_completer'
+    | 'signe_different'
+    | 'inactif';
 
 const props = defineProps<{
     contrat: {
@@ -53,14 +64,11 @@ const props = defineProps<{
         actif: boolean;
         revision: number;
     };
+    etat: { code: CodeEtat; message: string };
     versions: Version[];
     peut_generer: boolean;
     variables: { cle: string; libelle: string; valeur: string | null }[];
-    champs: Record<string, string | null>;
-    champs_utilises: { champ: string; libelle: string }[];
-    avantages: { id: string; texte: string }[];
-    avantages_retenus: string[];
-    utilise_avantages?: boolean;
+    avantages: string[];
 }>();
 
 useFlashToast();
@@ -75,48 +83,50 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-const AIDE_CHAMP: Record<string, string> = {
-    representant_nom: 'Ex. Mamadou BAH',
-    representant_qualite: 'Ex. Directeur général',
-    lieu_travail: 'Ex. Agence de Matoto, Conakry',
-    periode_essai:
-        'Ex. trois (3) mois, renouvelable une fois — ou « sans période d’essai »',
-    horaires: 'Ex. 40 heures par semaine, du lundi au samedi',
-    motif_cdd: 'Ex. accroissement temporaire d’activité',
-    lieu_signature: 'Ex. Conakry',
-};
-
-const form = useForm({
-    champs: Object.fromEntries(
-        props.champs_utilises.map((c) => [
-            c.champ,
-            props.champs[c.champ] ?? '',
-        ]),
-    ) as Record<string, string>,
-    avantages: props.avantages
-        .filter((a) => props.avantages_retenus.includes(a.id))
-        .map((a) => a.id),
-});
-
 const derniere = computed(() => props.versions[0] ?? null);
-const dossierIncomplet = computed(() =>
-    props.variables.filter((v) => !v.valeur),
-);
-const champsVides = computed(() =>
-    props.champs_utilises.filter((c) => !form.champs[c.champ]?.trim()),
-);
-const peutLancer = computed(
-    () =>
-        dossierIncomplet.value.length === 0 &&
-        champsVides.value.length === 0 &&
-        !form.processing,
-);
 const erreurs = computed(
     () => (page.props.errors ?? {}) as Record<string, string>,
 );
 
-function generer() {
-    form.post(`/backoffice/contrats/${props.contrat.id}/documents`, {
+// Couleur du bandeau : vert = PDF à jour, orange = action utile mais rien de bloqué, rouge = PDF
+// impossible tant qu'une information manque, gris = contrat terminé.
+const bandeau = computed(() => {
+    switch (props.etat.code) {
+        case 'a_jour':
+            return {
+                icone: CheckCircle2,
+                classe: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300',
+            };
+        case 'a_completer':
+            return {
+                icone: AlertTriangle,
+                classe: 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300',
+            };
+        case 'inactif':
+            return {
+                icone: Info,
+                classe: 'bg-muted/40 text-muted-foreground',
+            };
+        default:
+            return {
+                icone: AlertTriangle,
+                classe: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300',
+            };
+    }
+});
+
+// « Mettre à jour le PDF » : nouvelle tentative, ou nouvelle version après une version signée.
+const peutMettreAJour = computed(
+    () =>
+        props.peut_generer &&
+        ['a_generer', 'a_mettre_a_jour', 'signe_different'].includes(
+            props.etat.code,
+        ),
+);
+const miseAJour = useForm({});
+
+function mettreAJour() {
+    miseAJour.post(`/backoffice/contrats/${props.contrat.id}/documents`, {
         preserveScroll: true,
     });
 }
@@ -155,9 +165,39 @@ function enregistrerSignature() {
                 >
                     <ArrowLeft class="h-4 w-4" /> Contrats
                 </Link>
-                <h1 class="text-2xl font-semibold tracking-tight">
-                    Contrat de travail
-                </h1>
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Contrat de travail
+                    </h1>
+                    <div class="flex flex-wrap gap-2">
+                        <template v-if="derniere">
+                            <a
+                                :href="`/backoffice/contrats/${contrat.id}/pdf?preview=1`"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                <Button size="sm" data-testid="voir-pdf">
+                                    <Eye class="mr-1.5 h-4 w-4" /> Voir le PDF
+                                </Button>
+                            </a>
+                            <a :href="`/backoffice/contrats/${contrat.id}/pdf`">
+                                <Button variant="outline" size="sm">
+                                    <Download class="mr-1.5 h-4 w-4" />
+                                    Télécharger
+                                </Button>
+                            </a>
+                        </template>
+                        <Link
+                            v-if="peut_generer && contrat.est_actif"
+                            :href="`/backoffice/contrats/${contrat.id}/edit`"
+                        >
+                            <Button variant="outline" size="sm">
+                                <Pencil class="mr-1.5 h-4 w-4" /> Modifier le
+                                contrat
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
                 <p class="text-sm text-muted-foreground">
                     {{ contrat.employe_nom_complet }}
                     <span class="font-mono">{{
@@ -177,237 +217,113 @@ function enregistrerSignature() {
                 </p>
             </div>
 
-            <!-- Génération -->
+            <!-- État du PDF -->
             <section
-                v-if="peut_generer"
-                class="space-y-5 rounded-xl border bg-card p-5"
+                class="flex flex-wrap items-start justify-between gap-3 rounded-lg border px-4 py-3 text-sm"
+                :class="bandeau.classe"
+                data-testid="etat-pdf"
+                :data-etat="etat.code"
             >
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                        <h2 class="font-medium">
-                            {{
-                                derniere
-                                    ? 'Générer une nouvelle version'
-                                    : 'Générer le contrat'
-                            }}
-                        </h2>
-                        <p class="text-sm text-muted-foreground">
-                            Modèle : {{ modele.titre }} (révision
-                            {{ modele.revision }})
-                        </p>
-                    </div>
-                    <StatusDot
-                        :status="modele.statut"
-                        :label="`Modèle ${modele.statut_label.toLowerCase()}`"
+                <p class="flex gap-2">
+                    <component
+                        :is="bandeau.icone"
+                        class="mt-0.5 h-4 w-4 shrink-0"
                     />
+                    <span>{{ etat.message }}</span>
+                </p>
+                <Button
+                    v-if="peutMettreAJour"
+                    size="sm"
+                    :disabled="miseAJour.processing"
+                    data-testid="mettre-a-jour-pdf"
+                    @click="mettreAJour"
+                >
+                    <Loader2
+                        v-if="miseAJour.processing"
+                        class="mr-1.5 h-4 w-4 animate-spin"
+                    />
+                    <RefreshCw v-else class="mr-1.5 h-4 w-4" />
+                    {{
+                        etat.code === 'signe_different'
+                            ? 'Préparer une nouvelle version'
+                            : 'Mettre à jour le PDF'
+                    }}
+                </Button>
+            </section>
+            <template
+                v-for="cle in ['pdg', 'manquantes', 'modele', 'contrat']"
+                :key="cle"
+            >
+                <p
+                    v-if="erreurs[cle]"
+                    class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                    {{ erreurs[cle] }}
+                </p>
+            </template>
+
+            <!-- Informations reprises automatiquement -->
+            <section
+                v-if="variables.length"
+                class="space-y-3 rounded-xl border bg-card p-5"
+            >
+                <div>
+                    <h2 class="font-medium">
+                        Informations reprises dans le contrat
+                    </h2>
+                    <p class="text-sm text-muted-foreground">
+                        Reprises automatiquement de l’organisation, de la fiche
+                        du salarié, du contrat et du PDG. Pour corriger une
+                        information, modifiez-la à sa source : le PDF suit.
+                    </p>
                 </div>
-
-                <p
-                    v-if="!contrat.est_actif"
-                    class="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
-                >
-                    Ce contrat n’est plus actif : aucune nouvelle version ne
-                    peut être générée. Les versions existantes restent
-                    consultables ci-dessous.
-                </p>
-
-                <p
-                    v-else-if="!modele.actif"
-                    class="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
-                    data-testid="modele-inactif"
-                >
-                    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
-                    Aucun modèle de {{ contrat.type_contrat_label }} actif. Un
-                    administrateur doit le relire et l’activer dans Paramètres →
-                    RH → Modèles de contrat.
-                </p>
-
-                <template v-else>
-                    <p
-                        v-if="derniere?.statut === 'signe'"
-                        class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-300"
-                    >
-                        La version {{ derniere.version }} est signée : elle
-                        reste conservée telle quelle. Une nouvelle génération
-                        crée la version {{ derniere.version + 1 }}, à faire
-                        signer.
-                    </p>
-                    <p
-                        v-else-if="derniere?.statut === 'a_signer'"
-                        class="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
-                    >
-                        La version {{ derniere.version }} n’est pas encore
-                        signée : la régénérer la remplace par la version
-                        {{ derniere.version + 1 }}.
-                    </p>
-
-                    <div>
-                        <h3 class="mb-2 text-sm font-medium">
-                            Données reprises du dossier RH
-                        </h3>
-                        <dl
-                            class="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2"
-                        >
-                            <div
-                                v-for="v in variables"
-                                :key="v.cle"
-                                class="flex justify-between gap-3 border-b py-1"
-                            >
-                                <dt class="text-muted-foreground">
-                                    {{ v.libelle }}
-                                </dt>
-                                <dd
-                                    class="text-right"
-                                    :class="
-                                        v.valeur
-                                            ? ''
-                                            : 'font-medium text-destructive'
-                                    "
-                                >
-                                    {{ v.valeur ?? 'Non renseigné' }}
-                                </dd>
-                            </div>
-                        </dl>
-                        <p
-                            v-if="dossierIncomplet.length"
-                            class="mt-2 text-xs text-destructive"
-                            data-testid="dossier-incomplet"
-                        >
-                            Complétez le dossier du salarié ou le contrat avant
-                            de générer :
-                            {{
-                                dossierIncomplet
-                                    .map((v) => v.libelle.toLowerCase())
-                                    .join(', ')
-                            }}.
-                        </p>
-                    </div>
-
-                    <div v-if="champs_utilises.length" class="space-y-3">
-                        <h3 class="text-sm font-medium">À compléter</h3>
-                        <div class="grid gap-3 sm:grid-cols-2">
-                            <div
-                                v-for="c in champs_utilises"
-                                :key="c.champ"
-                                :class="
-                                    c.champ === 'periode_essai' ||
-                                    c.champ === 'horaires' ||
-                                    c.champ === 'motif_cdd'
-                                        ? 'sm:col-span-2'
-                                        : ''
-                                "
-                            >
-                                <div class="mb-1.5 flex items-center gap-1.5">
-                                    <Label
-                                        :for="`champ-${c.champ}`"
-                                        class="text-xs font-medium"
-                                        >{{ c.libelle }}</Label
-                                    >
-                                    <InfoTooltip
-                                        v-if="c.champ === 'periode_essai'"
-                                        label="Aide : période d'essai"
-                                    >
-                                        Durée de la période d'essai prévue au
-                                        contrat, telle qu'elle figurera dans le
-                                        document (ex. « trois (3) mois,
-                                        renouvelable une fois »). Écrivez « sans
-                                        période d'essai » si elle ne s'applique
-                                        pas.
-                                    </InfoTooltip>
-                                </div>
-                                <Input
-                                    :id="`champ-${c.champ}`"
-                                    v-model="form.champs[c.champ]"
-                                    maxlength="500"
-                                    :placeholder="AIDE_CHAMP[c.champ]"
-                                />
-                                <p
-                                    v-if="
-                                        form.errors[`champs.${c.champ}` as any]
-                                    "
-                                    class="mt-1 text-xs text-destructive"
-                                >
-                                    {{
-                                        form.errors[`champs.${c.champ}` as any]
-                                    }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div v-if="utilise_avantages" class="space-y-2">
-                        <h3 class="text-sm font-medium">
-                            Primes et avantages à faire figurer
-                        </h3>
-                        <p
-                            v-if="!avantages.length"
-                            class="text-sm text-muted-foreground"
-                        >
-                            Aucune prime ni aucun avantage validé pour ce
-                            salarié : le contrat indiquera « aucun ».
-                        </p>
-                        <label
-                            v-for="a in avantages"
-                            :key="a.id"
-                            class="flex items-start gap-2 text-sm"
-                        >
-                            <input
-                                v-model="form.avantages"
-                                type="checkbox"
-                                :value="a.id"
-                                class="mt-0.5 h-4 w-4 rounded border-input"
-                            />
-                            {{ a.texte }}
-                        </label>
-                        <p class="text-xs text-muted-foreground">
-                            Seuls les primes et avantages validés (écran «
-                            Primes des salariés ») sont proposés.
-                        </p>
-                    </div>
-
+                <dl class="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
                     <div
-                        v-for="cle in [
-                            'manquantes',
-                            'modele',
-                            'contrat',
-                            'avantages',
-                        ]"
-                        :key="cle"
+                        v-for="v in variables"
+                        :key="v.cle"
+                        class="flex justify-between gap-3 border-b py-1"
                     >
-                        <p
-                            v-if="erreurs[cle]"
-                            class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                        <dt class="text-muted-foreground">{{ v.libelle }}</dt>
+                        <dd
+                            class="text-right"
+                            :class="
+                                v.valeur ? '' : 'font-medium text-destructive'
+                            "
                         >
-                            {{ erreurs[cle] }}
-                        </p>
+                            {{ v.valeur ?? 'Non renseigné' }}
+                        </dd>
                     </div>
-
-                    <div class="flex justify-end">
-                        <Button
-                            :disabled="!peutLancer"
-                            data-testid="generer-contrat"
-                            @click="generer"
-                        >
-                            <Loader2
-                                v-if="form.processing"
-                                class="mr-2 h-4 w-4 animate-spin"
-                            />
-                            Générer le PDF
-                        </Button>
-                    </div>
-                </template>
+                </dl>
+                <div class="text-sm">
+                    <p class="text-muted-foreground">Primes et avantages</p>
+                    <p v-if="!avantages.length">
+                        Aucune prime ni aucun avantage.
+                    </p>
+                    <ul v-else class="list-inside list-disc">
+                        <li v-for="a in avantages" :key="a">{{ a }}</li>
+                    </ul>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    Le lieu de signature est laissé en blanc dans le PDF (« Fait
+                    à …… ») : il s’écrit à la main au moment de la signature.
+                </p>
             </section>
 
             <!-- Historique -->
             <section class="rounded-xl border bg-card">
                 <div class="border-b px-5 py-3">
-                    <h2 class="font-medium">Versions générées</h2>
+                    <h2 class="font-medium">Versions du PDF</h2>
+                    <p class="text-xs text-muted-foreground">
+                        Préparer le PDF ne vaut pas signature : une fois le
+                        papier signé par les deux parties, cliquez sur « Marquer
+                        comme signé ».
+                    </p>
                 </div>
                 <p
                     v-if="!versions.length"
                     class="px-5 py-8 text-center text-sm text-muted-foreground"
                 >
-                    Aucun contrat généré pour le moment.
+                    Aucun PDF pour le moment.
                 </p>
                 <ul v-else class="divide-y">
                     <li
@@ -427,7 +343,7 @@ function enregistrerSignature() {
                                 />
                             </div>
                             <p class="text-xs text-muted-foreground">
-                                Générée le {{ v.genere_le }}
+                                Préparée le {{ v.genere_le }}
                                 <template v-if="v.genere_par">
                                     par {{ v.genere_par }}</template
                                 >
@@ -498,8 +414,9 @@ function enregistrerSignature() {
             <div class="space-y-4">
                 <p class="text-sm text-muted-foreground">
                     Indiquez la date à laquelle le contrat papier a été signé
-                    par les deux parties. La version sera figée : toute
-                    modification ultérieure créera une nouvelle version.
+                    par les deux parties. Cette version sera conservée telle
+                    quelle : si le contrat change ensuite, une nouvelle version
+                    à faire signer sera préparée.
                 </p>
                 <div>
                     <Label for="signe-le" class="mb-1.5 block text-xs"

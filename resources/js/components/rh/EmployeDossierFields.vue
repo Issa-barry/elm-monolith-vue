@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import InfoTooltip from '@/components/InfoTooltip.vue';
+import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import NationaliteSelect, {
     type NationaliteOption,
 } from '@/components/rh/NationaliteSelect.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { LIEN_AUTRE } from '@/lib/contactUrgence';
 import Select from 'primevue/select';
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface Option {
     value: string;
@@ -42,6 +43,9 @@ const props = defineProps<{
     lienContactOptions: Option[];
     /** Création : pas de date d'embauche (reprise du premier contrat). */
     creation?: boolean;
+    /** Pays du téléphone de l'employé (code ISO) : imposé au téléphone du contact d'urgence ;
+     * sans lui, le pays par défaut du sélecteur (Guinée). */
+    paysTelephone?: string | null;
 }>();
 
 const form = defineModel<DossierSalarieForm>('form', { required: true });
@@ -72,6 +76,61 @@ const lienOptions = computed(() => [
 
 const champ =
     'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
+
+// ── Contact d'urgence déjà connu ? ──────────────────────────────────────────────
+// Le numéro saisi appartient-il déjà à quelqu'un de l'organisation (employé, livreur, client…) ?
+// On propose seulement de reprendre son nom : aucune fiche n'est créée ni modifiée.
+interface Correspondance {
+    nom: string;
+    role: string;
+}
+const telephoneUrgenceValide = ref(false);
+const correspondances = ref<Correspondance[]>([]);
+let minuterie: ReturnType<typeof setTimeout> | null = null;
+
+async function chercherContact(numero: string) {
+    try {
+        const params = new URLSearchParams({ telephone: numero });
+        const reponse = await fetch(
+            `/backoffice/employes/recherche-contact-urgence?${params.toString()}`,
+            {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            },
+        );
+        // Numéro changé pendant l'appel : réponse obsolète.
+        if (!reponse.ok || form.value.contact_urgence_telephone !== numero)
+            return;
+        const resultat = await reponse.json();
+        correspondances.value = resultat.correspondances ?? [];
+        // Une seule correspondance et nom encore vide : repris directement.
+        if (
+            correspondances.value.length === 1 &&
+            !form.value.contact_urgence_nom.trim()
+        ) {
+            form.value.contact_urgence_nom = correspondances.value[0].nom;
+        }
+    } catch {
+        // Recherche indisponible : la saisie reste possible, rien n'est bloqué.
+    }
+}
+
+watch(
+    () => [form.value.contact_urgence_telephone, telephoneUrgenceValide.value],
+    () => {
+        if (minuterie) clearTimeout(minuterie);
+        correspondances.value = [];
+        const numero = form.value.contact_urgence_telephone;
+        if (!numero || !telephoneUrgenceValide.value) return;
+        minuterie = setTimeout(() => void chercherContact(numero), 400);
+    },
+);
+
+function reprendreNom(nom: string) {
+    form.value.contact_urgence_nom = nom;
+}
 </script>
 
 <template>
@@ -245,7 +304,7 @@ const champ =
         >
             Contact d'urgence
         </h3>
-        <div class="grid gap-4 sm:grid-cols-3">
+        <div class="grid gap-4 sm:grid-cols-2">
             <div>
                 <label
                     for="dossier-urgence-nom"
@@ -290,20 +349,7 @@ const champ =
                     {{ form.errors.contact_urgence_lien }}
                 </p>
             </div>
-            <div>
-                <label
-                    for="dossier-urgence-tel"
-                    class="mb-1.5 block text-sm font-medium"
-                    >Téléphone</label
-                >
-                <input
-                    id="dossier-urgence-tel"
-                    v-model="form.contact_urgence_telephone"
-                    type="tel"
-                    :class="champ"
-                />
-            </div>
-            <div v-if="lienAutre" class="sm:col-span-3">
+            <div v-if="lienAutre" class="sm:col-span-2">
                 <label
                     for="dossier-urgence-precision"
                     class="mb-1.5 block text-sm font-medium"
@@ -330,6 +376,69 @@ const champ =
                 >
                     {{ form.errors.contact_urgence_lien_precision }}
                 </p>
+            </div>
+            <!-- Sur sa propre ligne, en pleine largeur. Même pays que le téléphone de l'employé,
+                 non modifiable (revérifié par le serveur). -->
+            <div class="sm:col-span-2">
+                <label
+                    for="dossier-urgence-tel"
+                    class="mb-1.5 block text-sm font-medium"
+                    >Téléphone</label
+                >
+                <PhoneCountryInput
+                    id="dossier-urgence-tel"
+                    :model-value="form.contact_urgence_telephone"
+                    :country="paysTelephone ?? undefined"
+                    country-locked
+                    :remember-choice="false"
+                    :required="false"
+                    @update:model-value="
+                        form.contact_urgence_telephone = $event
+                    "
+                    @update:valid="telephoneUrgenceValide = $event"
+                />
+                <p
+                    v-if="form.errors.contact_urgence_telephone"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.contact_urgence_telephone }}
+                </p>
+                <div
+                    v-if="correspondances.length"
+                    class="mt-2 space-y-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-300"
+                    data-testid="contact-urgence-connu"
+                >
+                    <p>
+                        {{
+                            correspondances.length > 1
+                                ? 'Ce numéro est déjà enregistré pour plusieurs fiches : choisissez le bon nom.'
+                                : 'Ce numéro est déjà enregistré dans l’application.'
+                        }}
+                    </p>
+                    <ul class="space-y-1">
+                        <li
+                            v-for="c in correspondances"
+                            :key="`${c.nom}-${c.role}`"
+                            class="flex flex-wrap items-center justify-between gap-2"
+                        >
+                            <span
+                                ><strong>{{ c.nom }}</strong>
+                                <span class="text-xs">
+                                    ({{ c.role }})</span
+                                ></span
+                            >
+                            <button
+                                v-if="form.contact_urgence_nom !== c.nom"
+                                type="button"
+                                class="text-xs font-medium underline underline-offset-2"
+                                @click="reprendreNom(c.nom)"
+                            >
+                                Reprendre ce nom
+                            </button>
+                            <span v-else class="text-xs">Nom repris</span>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>

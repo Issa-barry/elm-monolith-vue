@@ -26,6 +26,27 @@ class DonneesPaieRhService implements SourceDonneesPaie
         private readonly CalculElementsPaieService $calcul,
     ) {}
 
+    public function brouillonEnCours(string $organizationId, int $annee, int $mois): ?array
+    {
+        $brouillon = TransmissionPaie::where('organization_id', $organizationId)
+            ->where('annee', $annee)->where('mois', $mois)
+            ->where('statut', StatutTransmissionPaie::BROUILLON->value)
+            ->first();
+        if ($brouillon === null) {
+            return null;
+        }
+
+        return [
+            'version' => $brouillon->version,
+            'nb_salaries' => $brouillon->nb_salaries,
+            'total_verse' => (float) $brouillon->total_verse,
+            'total_valorise' => (float) $brouillon->total_valorise,
+            'nb_anomalies_bloquantes' => count(array_filter($brouillon->anomaliesListe(), fn (array $a) => $a['niveau'] === 'bloquante')),
+            'a_jour' => app(TransmissionPaieService::class)->estAJour($brouillon),
+            'preparee_le' => $brouillon->preparee_le?->format('d/m/Y à H:i'),
+        ];
+    }
+
     public function transmissionCourante(string $organizationId, int $annee, int $mois): ?TransmissionPaie
     {
         return TransmissionPaie::where('organization_id', $organizationId)

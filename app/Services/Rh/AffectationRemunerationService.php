@@ -17,6 +17,7 @@ use App\Models\TypeRemuneration;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\Rh\Paie\CalendrierPaieService;
+use App\Support\Rh\PerimetreEmploye;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
@@ -50,6 +51,33 @@ class AffectationRemunerationService
         private readonly AuditLogService $audit,
         private readonly CalendrierPaieService $calendrier,
     ) {}
+
+    /**
+     * Primes qui occupent déjà une période (validées ou à valider), par salarié : même règle que le
+     * refus de chevauchement. Pour les formulaires (récapitulatif du salarié, types déjà pris
+     * retirés des listes) ; le contrôle qui fait foi reste assertSansChevauchement().
+     *
+     * @param  iterable<string>  $employeIds
+     * @return array<string, list<array{type_id: string, libelle: ?string, date_debut: string, date_fin: ?string, a_valider: bool}>>
+     */
+    public function primesOccupeesParEmploye(string $organizationId, iterable $employeIds): array
+    {
+        return AffectationRemuneration::with('type:id,libelle')
+            ->where('organization_id', $organizationId)
+            ->whereIn('employe_id', collect($employeIds))
+            ->whereIn('statut', StatutAffectationRemuneration::occupantLaPeriode())
+            ->orderBy('date_debut')
+            ->get(['id', 'employe_id', 'type_remuneration_id', 'date_debut', 'date_fin', 'statut'])
+            ->groupBy('employe_id')
+            ->map(fn ($primes) => $primes->map(fn (AffectationRemuneration $a) => [
+                'type_id' => $a->type_remuneration_id,
+                'libelle' => $a->type?->libelle,
+                'date_debut' => $a->date_debut->toDateString(),
+                'date_fin' => $a->date_fin?->toDateString(),
+                'a_valider' => $a->statut === StatutAffectationRemuneration::A_VALIDER,
+            ])->values()->all())
+            ->all();
+    }
 
     // ── Affectation ─────────────────────────────────────────────────────────────
 
@@ -576,10 +604,7 @@ class AffectationRemunerationService
         if ($employe->organization_id !== $this->organisationDe($acteur)) {
             throw new AuthorizationException;
         }
-        if ($acteur->agitSurToutesLesAgences()) {
-            return;
-        }
-        if ($employe->site_id === null || ! $acteur->sites()->whereKey($employe->site_id)->exists()) {
+        if (! PerimetreEmploye::peutModifier($acteur, $employe)) {
             throw new AuthorizationException('Ce salarié n\'est pas rattaché à l\'une de vos agences.');
         }
     }
@@ -587,14 +612,7 @@ class AffectationRemunerationService
     /** Consultation : agences consultables (vision 360° comprise, ADR 0025). */
     public static function peutConsulter(Employe $employe, User $user): bool
     {
-        if ($employe->organization_id !== $user->organization_id) {
-            return false;
-        }
-        if ($user->voitToutesLesAgences()) {
-            return true;
-        }
-
-        return $employe->site_id !== null && $user->sites()->whereKey($employe->site_id)->exists();
+        return PerimetreEmploye::peutConsulter($user, $employe);
     }
 
     private function appliquerValidation(AffectationRemuneration $affectation, User $acteur): AffectationRemuneration

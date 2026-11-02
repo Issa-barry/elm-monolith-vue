@@ -7,7 +7,12 @@
  * Run: npx playwright test tests/e2e/employe-site-transfer-flow.spec.ts --workers=1
  */
 import { expect, test } from '@playwright/test';
-import { login, randomDigits, selectOptionFromCombobox } from './helpers';
+import {
+    login,
+    ouvrirNouvelEmploye,
+    randomDigits,
+    selectOptionFromCombobox,
+} from './helpers';
 
 test.setTimeout(120_000);
 
@@ -20,7 +25,8 @@ test('créer un employé avec un site affiche une affectation initiale active', 
 }) => {
     const nom = `E2EEMP${randomDigits(6)}`;
 
-    await page.goto('/backoffice/employes/create');
+    // Le formulaire commence toujours par la recherche du téléphone.
+    await ouvrirNouvelEmploye(page);
     await expect(
         page.getByRole('heading', { name: /nouvel employé/i }),
     ).toBeVisible({
@@ -57,7 +63,8 @@ test('transférer un employé vers un autre site conserve son historique', async
 }) => {
     const nom = `E2EEMP${randomDigits(6)}`;
 
-    await page.goto('/backoffice/employes/create');
+    // Le formulaire commence toujours par la recherche du téléphone.
+    await ouvrirNouvelEmploye(page);
     await page
         .locator('form')
         .locator('input[type="text"]')

@@ -69,6 +69,19 @@ class TransmissionPaieController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+
+        // Brouillon toujours à jour à l'ouverture (ADR 0047) : recalculé si les données RH ont changé,
+        // pour qui peut préparer la paie. Les autres lecteurs voient s'il est à recalculer.
+        if ($transmission->statut === StatutTransmissionPaie::BROUILLON && $this->service->actualiserBrouillon($transmission, $user)) {
+            $transmission->refresh();
+        }
+        $aJour = null;
+        if ($transmission->statut === StatutTransmissionPaie::BROUILLON) {
+            $actualisable = $user->can(TransmissionPaieService::PERMISSION_PREPARER) && $user->agitSurToutesLesAgences()
+                && ! $this->service->comptabiliteAValide($transmission->organization_id, $transmission->annee, $transmission->mois);
+            $aJour = $actualisable || $this->service->estAJour($transmission);
+        }
+
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $texte = trim((string) $request->input('salarie', ''));
         $visible = $this->filtreVisibilite($user);
@@ -114,6 +127,10 @@ class TransmissionPaieController extends Controller
                 'organisation_complete' => $user->voitToutesLesAgences(),
                 'total_verse_organisation' => $user->voitToutesLesAgences() ? (float) $transmission->total_verse : null,
                 'total_valorise_organisation' => $user->voitToutesLesAgences() ? (float) $transmission->total_valorise : null,
+                // Brouillon seulement : reflète-t-il les données RH du moment ?
+                'a_jour' => $aJour,
+                // « Annuler la validation » : affiché seulement si le serveur l'accepterait.
+                'peut_annuler_validation' => $this->service->peutAnnulerValidation($transmission, $user),
             ],
             'salaries' => $this->parSalarie($lignes),
             'recapitulatif' => $this->recapitulatif($lignes),
@@ -172,15 +189,30 @@ class TransmissionPaieController extends Controller
         $this->authorize('valider', $transmission);
         $transmission = $this->service->valider($transmission, $request->user());
 
-        return back()->with('success', "Version {$transmission->version} validée : elle est figée.");
+        return back()->with('success', "Version {$transmission->version} validée et figée : elle est disponible pour la Comptabilité.");
     }
 
+    /** Versions validées avant l'ADR 0047 seulement : la validation met désormais la version à disposition. */
     public function transmettre(Request $request, TransmissionPaie $transmission): RedirectResponse
     {
         $this->authorize('transmettre', $transmission);
         $transmission = $this->service->transmettre($transmission, $request->user());
 
-        return back()->with('success', "Version {$transmission->version} transmise à la Comptabilité.");
+        return back()->with('success', "Version {$transmission->version} mise à disposition de la Comptabilité.");
+    }
+
+    public function annulerValidation(Request $request, TransmissionPaie $transmission): RedirectResponse
+    {
+        $this->authorize('valider', $transmission);
+        $data = $request->validate(
+            ['motif' => ['required', 'string', 'max:1000']],
+            ['motif.required' => 'Indiquez le motif de l\'annulation.', 'motif.max' => 'Le motif est limité à 1 000 caractères.'],
+        );
+
+        $brouillon = $this->service->annulerValidation($transmission, $request->user(), $data['motif']);
+
+        return redirect()->route('transmissions-paie.show', $brouillon)
+            ->with('success', "Validation de la version {$transmission->version} annulée. Version {$brouillon->version} ouverte en brouillon : corrigez les données RH, vérifiez puis validez.");
     }
 
     public function historique(Request $request, TransmissionPaie $transmission): JsonResponse
@@ -225,7 +257,7 @@ class TransmissionPaieController extends Controller
             'prise_en_charge_le' => $t->prise_en_charge_le?->format('d/m/Y H:i'),
             'prise_en_charge_reference' => $t->prise_en_charge_reference,
             'statut_comptabilite' => $t->statut === StatutTransmissionPaie::TRANSMISE
-                ? ($t->prise_en_charge_le ? 'Reprise par la Comptabilité' : 'En attente de reprise par la Comptabilité')
+                ? ($t->prise_en_charge_le ? 'Reprise par la Comptabilité' : 'Disponible pour la Comptabilité, pas encore reprise')
                 : null,
         ];
     }

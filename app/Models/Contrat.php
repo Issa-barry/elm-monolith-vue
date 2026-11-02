@@ -24,7 +24,14 @@ class Contrat extends Model
         'date_fin',
         'salaire_base',
         'statut_contrat',
+        // Conditions reprises dans le contrat de travail généré (ADR 0048).
+        'periode_essai_duree',
+        'periode_essai_unite',
+        'heures_hebdomadaires',
+        'motif_cdd',
     ];
+
+    public const UNITES_PERIODE_ESSAI = ['semaine' => 'Semaines', 'mois' => 'Mois'];
 
     protected function casts(): array
     {
@@ -34,6 +41,8 @@ class Contrat extends Model
             'date_debut' => 'date',
             'date_fin' => 'date',
             'salaire_base' => 'decimal:2',
+            'periode_essai_duree' => 'integer',
+            'heures_hebdomadaires' => 'decimal:2',
             // Départ du salarié (DepartEmployeService) : écrits seulement par ce service, hors $fillable.
             'termine_par_depart' => 'boolean',
             'date_fin_avant_depart' => 'date',

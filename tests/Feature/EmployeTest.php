@@ -195,6 +195,7 @@ class EmployeTest extends TestCase
             ->post(route('employes.store'), [
                 'nom' => 'BARRY',
                 'prenom' => 'Alpha',
+                'telephone' => '+224622602693',
                 'type_employe' => 'interne',
                 'statut' => 'actif',
             ]);
@@ -210,7 +211,7 @@ class EmployeTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('employes.store'), [])
-            ->assertSessionHasErrors(['nom', 'prenom', 'type_employe', 'statut']);
+            ->assertSessionHasErrors(['nom', 'prenom', 'telephone', 'type_employe', 'statut']);
     }
 
     public function test_store_fails_with_invalid_type_employe(): void

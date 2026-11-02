@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Concerns\DesigneUnPdg;
 use Tests\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use Tests\TestCase;
  */
 class ContratsSuccessifsTest extends TestCase
 {
+    use DesigneUnPdg;
     use RefreshDatabase;
 
     private Organization $org;
@@ -31,6 +33,7 @@ class ContratsSuccessifsTest extends TestCase
         parent::setUp();
         app(PermissionRegistrar::class)->forgetCachedPermissions();
         $this->org = Organization::factory()->create();
+        $this->designerPdg($this->org);
         $site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'depot']);
 
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
@@ -57,7 +60,7 @@ class ContratsSuccessifsTest extends TestCase
 
     private function creer(Employe $employe, array $donnees)
     {
-        return $this->actingAs($this->user)->post(route('contrats.store'), ['employe_id' => $employe->id, 'salaire_base' => 600000, ...$donnees]);
+        return $this->actingAs($this->user)->post(route('contrats.store'), [...$this->conditionsContrat(), 'employe_id' => $employe->id, 'salaire_base' => 600000, ...$donnees]);
     }
 
     public function test_le_premier_contrat_renseigne_la_date_d_embauche(): void

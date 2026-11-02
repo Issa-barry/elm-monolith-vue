@@ -280,6 +280,36 @@ class AffectationRemunerationTest extends TestCase
         $this->affecter([...$base, 'type_remuneration_id' => $this->type()->id, 'date_debut' => '2026-11-01'])->assertSessionHasNoErrors();
     }
 
+    public function test_la_fenetre_attribuer_connait_les_primes_deja_attribuees_de_chaque_salarie(): void
+    {
+        $employe = $this->employe();
+        $sansPrime = $this->employe();
+        $transport = $this->type(['libelle' => 'Transport']);
+        $logement = $this->type(['libelle' => 'Logement']);
+        $this->affectationValidee($employe, $transport, ['date_debut' => '2026-10-01']);
+        $this->affectationValidee($employe, $logement, ['date_debut' => '2026-11-01', 'statut' => StatutAffectationRemuneration::A_VALIDER->value]);
+        // Annulée : n'occupe plus la période, jamais proposée comme « déjà attribuée ».
+        $this->affectationValidee($employe, $this->type(['libelle' => 'Téléphone']), ['statut' => StatutAffectationRemuneration::ANNULEE->value]);
+        // Autre organisation : jamais visible.
+        $autreOrg = Organization::factory()->create();
+        Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Ailleurs', 'type' => 'depot']);
+        $this->affectationValidee($this->employe([], $autreOrg), $this->type([], $autreOrg));
+
+        $this->actingAs($this->user)->get(route('affectations-remuneration.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('employes', function ($employes) use ($employe, $sansPrime, $transport, $logement, $autreOrg) {
+                    $parId = collect($employes)->keyBy('value');
+                    $primes = collect($parId[$employe->id]['primes']);
+
+                    return $primes->count() === 2
+                        && $primes->pluck('type_id')->sort()->values()->all() === collect([$transport->id, $logement->id])->sort()->values()->all()
+                        && $primes->firstWhere('type_id', $logement->id)['a_valider'] === true
+                        && $primes->firstWhere('type_id', $transport->id)['date_fin'] === null
+                        && $parId[$sansPrime->id]['primes'] === []
+                        && ! $parId->contains(fn ($e) => Employe::find($e['value'])?->organization_id === $autreOrg->id);
+                }));
+    }
+
     public function test_le_cumul_autorise_permet_plusieurs_affectations_simultanees(): void
     {
         $employe = $this->employe();
@@ -662,6 +692,103 @@ class AffectationRemunerationTest extends TestCase
     }
 
     // ── Liste, filtres, historique ────────────────────────────────────────────
+
+    // ── Caractéristiques d'un type déjà attribué (PRIME-007, révision du 31/10/2026) ──
+
+    private function modifierType(TypeRemuneration $type, array $champs)
+    {
+        return $this->actingAs($this->superAdmin())->from(route('types-remuneration.index'))
+            ->put(route('types-remuneration.update', $type), [
+                'libelle' => $type->libelle, 'code' => $type->code, 'mode_calcul' => $type->mode_calcul->value,
+                'periodicite' => $type->periodicite->value, 'nature_montant' => $type->nature_montant->value,
+                'proratisable' => $type->proratisable, ...$champs,
+            ]);
+    }
+
+    public function test_une_prime_ponctuelle_attribuee_devient_mensuelle_sans_toucher_aux_montants(): void
+    {
+        $type = $this->type(['periodicite' => 'ponctuelle', 'nature_montant' => 'variable', 'montant_defaut' => 200000]);
+        $affectation = $this->affectationValidee($this->employe(), $type, ['date_debut' => '2026-11-01', 'date_fin' => '2026-11-30', 'montant' => null]);
+        SaisieRemuneration::create(['organization_id' => $this->org->id, 'affectation_id' => $affectation->id,
+            'annee' => 2026, 'mois' => 11, 'montant' => 200000, 'statut' => 'validee']);
+
+        $this->modifierType($type, ['periodicite' => 'mensuelle'])->assertSessionHasNoErrors();
+
+        $this->assertSame('mensuelle', $type->fresh()->periodicite->value);
+        $this->assertSame('2026-11-30', $affectation->fresh()->date_fin->toDateString());
+        $this->assertSame(1, SaisieRemuneration::count());
+        $this->assertSame('200000.00', (string) SaisieRemuneration::sole()->montant);
+
+        // Les nouvelles attributions suivent la nouvelle périodicité : plus limitées à un mois.
+        $this->affecter(['employe_id' => $this->employe()->id, 'type_remuneration_id' => $type->id, 'date_debut' => '2026-12-01'])
+            ->assertSessionHasNoErrors();
+        $this->assertNull(AffectationRemuneration::whereDate('date_debut', '2026-12-01')->sole()->date_fin);
+    }
+
+    public function test_une_prime_mensuelle_en_cours_ne_devient_pas_ponctuelle(): void
+    {
+        $type = $this->type();
+        $this->affectationValidee($this->employe(), $type, ['date_debut' => '2026-10-01']);
+
+        $this->modifierType($type, ['periodicite' => 'ponctuelle'])
+            ->assertSessionHasErrors(['periodicite' => 'Impossible pour l’instant : 1 attribution(s) de cette prime portent sur des mois de paie encore ouverts et devenue ponctuelle, la prime continuerait d’être versée sur plusieurs mois ou changerait de calcul (prorata). Terminez ou annulez ces attributions, ou créez un nouveau type. Les montants déjà transmis ne changent jamais.']);
+        $this->assertSame('mensuelle', $type->fresh()->periodicite->value);
+    }
+
+    public function test_une_prime_dont_les_attributions_sont_toutes_figees_change_de_calcul(): void
+    {
+        $type = $this->type();
+        $affectation = $this->affectationValidee($this->employe(), $type, ['date_debut' => '2026-09-01', 'date_fin' => '2026-10-31']);
+        $this->figerOctobre();
+
+        $this->modifierType($type, ['periodicite' => 'ponctuelle', 'nature_montant' => 'variable'])->assertSessionHasNoErrors();
+
+        $type->refresh();
+        $this->assertSame('ponctuelle', $type->periodicite->value);
+        $this->assertSame('variable', $type->nature_montant->value);
+        $this->assertSame('500000.00', (string) $affectation->fresh()->montant);
+    }
+
+    public function test_la_nature_du_montant_reste_protegee_tant_qu_une_attribution_est_ouverte(): void
+    {
+        $type = $this->type(['periodicite' => 'ponctuelle', 'nature_montant' => 'variable']);
+        $this->affectationValidee($this->employe(), $type, ['date_debut' => '2026-11-01', 'date_fin' => '2026-11-30', 'montant' => null]);
+
+        // Fixe sans montant à l'attribution : la paie transmettrait 0. Refusé, ensemble ou seul.
+        $this->modifierType($type, ['periodicite' => 'mensuelle', 'nature_montant' => 'fixe'])->assertSessionHasErrors('nature_montant');
+        $this->modifierType($type, ['nature_montant' => 'fixe'])->assertSessionHasErrors('nature_montant');
+        $this->modifierType($type, ['mode_calcul' => 'pourcentage_salaire_base'])->assertSessionHasErrors('mode_calcul');
+        $this->modifierType($type, ['code' => 'AUTRE_CODE'])->assertSessionHasErrors('code');
+        $this->assertSame('variable', $type->fresh()->nature_montant->value);
+
+        // Une attribution annulée ne compte plus.
+        AffectationRemuneration::query()->update(['statut' => 'annulee']);
+        $this->modifierType($type, ['nature_montant' => 'fixe'])->assertSessionHasNoErrors();
+    }
+
+    public function test_modifier_les_caracteristiques_exige_toujours_le_droit_de_validation(): void
+    {
+        $type = $this->type(['periodicite' => 'ponctuelle']);
+
+        $this->actingAs($this->user)->from(route('types-remuneration.index'))
+            ->put(route('types-remuneration.update', $type), [
+                'libelle' => $type->libelle, 'code' => $type->code, 'mode_calcul' => 'montant_fixe',
+                'periodicite' => 'mensuelle', 'nature_montant' => 'fixe',
+            ])->assertStatus(403);
+        $this->assertSame('ponctuelle', $type->fresh()->periodicite->value);
+    }
+
+    public function test_la_liste_fournit_la_valeur_par_defaut_pour_preremplir_un_montant_variable(): void
+    {
+        $variable = $this->type(['nature_montant' => 'variable', 'montant_defaut' => 200000]);
+        $this->affectationValidee($this->employe(), $variable, ['date_debut' => '2026-11-01', 'montant' => null]);
+
+        $this->actingAs($this->user)->get(route('affectations-remuneration.index'))
+            ->assertInertia(fn (Assert $p) => $p
+                ->where('affectations.0.type.nature_montant', 'variable')
+                ->where('affectations.0.type.montant_defaut', 200000)
+                ->where('affectations.0.type.taux_defaut', null));
+    }
 
     public function test_la_liste_filtre_par_salarie_type_et_periode(): void
     {

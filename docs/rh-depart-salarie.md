@@ -53,6 +53,15 @@ contrat terminé par le départ rétabli tel qu'il était (statut actif, date de
 Un salarié sorti avant le 31/10/2026 par le formulaire (sans contrat marqué) peut aussi être
 rétabli : seul son statut est concerné.
 
+## 4 bis. Réembauche : pas encore définie (31/10/2026)
+
+En attendant une procédure de réembauche, **aucun contrat ne peut être créé pour un salarié
+sorti**, ni un contrat terminé lui être rendu actif (`ContratService::assertPasSorti`, écran
+Contrats et import RH). Le bouton « Nouveau contrat » est masqué sur sa fiche et dans la liste, avec
+un message explicatif ; le salarié n'est jamais réactivé automatiquement. Si le départ a été
+enregistré par erreur, « Annuler le départ » reste le seul retour. Les contrats successifs d'un
+salarié actif ne changent pas.
+
 ## 5. Accès
 
 | Action | Règle |

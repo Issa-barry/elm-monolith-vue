@@ -20,10 +20,12 @@ use Illuminate\Validation\ValidationException;
  * Seul point d'écriture des transmissions mensuelles RH → Comptabilité (docs/transmission-paie.md,
  * ADR 0040).
  *
- * Brouillon (montants calculés, recalculables) → validée (figée : plus aucune ligne ne change,
- * empreinte enregistrée) → transmise (lue par la Comptabilité) → remplacée par une version
- * suivante. Une correction ouvre toujours une nouvelle version, avec un motif ; les versions
- * précédentes restent consultables.
+ * Brouillon (montants calculés, recalculés automatiquement à l'ouverture et avant la validation)
+ * → validée par les RH : figée (empreinte) ET aussitôt disponible pour la Comptabilité — statut
+ * « transmise », sans action supplémentaire (ADR 0047, révise l'ADR 0040) → remplacée par une
+ * version suivante. Une correction ouvre toujours une nouvelle version, avec un motif ; tant que la
+ * Comptabilité n'a pas repris la version, sa validation peut être annulée (version conservée). Les
+ * versions précédentes restent consultables. Valider ne déclenche ni paiement ni écriture.
  *
  * Les droits (`rh-transmissions-paie.preparer`, `.valider`, `.transmettre`) et l'organisation sont
  * contrôlés ICI. Une transmission couvre tous les salariés de l'organisation : préparer, valider et
@@ -121,18 +123,63 @@ class TransmissionPaieService
             $this->exigerStatut($transmission, StatutTransmissionPaie::BROUILLON, 'Seul un brouillon se recalcule : une version figée ne change plus.');
             $this->assertComptabiliteNAPasValide($transmission->organization_id, $transmission->annee, $transmission->mois);
 
-            $avant = $this->instantane($transmission);
             $resultat = $this->calcul->calculer($transmission->organization_id, $transmission->annee, $transmission->mois);
-            TransmissionPaieLigne::where('transmission_paie_id', $transmission->id)->delete();
-            $this->enregistrerLignes($transmission, $resultat['lignes']);
-            $transmission->update([...$this->synthese($resultat), 'preparee_par' => $acteur->id, 'preparee_le' => now()]);
-
-            [$ancien, $nouveau] = $this->audit->diffFields($avant, $this->instantane($transmission), ['nb_salaries', 'total_verse', 'total_valorise', 'nb_anomalies_bloquantes']);
-            $this->journaliser($transmission, AuditEvent::AUTO_RECALCULATED, $acteur, $ancien, $nouveau,
-                "Brouillon de {$transmission->libelleMois()} recalculé".($nouveau === null ? ' (aucun changement)' : ''));
+            $this->persisterCalcul($transmission, $resultat, $acteur, "Brouillon de {$transmission->libelleMois()} recalculé");
 
             return $transmission;
         });
+    }
+
+    /**
+     * Recalcul automatique d'un brouillon (ouverture de l'écran, avant la validation) : seulement si
+     * les données RH ont changé depuis le dernier calcul, et si l'acteur peut préparer la paie.
+     * Retourne vrai si les montants ont été mis à jour. Jamais sur une version validée.
+     */
+    public function actualiserBrouillon(TransmissionPaie $transmission, User $acteur): bool
+    {
+        if ($transmission->statut !== StatutTransmissionPaie::BROUILLON
+            || $transmission->organization_id !== $acteur->organization_id
+            || ! $acteur->can(self::PERMISSION_PREPARER) || ! $acteur->agitSurToutesLesAgences()
+            || $this->comptabiliteAValide($transmission->organization_id, $transmission->annee, $transmission->mois)) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($transmission, $acteur) {
+            $this->verrouillerOrganisation($transmission->organization_id);
+            $transmission = $this->verrouiller($transmission);
+            if ($transmission->statut !== StatutTransmissionPaie::BROUILLON) {
+                return false;
+            }
+
+            $resultat = $this->calcul->calculer($transmission->organization_id, $transmission->annee, $transmission->mois);
+            if ($resultat['empreinte'] === $transmission->empreinte) {
+                return false;
+            }
+
+            $this->persisterCalcul($transmission, $resultat, $acteur, "Brouillon de {$transmission->libelleMois()} recalculé automatiquement (données RH modifiées)");
+
+            return true;
+        });
+    }
+
+    /** Le brouillon reflète-t-il les données RH du moment ? Lecture seule (Comptabilité, lecteurs). */
+    public function estAJour(TransmissionPaie $transmission): bool
+    {
+        return $this->calcul->calculer($transmission->organization_id, $transmission->annee, $transmission->mois)['empreinte']
+            === $transmission->empreinte;
+    }
+
+    /** @param  array<string, mixed>  $resultat */
+    private function persisterCalcul(TransmissionPaie $transmission, array $resultat, User $acteur, string $description): void
+    {
+        $avant = $this->instantane($transmission);
+        TransmissionPaieLigne::where('transmission_paie_id', $transmission->id)->delete();
+        $this->enregistrerLignes($transmission, $resultat['lignes']);
+        $transmission->update([...$this->synthese($resultat), 'preparee_par' => $acteur->id, 'preparee_le' => now()]);
+
+        [$ancien, $nouveau] = $this->audit->diffFields($avant, $this->instantane($transmission), ['nb_salaries', 'total_verse', 'total_valorise', 'nb_anomalies_bloquantes']);
+        $this->journaliser($transmission, AuditEvent::AUTO_RECALCULATED, $acteur, $ancien, $nouveau,
+            $description.($nouveau === null ? ' (aucun changement)' : ''));
     }
 
     public function abandonner(TransmissionPaie $transmission, User $acteur): TransmissionPaie
@@ -160,14 +207,22 @@ class TransmissionPaieService
     }
 
     /**
-     * Valide (fige) un brouillon. Refusé s'il reste une anomalie bloquante, ou si les données RH
-     * ont changé depuis le dernier calcul : la version validée est exactement celle consultée.
+     * Valide un brouillon : il est figé ET mis à disposition de la Comptabilité (ADR 0047). Un
+     * dernier recalcul a lieu d'abord ; si les montants ont changé, la validation est refusée pour
+     * que la version validée soit exactement celle consultée. Refusé aussi s'il reste une anomalie
+     * bloquante. Ne déclenche ni paiement ni écriture comptable.
      */
     public function valider(TransmissionPaie $transmission, User $acteur): TransmissionPaie
     {
         $this->assertMemeOrganisation($transmission, $acteur);
         $this->exigerDroit($acteur, self::PERMISSION_VALIDER);
         $this->exigerPerimetreComplet($acteur);
+
+        if ($this->actualiserBrouillon($transmission, $acteur)) {
+            throw ValidationException::withMessages([
+                'transmission' => 'Les données RH avaient changé : le brouillon vient d\'être recalculé. Vérifiez les nouveaux montants, puis validez.',
+            ]);
+        }
 
         return DB::transaction(function () use ($transmission, $acteur) {
             $this->verrouillerOrganisation($transmission->organization_id);
@@ -189,31 +244,34 @@ class TransmissionPaieService
                 ]);
             }
 
-            // Une version validée mais jamais transmise est remplacée dès maintenant.
+            // La version disponible jusqu'ici pour la Comptabilité (et une ancienne version validée
+            // jamais mise à disposition) est remplacée dès maintenant.
             TransmissionPaie::where('organization_id', $transmission->organization_id)
                 ->where('annee', $transmission->annee)->where('mois', $transmission->mois)
-                ->where('statut', StatutTransmissionPaie::VALIDEE->value)
+                ->whereIn('statut', [StatutTransmissionPaie::VALIDEE->value, StatutTransmissionPaie::TRANSMISE->value])
                 ->whereKeyNot($transmission->id)
                 ->get()
                 ->each(fn (TransmissionPaie $ancienne) => $this->remplacer($ancienne, $transmission, $acteur));
 
             $transmission->update([
-                'statut' => StatutTransmissionPaie::VALIDEE->value,
+                'statut' => StatutTransmissionPaie::TRANSMISE->value,
                 'validee_par' => $acteur->id,
                 'validee_le' => now(),
+                'transmise_par' => $acteur->id,
+                'transmise_le' => now(),
             ]);
             $this->journaliser($transmission, AuditEvent::VALIDATED, $acteur, ['statut' => StatutTransmissionPaie::BROUILLON->value],
-                ['statut' => StatutTransmissionPaie::VALIDEE->value, 'empreinte' => $transmission->empreinte],
-                "Version {$transmission->version} de {$transmission->libelleMois()} validée et figée");
+                ['statut' => StatutTransmissionPaie::TRANSMISE->value, 'empreinte' => $transmission->empreinte],
+                "Version {$transmission->version} de {$transmission->libelleMois()} validée et figée : disponible pour la Comptabilité");
 
             return $transmission;
         });
     }
 
     /**
-     * Transmet une version validée à la Comptabilité ; la version transmise auparavant pour ce mois
-     * est remplacée. Une version n'est transmise qu'une fois, et seulement si son contenu figé est
-     * intact (empreinte).
+     * Met à disposition de la Comptabilité une version validée AVANT l'ADR 0047 (statut « validee ») ;
+     * depuis, la validation le fait d'elle-même. La version disponible auparavant pour ce mois est
+     * remplacée. Une version n'est transmise qu'une fois, et seulement si son contenu figé est intact.
      */
     public function transmettre(TransmissionPaie $transmission, User $acteur): TransmissionPaie
     {
@@ -250,6 +308,118 @@ class TransmissionPaieService
 
             return $transmission;
         });
+    }
+
+    /**
+     * Annule la validation RH d'une version que la Comptabilité n'a pas encore reprise (ADR 0047).
+     * La version est conservée telle quelle (statut « validation annulée », elle ne fige plus le
+     * mois) ; la version qu'elle avait remplacée redevient celle de la Comptabilité ; un nouveau
+     * brouillon recalculé est ouvert, avec le motif, et devra être validé à nouveau. Retourne ce
+     * brouillon.
+     */
+    public function annulerValidation(TransmissionPaie $transmission, User $acteur, string $motif): TransmissionPaie
+    {
+        $this->assertMemeOrganisation($transmission, $acteur);
+        $this->exigerDroit($acteur, self::PERMISSION_VALIDER);
+        $this->exigerPerimetreComplet($acteur);
+        $motif = trim($motif);
+        if ($motif === '') {
+            throw ValidationException::withMessages(['motif' => 'Indiquez le motif de l\'annulation.']);
+        }
+
+        return DB::transaction(function () use ($transmission, $acteur, $motif) {
+            $this->verrouillerOrganisation($transmission->organization_id);
+            $transmission = $this->verrouiller($transmission);
+            $this->assertAnnulable($transmission);
+
+            $avant = $transmission->statut->value;
+            $transmission->update(['statut' => StatutTransmissionPaie::VALIDATION_ANNULEE->value]);
+            $this->journaliser($transmission, AuditEvent::CANCELLED, $acteur, ['statut' => $avant],
+                ['statut' => StatutTransmissionPaie::VALIDATION_ANNULEE->value, 'motif' => $motif],
+                "Validation de la version {$transmission->version} de {$transmission->libelleMois()} annulée : {$motif}");
+
+            // La version que celle-ci avait remplacée redevient la version de la Comptabilité.
+            $precedente = $transmission->version_precedente_id !== null
+                ? TransmissionPaie::whereKey($transmission->version_precedente_id)->lockForUpdate()->first()
+                : null;
+            if ($precedente !== null && $precedente->statut === StatutTransmissionPaie::REMPLACEE) {
+                $precedente->update(['statut' => StatutTransmissionPaie::TRANSMISE->value]);
+                $this->journaliser($precedente, AuditEvent::STATUS_CHANGED, $acteur, ['statut' => StatutTransmissionPaie::REMPLACEE->value],
+                    ['statut' => StatutTransmissionPaie::TRANSMISE->value],
+                    "Version {$precedente->version} de nouveau disponible pour la Comptabilité (validation de la version {$transmission->version} annulée)");
+            }
+
+            $brouillon = TransmissionPaie::where('organization_id', $transmission->organization_id)
+                ->where('annee', $transmission->annee)->where('mois', $transmission->mois)
+                ->where('statut', StatutTransmissionPaie::BROUILLON->value)
+                ->first();
+
+            return $brouillon ?? $this->ouvrirBrouillon($transmission, $acteur, "Validation de la version {$transmission->version} annulée : {$motif}");
+        });
+    }
+
+    /** L'annulation serait-elle acceptée (affichage du bouton) ? */
+    public function peutAnnulerValidation(TransmissionPaie $transmission, User $acteur): bool
+    {
+        if ($transmission->organization_id !== $acteur->organization_id
+            || ! $acteur->can(self::PERMISSION_VALIDER) || ! $acteur->agitSurToutesLesAgences()) {
+            return false;
+        }
+
+        try {
+            $this->assertAnnulable($transmission);
+
+            return true;
+        } catch (ValidationException) {
+            return false;
+        }
+    }
+
+    private function assertAnnulable(TransmissionPaie $transmission): void
+    {
+        if (! in_array($transmission->statut, [StatutTransmissionPaie::TRANSMISE, StatutTransmissionPaie::VALIDEE], true)) {
+            throw ValidationException::withMessages(['transmission' => 'Seule la version validée en vigueur peut voir sa validation annulée.']);
+        }
+        if ($transmission->prise_en_charge_reference !== null) {
+            throw ValidationException::withMessages([
+                'transmission' => 'La Comptabilité a déjà repris cette version : la correction passe par une nouvelle version ou par le mois suivant.',
+            ]);
+        }
+        if ($this->comptabiliteAValide($transmission->organization_id, $transmission->annee, $transmission->mois)) {
+            throw ValidationException::withMessages([
+                'transmission' => 'La Comptabilité a déjà validé, payé ou clôturé la paie de ce mois : la correction se fait sur le mois suivant.',
+            ]);
+        }
+    }
+
+    /** Nouveau brouillon recalculé, numéroté à la suite, rattaché à la dernière version figée. */
+    private function ouvrirBrouillon(TransmissionPaie $origine, User $acteur, string $motif): TransmissionPaie
+    {
+        $versions = TransmissionPaie::where('organization_id', $origine->organization_id)
+            ->where('annee', $origine->annee)->where('mois', $origine->mois)
+            ->orderByDesc('version')
+            ->lockForUpdate()
+            ->get();
+        $precedente = $versions->first(fn (TransmissionPaie $t) => $t->statut->estFigee());
+        $resultat = $this->calcul->calculer($origine->organization_id, $origine->annee, $origine->mois);
+
+        $brouillon = TransmissionPaie::create([
+            'organization_id' => $origine->organization_id,
+            'annee' => $origine->annee,
+            'mois' => $origine->mois,
+            'version' => ((int) $versions->max('version')) + 1,
+            'statut' => StatutTransmissionPaie::BROUILLON->value,
+            'motif' => $motif,
+            'version_precedente_id' => $precedente?->id,
+            'preparee_par' => $acteur->id,
+            'preparee_le' => now(),
+            ...$this->synthese($resultat),
+        ]);
+        $this->enregistrerLignes($brouillon, $resultat['lignes']);
+        $this->journaliser($brouillon, AuditEvent::CREATED, $acteur, null, $this->instantane($brouillon),
+            "Version {$brouillon->version} de {$brouillon->libelleMois()} ouverte : {$motif}");
+
+        return $brouillon;
     }
 
     /** Le contenu figé correspond-il toujours à l'empreinte enregistrée à la validation ? */
@@ -376,10 +546,17 @@ class TransmissionPaieService
      * La Comptabilité a validé la paie de ce mois : plus de nouvelle version, les changements
      * passeront en régularisation du mois suivant (lot 5).
      */
-    private function assertComptabiliteNAPasValide(string $organizationId, int $annee, int $mois): void
+    /** Période de paie validée, payée ou clôturée par la Comptabilité. */
+    public function comptabiliteAValide(string $organizationId, int $annee, int $mois): bool
     {
         $periode = PaiePeriode::where('organization_id', $organizationId)->where('annee', $annee)->where('mois', $mois)->first();
-        if ($periode !== null && $periode->statut instanceof StatutPeriodePaie && $periode->statut->estVerrouille()) {
+
+        return $periode !== null && $periode->statut instanceof StatutPeriodePaie && $periode->statut->estVerrouille();
+    }
+
+    private function assertComptabiliteNAPasValide(string $organizationId, int $annee, int $mois): void
+    {
+        if ($this->comptabiliteAValide($organizationId, $annee, $mois)) {
             throw ValidationException::withMessages([
                 'mois' => 'La Comptabilité a déjà validé la paie de ce mois : il ne peut plus recevoir de nouvelle version.',
             ]);

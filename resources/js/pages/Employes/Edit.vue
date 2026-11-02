@@ -22,6 +22,7 @@ import {
 import Select from 'primevue/select';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
+import { ref } from 'vue';
 
 interface Option {
     value: string;
@@ -104,6 +105,9 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Employés', href: '/backoffice/employes' },
     { title: `${props.employe.prenom} ${props.employe.nom}`, href: '#' },
 ];
+
+// Pays du téléphone de l'employé : imposé au téléphone du contact d'urgence.
+const paysTelephone = ref<string | null>(null);
 
 const form = useForm({
     nom: props.employe.nom,
@@ -293,6 +297,7 @@ function deleteContrat(c: ContratRow) {
                                     @update:model-value="
                                         form.telephone = $event
                                     "
+                                    @update:country="paysTelephone = $event"
                                 />
                                 <p
                                     v-if="form.errors.telephone"
@@ -386,6 +391,7 @@ function deleteContrat(c: ContratRow) {
                         :civilite-options="civilite_options"
                         :nationalite-options="nationalite_options"
                         :lien-contact-options="lien_contact_options"
+                        :pays-telephone="paysTelephone"
                     />
 
                     <!-- Historique d'affectation (site + fonction) -->

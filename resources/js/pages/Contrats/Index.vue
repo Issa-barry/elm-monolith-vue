@@ -17,7 +17,6 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Briefcase,
-    Download,
     Eye,
     FilePlus2,
     History,
@@ -50,8 +49,10 @@ interface Contrat {
         statut: string;
         statut_label: string;
     } | null;
-    // Génération autorisée (permissions + agence de rattachement), calculée par le serveur.
+    // Mise à jour du PDF autorisée (permissions + agence de rattachement), calculée par le serveur.
     peut_generer: boolean;
+    // Primes attribuées au salarié, une fois par type (null sans le droit de les consulter).
+    primes_count: number | null;
 }
 
 interface Option {
@@ -113,6 +114,11 @@ const filterFields: FilterField[] = [
 ];
 
 const filteredContrats = computed(() => props.contrats);
+
+function libellePrimes(nombre: number | null): string {
+    const n = nombre ?? 0;
+    return `${n} prime${n > 1 ? 's' : ''}`;
+}
 
 // ── Styles badges ─────────────────────────────────────────────────────────────
 const TYPE_CONTRAT_CLASS: Record<string, string> = {
@@ -250,6 +256,23 @@ function confirmDelete(c: Contrat) {
                         </template>
                     </Column>
 
+                    <Column
+                        v-if="can('rh-affectations-remuneration.read')"
+                        header="Primes"
+                        style="width: 100px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                class="text-sm"
+                                :class="{
+                                    'text-muted-foreground': !data.primes_count,
+                                }"
+                                data-testid="nombre-primes"
+                                >{{ libellePrimes(data.primes_count) }}</span
+                            >
+                        </template>
+                    </Column>
+
                     <Column header="Contrat de travail" style="width: 170px">
                         <template #body="{ data }">
                             <StatusDot
@@ -257,8 +280,14 @@ function confirmDelete(c: Contrat) {
                                 :status="data.document_courant.statut"
                                 :label="`V${data.document_courant.version} · ${data.document_courant.statut_label}`"
                             />
-                            <span v-else class="text-sm text-muted-foreground"
-                                >Non généré</span
+                            <span
+                                v-else
+                                class="text-sm text-muted-foreground"
+                                >{{
+                                    data.statut_contrat === 'actif'
+                                        ? 'PDF à préparer'
+                                        : 'Aucun PDF'
+                                }}</span
                             >
                         </template>
                     </Column>
@@ -282,10 +311,11 @@ function confirmDelete(c: Contrat) {
                                         <DropdownMenuItem
                                             v-if="
                                                 data.peut_generer &&
-                                                !data.document_courant
+                                                !data.document_courant &&
+                                                data.statut_contrat === 'actif'
                                             "
                                             as-child
-                                            data-testid="action-generer-contrat"
+                                            data-testid="action-preparer-pdf"
                                         >
                                             <Link
                                                 :href="`/backoffice/contrats/${data.id}/document`"
@@ -293,7 +323,7 @@ function confirmDelete(c: Contrat) {
                                             >
                                                 <FilePlus2
                                                     class="h-4 w-4"
-                                                />Générer le contrat
+                                                />Préparer le PDF
                                             </Link>
                                         </DropdownMenuItem>
                                         <template
@@ -314,20 +344,6 @@ function confirmDelete(c: Contrat) {
                                                     class="flex w-full cursor-pointer items-center gap-2"
                                                 >
                                                     <Eye class="h-4 w-4" />Voir
-                                                    le contrat (PDF)
-                                                </a>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                as-child
-                                                data-testid="action-telecharger-contrat-pdf"
-                                            >
-                                                <a
-                                                    :href="`/backoffice/contrats/${data.id}/pdf`"
-                                                    class="flex w-full cursor-pointer items-center gap-2"
-                                                >
-                                                    <Download
-                                                        class="h-4 w-4"
-                                                    />Télécharger le PDF
                                                 </a>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
@@ -342,8 +358,8 @@ function confirmDelete(c: Contrat) {
                                                         class="h-4 w-4"
                                                     />{{
                                                         data.peut_generer
-                                                            ? 'Versions, régénérer, signer'
-                                                            : 'Versions du contrat'
+                                                            ? 'Fiche du contrat, signature'
+                                                            : 'Fiche du contrat'
                                                     }}
                                                 </Link>
                                             </DropdownMenuItem>

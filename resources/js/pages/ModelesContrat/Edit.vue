@@ -75,9 +75,8 @@ const groupes = computed(() => {
 });
 
 const SOURCE_LIBELLE: Record<string, string> = {
-    dossier: 'dossier RH',
-    saisie: 'à compléter',
-    avantages: 'primes cochées',
+    dossier: 'repris automatiquement',
+    avantages: 'primes validées',
 };
 
 function ajouterArticle() {
@@ -347,8 +346,10 @@ function changerStatut(action: 'activer' | 'desactiver') {
                         <div class="rounded-xl border bg-card p-4">
                             <p class="text-sm font-medium">Variables</p>
                             <p class="mt-1 text-xs text-muted-foreground">
-                                Une variable vide bloque la génération : rien
-                                n’est jamais inventé.
+                                Toutes les variables sont reprises
+                                automatiquement (organisation, salarié, contrat,
+                                PDG). Une variable vide bloque le PDF et indique
+                                où la compléter : rien n’est jamais inventé.
                             </p>
                             <div
                                 v-for="[groupe, liste] in groupes"

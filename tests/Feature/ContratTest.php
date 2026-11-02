@@ -4,19 +4,26 @@ namespace Tests\Feature;
 
 use App\Enums\StatutContrat;
 use App\Enums\TypeContrat;
+use App\Models\AffectationRemuneration;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Organization;
 use App\Models\Personne;
+use App\Models\SaisieRemuneration;
 use App\Models\Site;
+use App\Models\TypeRemuneration;
 use App\Models\User;
+use App\Services\Rh\DocumentContratService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Concerns\DesigneUnPdg;
 use Tests\TestCase;
 
 class ContratTest extends TestCase
 {
+    use DesigneUnPdg;
     use RefreshDatabase;
 
     private Organization $org;
@@ -31,6 +38,7 @@ class ContratTest extends TestCase
 
         $this->org = Organization::factory()->create();
         $this->site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Dépôt', 'type' => 'depot']);
+        $this->designerPdg($this->org);
         $this->user = $this->makeUser([
             'rh-contrats.read', 'rh-contrats.create', 'rh-contrats.update', 'rh-contrats.delete',
             'rh-employes.read',
@@ -113,6 +121,100 @@ class ContratTest extends TestCase
             ->assertStatus(403);
     }
 
+    // ── index : nombre de primes (AFF-004 bis) ────────────────────────────────
+
+    private function typePrime(string $libelle, string $periodicite = 'mensuelle', ?Organization $org = null, string $nature = 'fixe'): TypeRemuneration
+    {
+        return TypeRemuneration::create([
+            'organization_id' => ($org ?? $this->org)->id, 'code' => strtoupper(substr($libelle, 0, 4)).fake()->unique()->numerify('###'),
+            'libelle' => $libelle, 'categorie' => 'prime', 'mode_calcul' => 'montant_fixe', 'periodicite' => $periodicite,
+            'nature_montant' => $nature, 'statut' => 'actif',
+        ]);
+    }
+
+    private function attribuer(Employe $employe, TypeRemuneration $type, array $attributs = []): AffectationRemuneration
+    {
+        return AffectationRemuneration::create([
+            'organization_id' => $employe->organization_id, 'employe_id' => $employe->id, 'type_remuneration_id' => $type->id,
+            'date_debut' => today()->subMonths(3)->toDateString(), 'montant' => 50000, 'statut' => 'validee',
+            ...$attributs,
+        ]);
+    }
+
+    /** @return array<string, int|null> nombre de primes par matricule */
+    private function primesAffichees(User $user, array $query = []): array
+    {
+        $reponse = $this->actingAs($user)->get(route('contrats.index', $query));
+        $reponse->assertInertia(fn (Assert $page) => $page->component('Contrats/Index'));
+
+        return collect($reponse->viewData('page')['props']['contrats'])
+            ->mapWithKeys(fn ($c) => [$c['employe_matricule'] => $c['primes_count']])->all();
+    }
+
+    public function test_la_liste_compte_les_primes_attribuees_une_fois_par_type(): void
+    {
+        $user = $this->makeUser(['rh-contrats.read', 'rh-affectations-remuneration.read']);
+        $transport = $this->typePrime('Transport');
+        $logement = $this->typePrime('Logement');
+        $variable = $this->typePrime('Rendement', nature: 'variable');
+        $ponctuelle = $this->typePrime('Fin d\'année', 'ponctuelle');
+
+        $sansPrime = $this->makeEmploye(['matricule' => '000100', 'site_id' => $this->site->id]);
+        $unePrime = $this->makeEmploye(['matricule' => '000200', 'site_id' => $this->site->id]);
+        $plusieurs = $this->makeEmploye(['matricule' => '000300', 'site_id' => $this->site->id]);
+        foreach ([$sansPrime, $unePrime, $plusieurs] as $e) {
+            $this->makeContrat($e);
+        }
+
+        $this->attribuer($unePrime, $transport);
+        // Annulée, terminée, proposition à valider : pas retenues.
+        $this->attribuer($sansPrime, $transport, ['statut' => 'annulee']);
+        $this->attribuer($sansPrime, $logement, ['date_fin' => today()->subDay()->toDateString()]);
+        $this->attribuer($sansPrime, $variable, ['statut' => 'a_valider', 'montant' => null]);
+
+        // Changement de montant validé : l'ancienne attribution et celle qui lui succède = une seule prime.
+        $ancienne = $this->attribuer($plusieurs, $transport, ['date_fin' => today()->addMonth()->toDateString()]);
+        $this->attribuer($plusieurs, $transport, ['date_debut' => today()->addMonth()->addDay()->toDateString(), 'montant' => 60000, 'remplace_affectation_id' => $ancienne->id]);
+        // Prime mensuelle saisie trois mois : comptée une fois.
+        $mensuelle = $this->attribuer($plusieurs, $variable, ['montant' => null]);
+        foreach ([8, 9, 10] as $mois) {
+            SaisieRemuneration::create(['organization_id' => $this->org->id, 'affectation_id' => $mensuelle->id, 'annee' => 2026, 'mois' => $mois, 'montant' => 10000, 'statut' => 'validee']);
+        }
+        // Prime ponctuelle validée à venir : comptée ; proposition à valider : non.
+        $this->attribuer($plusieurs, $ponctuelle, ['date_debut' => today()->addMonth()->startOfMonth()->toDateString(), 'date_fin' => today()->addMonth()->endOfMonth()->toDateString()]);
+        $this->attribuer($plusieurs, $logement, ['statut' => 'a_valider']);
+
+        // Primes d'une autre organisation, même sur un employé homonyme : jamais comptées.
+        $autreOrg = Organization::factory()->create();
+        $etranger = $this->makeEmploye(['organization_id' => $autreOrg->id, 'matricule' => '000100']);
+        $this->attribuer($etranger, $this->typePrime('Transport', org: $autreOrg));
+
+        $affiche = collect($this->primesAffichees($user))->sortKeys()->all();
+        $this->assertSame(['000100' => 0, '000200' => 1, '000300' => 3], $affiche);
+
+        // Même règle que les primes reprises dans le contrat PDF, comptées par type.
+        foreach (Contrat::with('employe')->get() as $contrat) {
+            $this->assertSame(
+                $affiche[$contrat->employe->matricule],
+                app(DocumentContratService::class)->avantagesDisponibles($contrat)->pluck('type_remuneration_id')->unique()->count(),
+            );
+        }
+    }
+
+    public function test_le_nombre_de_primes_suit_les_filtres_et_reste_masque_sans_droit(): void
+    {
+        $avecPrime = $this->makeEmploye(['matricule' => '000400', 'site_id' => $this->site->id]);
+        $this->makeContrat($avecPrime, ['type_contrat' => TypeContrat::CDD->value, 'date_fin' => today()->addYear()->toDateString()]);
+        $this->makeContrat($this->makeEmploye(['matricule' => '000500', 'site_id' => $this->site->id]));
+        $this->attribuer($avecPrime, $this->typePrime('Transport'));
+
+        $lecteur = $this->makeUser(['rh-contrats.read', 'rh-affectations-remuneration.read']);
+        $this->assertSame(['000400' => 1], $this->primesAffichees($lecteur, ['type_contrat' => 'cdd']));
+        $this->assertSame(['000500' => 0], $this->primesAffichees($lecteur, ['type_contrat' => 'cdi']));
+
+        $this->assertSame(['000400' => null, '000500' => null], collect($this->primesAffichees($this->user))->sortKeys()->all());
+    }
+
     // ── store : règles CDI ────────────────────────────────────────────────────
 
     public function test_store_cdi_creates_contrat_without_date_fin(): void
@@ -121,6 +223,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -139,6 +242,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -157,6 +261,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdd',
                 'date_debut' => '2025-01-01',
@@ -170,6 +275,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdd',
                 'date_debut' => '2025-06-01',
@@ -184,6 +290,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdd',
                 'date_debut' => '2025-01-01',
@@ -204,6 +311,7 @@ class ContratTest extends TestCase
 
         $response = $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-06-01',
@@ -220,6 +328,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-06-01',
@@ -244,6 +353,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'ctt',
                 'date_debut' => '2025-01-01',
@@ -260,6 +370,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $otherEmploye->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -364,6 +475,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -404,6 +516,7 @@ class ContratTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
+                ...$this->conditionsContrat(),
                 'employe_id' => $employe->id,
                 'type_contrat' => 'cdi',
                 'date_debut' => '2025-01-01',
@@ -428,7 +541,7 @@ class ContratTest extends TestCase
         Permission::firstOrCreate(['name' => 'rh-remunerations.read', 'guard_name' => 'web']);
         $this->user->givePermissionTo('rh-remunerations.read');
         $employe = $this->makeEmploye();
-        $donnees = ['employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2025-01-01'];
+        $donnees = [...$this->conditionsContrat(), 'employe_id' => $employe->id, 'type_contrat' => 'cdi', 'date_debut' => '2025-01-01'];
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [...$donnees, 'salaire_base' => '750 000'])

@@ -22,7 +22,7 @@ La création d'un employé ne crée **jamais** de compte utilisateur.
 | Situation | Comportement |
 |---|---|
 | Téléphone inconnu dans l'organisation | Nouvelle Personne + Employe. |
-| Pas de téléphone saisi | Nouvelle Personne systématiquement (aucun rapprochement possible). |
+| Pas de téléphone saisi | Refusé depuis le 01/11/2026 : le téléphone est obligatoire à la création (voir « Parcours Nouvel employé »). |
 | Téléphone d'un utilisateur, client, propriétaire, livreur… | La Personne existante est réutilisée : un seul individu, plusieurs rôles. |
 | Personne réutilisée sans nom/prénom/email (livreur créé au seul téléphone, client avec `nom_complet` seul) | Les champs **vides** sont complétés avec la saisie RH. |
 | Personne réutilisée avec un nom/prénom/email déjà renseigné et différent | L'identité existante est conservée ; la saisie RH est ignorée pour ces champs. |
@@ -33,6 +33,40 @@ La création d'un employé ne crée **jamais** de compte utilisateur.
 
 La création est transactionnelle : la Personne est verrouillée le temps du contrôle « déjà
 employé », deux créations simultanées avec le même téléphone ne peuvent pas aboutir toutes les deux.
+Si un même numéro inconnu est enregistré au même instant par deux utilisateurs, la contrainte
+unique `(organization_id, telephone_normalise)` refuse la seconde personne : l'utilisateur reçoit
+« Ce numéro vient d'être enregistré par quelqu'un d'autre. Cliquez de nouveau sur « Rechercher » »
+(jamais une erreur technique).
+
+## Parcours « Nouvel employé » : le téléphone d'abord (01/11/2026)
+
+1. **Numéro de téléphone** (sélecteur de pays, Guinée +224 par défaut) puis **« Rechercher »**
+   (`GET /backoffice/employes/recherche-telephone`, `RechercheEmployeParTelephone`, droit de créer
+   un employé, organisation de l'utilisateur seulement). Le reste du formulaire n'apparaît
+   qu'après la recherche.
+2. Le numéro est reconnu quel que soit son format : `+224 622 60 26 93`, `00224622602693`,
+   `224622602693`, `622602693` ou `0622602693` (avec le pays choisi) → `+224622602693`, validé par
+   libphonenumber. Même clé que l'enregistrement (`telephone_normalise`, chiffres seuls).
+3. Résultat :
+
+| Résultat | Affichage | Suite |
+|---|---|---|
+| Un dossier employé existe (actif, suspendu ou sorti) | Orange : « Un employé existe déjà avec ce numéro » — nom, matricule, statut, agence | **Aucune création** : « Ouvrir la fiche » / « Compléter le dossier » (selon les droits et l'agence). Hors de ses agences, l'existence est dite sans lien. |
+| Plusieurs dossiers employés (données anciennes) | « Plusieurs dossiers … choisissez le bon » + la liste | Aucun choix automatique, aucune création |
+| Numéro d'une personne connue sous un autre rôle (livreur, utilisateur, propriétaire…) | Bleu : nom et rôles de la personne | Création possible, rattachée à cette personne ; nom et prénom repris, non modifiables ici |
+| Numéro inconnu | Vert : « Aucun employé trouvé. Vous pouvez créer un nouveau dossier. » | Création, numéro déjà rempli |
+| Ancien dossier supprimé | Mention « ancien dossier archivé » | Réembauche possible (règle ci-dessus) |
+
+- **Téléphone obligatoire à la création** (décision du 01/11/2026, auparavant facultatif) : pas de
+  création sans passer par la recherche du numéro ; le serveur refuse une création sans
+  téléphone (« Le numéro de téléphone est obligatoire : il permet de vérifier que l'employé n'est
+  pas déjà enregistré »). En modification, il reste facultatif : une fiche ancienne sans numéro
+  reste modifiable (et l'effacement garde ses règles, voir « Modification »).
+- La recherche n'est qu'une aide : le contrôle qui fait foi est celui de l'enregistrement (tableau
+  ci-dessus), refait côté serveur.
+- Import Excel RH : sans effet, l'import ne crée jamais de salarié.
+- Aucune migration : la contrainte unique sur le téléphone normalisé existait déjà ; les numéros
+  enregistrés sont tous au format international.
 
 ## Dossier salarié (27/10/2026)
 
@@ -42,7 +76,7 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 |---|---|---|
 | Dossier | Service, date d'embauche (fiche seulement, pas à la création) ; date et motif de sortie en lecture seule | `employes` |
 | Identité civile | Date de naissance (antérieure à aujourd'hui), lieu, civilité (Monsieur / Madame / Mademoiselle), nationalité (liste) | `personnes` (partagée avec les autres rôles) |
-| Contact d'urgence | Nom, lien (liste + « Autre » précisé), téléphone (un seul contact) | `employes` |
+| Contact d'urgence | Nom, lien (liste + « Autre » précisé), téléphone (un seul contact) — voir ci-dessous | `employes` |
 | Données sensibles | N° CNSS **du salarié** | `employes.numero_cnss` |
 
 - **Dates du dossier (31/10/2026, ADR 0045)** : la date d'embauche n'est plus saisie à la création
@@ -64,6 +98,26 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
   Tuteur / Tutrice, Autre). « Autre » exige une précision (50 caractères), enregistrée à la place
   du libellé dans `contact_urgence_lien` ; choisir un autre lien efface la précision. Une ancienne
   saisie libre se relit comme « Autre » avec cette valeur pour précision. Pas de migration.
+- **Téléphone du contact d'urgence (01/11/2026)** : même composant que les autres téléphones
+  (drapeau + indicatif visibles), mais le **pays est imposé et non modifiable** : celui du
+  téléphone de l'employé (`personnes.code_pays`, issu de son numéro — jamais de sa nationalité) ;
+  sans téléphone de l'employé, la Guinée (+224, pays par défaut du sélecteur). Enregistré au
+  format international (`+224…`). Le serveur revérifie : numéro valide et du même indicatif que
+  l'employé, sinon refus. Une ancienne valeur en saisie libre renvoyée inchangée est conservée
+  telle quelle (le dossier reste modifiable) ; pas de migration. Le téléphone est affiché sur sa
+  propre ligne, en pleine largeur, sous le nom et le lien.
+- **Contact d'urgence déjà connu (01/11/2026, choix « reprise du nom, sans migration »)** : dès
+  qu'un numéro complet est saisi, `GET /backoffice/employes/recherche-contact-urgence`
+  (`RechercheEmployeParTelephone::proprietairesDuNumero`, droit `rh-employes.create` ou
+  `.update`, organisation de l'utilisateur) cherche à qui il appartient déjà : personne (avec ses
+  rôles), client, entreprise tierce — même numéro normalisé quel que soit son format. Une seule
+  correspondance et nom vide : le nom est repris ; sinon « Reprendre ce nom » sur la bonne
+  ligne (plusieurs correspondances : toutes proposées, aucun choix automatique). **Lecture
+  seule** : le contact reste enregistré sur la fiche du salarié (nom, lien, téléphone) ; aucune
+  fiche personne n'est créée pour lui et aucune fiche existante n'est modifiée. Un même contact
+  pour plusieurs salariés = les mêmes valeurs sur chaque fiche, sans doublon de personne. Pas de
+  lien vers une fiche personne partagée (écarté : migration, et les proches des salariés
+  entreraient dans le référentiel commun).
 - **N° CNSS** : numéro personnel d'immatriculation du salarié à la Caisse nationale de sécurité
   sociale (cnss.gov.gn), facultatif, jamais généré par l'application. Le numéro employeur de
   l'entreprise n'est pas géré dans le dossier du salarié.
@@ -95,7 +149,7 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 | `rh-employes.read` / `.create` / `.update` / `.delete` | Dossier (hors données sensibles et salaires) | inchangé |
 | `rh-employes.donnees_sensibles` | Voir et modifier le n° CNSS ; voir les coordonnées de paiement déjà enregistrées | super_admin, admin_entreprise |
 | `rh-remunerations.read` | Voir et saisir le salaire (fiche employé, contrats) | super_admin, admin_entreprise, manager |
-| `rh-referentiels.gerer` | Gérer les fonctions et services RH, et les modèles de contrat ([rh-contrat-pdf.md](rh-contrat-pdf.md)) | super_admin, admin_entreprise |
+| `rh-referentiels.gerer` | Gérer les fonctions et services RH, les modèles de contrat et désigner le PDG de l'organisation, signataire des contrats ([rh-contrat-pdf.md](rh-contrat-pdf.md), ADR 0048) | super_admin, admin_entreprise |
 
 - Sans la permission, la donnée n'est **pas envoyée** au navigateur, et une valeur envoyée est
   ignorée (la donnée existante reste intacte).
@@ -108,6 +162,17 @@ Tous les champs sont **facultatifs** : les dossiers existants restent valides sa
 Limitées aux agences de l'utilisateur (agence actuelle de l'employé), sauf vision de toutes les
 agences (ADR 0025) ; un employé sans agence n'apparaît qu'à ces derniers. Filtre Agence
 (`site_ids[]`), plus filtre Service pour les employés.
+
+**Fiche et contrats (31/10/2026)** : même cloisonnement en accès direct, vérifié par le serveur
+(`App\Support\Rh\PerimetreEmploye`, règle unique aussi utilisée par les primes et le départ) :
+- consulter la fiche : agences de rattachement, ou vision de toutes les agences ;
+- modifier, transférer, supprimer l'employé, créer, modifier ou supprimer ses contrats : agences de
+  rattachement, sauf administrateur ou superviseur (ADR 0034) — la vision de toutes les agences
+  n'ouvre que la lecture ;
+- toujours limité à l'organisation, super administrateur compris.
+Les boutons Modifier / Supprimer / Nouveau contrat de la liste et de la fiche suivent la même règle
+(`dans_perimetre_ecriture` calculé par le serveur). Le formulaire de création de contrat ne propose
+que les salariés actifs des agences de rattachement.
 
 ## Modification
 

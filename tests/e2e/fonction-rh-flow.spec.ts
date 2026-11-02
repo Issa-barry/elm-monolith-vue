@@ -8,7 +8,7 @@
  * Run: npx playwright test tests/e2e/fonction-rh-flow.spec.ts --workers=1
  */
 import { expect, test } from '@playwright/test';
-import { login, randomDigits } from './helpers';
+import { login, ouvrirNouvelEmploye, randomDigits } from './helpers';
 
 test.describe('création inline depuis un autre formulaire', () => {
     test.beforeEach(async ({ page }) => {
@@ -21,7 +21,8 @@ test.describe('création inline depuis un autre formulaire', () => {
         const nom = `E2EEMP${randomDigits(6)}`;
         const libelle = `E2EFON-${randomDigits(6)}`;
 
-        await page.goto('/backoffice/employes/create');
+        // Le formulaire commence toujours par la recherche du téléphone.
+        await ouvrirNouvelEmploye(page);
         await expect(
             page.getByRole('heading', { name: /nouvel employé/i }),
         ).toBeVisible({ timeout: 15_000 });
