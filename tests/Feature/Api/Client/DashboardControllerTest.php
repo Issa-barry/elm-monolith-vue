@@ -5,6 +5,7 @@ namespace Tests\Feature\Api\Client;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
+use App\Enums\StatutDepense;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
@@ -14,6 +15,8 @@ use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionProcessus;
 use App\Models\Depense;
+use App\Models\EquipeLivraison;
+use App\Models\EquipeLivreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -281,6 +284,100 @@ class DashboardControllerTest extends TestCase
         $this->assertEquals(6000.0, $inertia['earnings']['balance']);
         $this->assertSame($inertia['earnings'], $api['summary']);
         $this->assertSame($inertia['earnings_by_vehicule'][0]['frais_depenses'], $api['par_vehicule'][0]['frais_depenses']);
+    }
+
+    public function test_depenses_total_equals_vehicle_expenses_for_a_proprietaire(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $vehicule = $this->makeVehicule($org, $user->proprietaire);
+
+        Depense::factory()->valide()->create([
+            'organization_id' => $org->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+            'montant' => 4000,
+            'date_depense' => now()->toDateString(),
+        ]);
+
+        $api = $this->apiJson($user);
+
+        $this->assertEquals(4000.0, $api['summary']['frais_depenses_total']);
+        $this->assertEquals(4000.0, $api['depenses_total']);
+    }
+
+    public function test_depenses_total_counts_livreur_depenses_without_changing_the_balance(): void
+    {
+        // Régression 02/11 : la carte Dépenses restait à 0 GNF malgré une avance sur salaire
+        // validée. Affichage seul : la règle "jamais imputées à un livreur" reste vraie pour
+        // frais_depenses_total et balance.
+        $org = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+        $livreurId = $user->livreur->id;
+        $personnelle = [
+            'organization_id' => $org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreurId,
+        ];
+
+        Depense::factory()->valide()->create([...$personnelle, 'montant' => 25000, 'date_depense' => now()->toDateString()]);
+        Depense::factory()->create([...$personnelle, 'montant' => 900, 'date_depense' => now()->toDateString(), 'statut' => StatutDepense::SOUMIS->value]);
+        Depense::factory()->valide()->create([...$personnelle, 'montant' => 5000, 'date_depense' => now()->subMonthsNoOverflow(2)->toDateString()]);
+        Depense::factory()->valide()->create([
+            ...$personnelle,
+            'beneficiaire_id' => $this->makeLivreurUser($org)->livreur->id,
+            'montant' => 700,
+            'date_depense' => now()->toDateString(),
+        ]);
+
+        $api = $this->apiJson($user);
+
+        $this->assertEquals(25000.0, $api['depenses_total']);
+        $this->assertEquals(0.0, $api['summary']['frais_depenses_total']);
+        $this->assertEquals(0.0, $api['summary']['balance']);
+    }
+
+    public function test_depenses_total_excludes_livreur_depenses_when_filtered_by_vehicule(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+        $proprietaire = $this->makeProprietaireUser($org)->proprietaire;
+        $vehicule = $this->makeVehicule($org, $proprietaire);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $org->id,
+            'vehicule_id' => $vehicule->id,
+            'nom' => 'Equipe Test',
+            'is_active' => true,
+            'taux_commission_proprietaire' => 0,
+        ]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $user->livreur->id, 'role' => 'chauffeur', 'ordre' => 1]);
+
+        Depense::factory()->valide()->create([
+            'organization_id' => $org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $user->livreur->id,
+            'montant' => 25000,
+            'date_depense' => now()->toDateString(),
+        ]);
+
+        $this->assertEquals(25000.0, $this->apiJson($user)['depenses_total']);
+        $this->assertEquals(0.0, $this->apiJson($user, ['vehicule_id' => $vehicule->id])['depenses_total']);
+    }
+
+    public function test_depenses_total_isolates_another_organization(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+
+        Depense::factory()->valide()->create([
+            'organization_id' => Organization::factory()->create()->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $user->livreur->id,
+            'montant' => 25000,
+            'date_depense' => now()->toDateString(),
+        ]);
+
+        $this->assertEquals(0.0, $this->apiJson($user)['depenses_total']);
     }
 
     public function test_parity_full_payment(): void

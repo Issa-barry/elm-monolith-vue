@@ -1280,6 +1280,41 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
 - Tests : `tests/Feature/Comptabilite/CommissionAjustementVenteTest.php`
   (`valider_vehicules_en_masse_*`).
 
+### Validation d'une grande sélection (01/11/2026)
+
+Aucune règle de validation ne change : seule la façon d'exécuter une grande sélection change.
+
+- **Cause corrigée** : une ligne de Comptabilité > Commissions regroupe toutes les parts à valider
+  d'un livreur. Une sélection de 30 lignes peut donc porter plusieurs centaines de parts, et chacune
+  coûtait 3 requêtes, puis chaque période concernée rechargeait toutes ses parts. Le serveur coupait
+  la requête avant la fin. Mesure sur 450 parts : 1 444 requêtes avant, 92 après.
+- **Serveur** : `CommissionAdjustmentService::validerLotCombine()` valide vente et logistique en une
+  seule transaction, en SQL groupé, puis traite une seule fois les périodes concernées. Le contrôle
+  « période complète » compte en SQL (`nombrePartsNonValidees()`, `periodeADesCommissions()`) sans
+  recharger la période. `updated_at` reste inchangé, donc pas de recalcul des fiches.
+- **Écran Commissions** : la sélection part en lots successifs de 200 parts (plafond serveur :
+  `CommissionAjustementController::VALIDATION_LOT_MAX`, 500), avec progression sur le bouton. Au
+  premier échec, l'envoi s'arrête, les lots passés restent validés et un message l'indique. Fermer la
+  page arrête aussi l'envoi, avec le même résultat. Relancer ne traite que le reste : une part déjà
+  validée garde son validateur d'origine, et n'ajoute rien à l'historique du bénéficiaire.
+- **Reprise** : vente et logistique d'un même lot sont validées ensemble ou pas du tout. Le traitement
+  de la période vient ensuite, hors de cette transaction : s'il échoue, les parts restent validées et
+  renvoyer le lot termine la période. Si plus aucune part n'est à valider sur l'écran, le bouton
+  « Valider la période de paiement » prend le relais.
+- **Détail d'une période** : « Valider les véhicules » reste une seule requête, qui bénéficie du
+  même traitement groupé. Vente et logistique ne peuvent plus être validées à moitié.
+- **`valider-lot`** : le droit sur la période ne suffit pas. Chaque part reçue doit appartenir à
+  l'organisation de l'utilisateur et figurer sur les fiches de cette période, sinon tout le lot est
+  refusé (403). Même plafond de 500 parts.
+- **Mesure sur 2 400 parts, 150 fiches (SQLite local, à confirmer sur MySQL)** : 58 requêtes par lot, et
+  3 102 pour le dernier lot, celui qui valide la période. Ce surcoût vient surtout de la comptabilisation
+  des fiches (environ 20 requêtes par fiche).
+- Pas de file d'attente : l'hébergement mutualisé n'offre pas de worker permanent
+  (`DEPLOY-HOSTINGER-CICD.md`) et un lot reste assez court pour une requête web. Si le dernier lot
+  dépassait le délai du serveur, c'est la comptabilisation des fiches qu'il faudrait différer.
+- Tests : `tests/Feature/Comptabilite/CommissionValidationMasseTest.php`,
+  `resources/js/lib/__tests__/traiterParLots.spec.ts`.
+
 ### Bouton « Valider la période de paiement » après validation (27/09/2026)
 
 - Visible pour qui a le droit de valider (policy `gererValidation` : administrateur de

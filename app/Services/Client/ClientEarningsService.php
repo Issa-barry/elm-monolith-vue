@@ -458,6 +458,30 @@ class ClientEarningsService
     }
 
     /**
+     * Dépenses validées rattachées directement à un livreur (ex. avance sur salaire).
+     * Affichage seul : jamais déduites de `balance`, qui ne compte que les frais de
+     * véhicule d'un proprietaire (cf. fraisDepensesParVehicule()).
+     */
+    public function depensesLivreurTotal(
+        ?string $organizationId,
+        ?Livreur $livreur,
+        ?string $dateDebut = null,
+        ?string $dateFin = null,
+    ): float {
+        if ($organizationId === null || $livreur === null) {
+            return 0.0;
+        }
+
+        return (float) Depense::where('beneficiaire_type', 'livreur')
+            ->where('beneficiaire_id', $livreur->id)
+            ->where('statut', StatutDepense::VALIDE->value)
+            ->where('organization_id', $organizationId)
+            ->when($dateDebut, fn ($q) => $q->whereDate('date_depense', '>=', $dateDebut))
+            ->when($dateFin, fn ($q) => $q->whereDate('date_depense', '<=', $dateFin))
+            ->sum('montant');
+    }
+
+    /**
      * Relevé chronologique (vente + logistique), 100 dernières opérations.
      *
      * @param  Collection<int, CommissionEnveloppePart>  $partsVentes

@@ -15,13 +15,14 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\TestCase;
 
 class SalaireEmployeDetailTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, PrepareLaPaieDepuisLesRh, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, PrepareLaPaieDepuisLesRh, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -46,6 +47,7 @@ class SalaireEmployeDetailTest extends TestCase
             'personne_id' => $personne->id,
             'matricule' => '000001',
             'type_employe' => 'interne',
+            'site_id' => $this->user->sites()->first()->id,
             'statut' => 'actif',
         ]);
 
@@ -110,6 +112,7 @@ class SalaireEmployeDetailTest extends TestCase
     public function test_payer_employe_repartit_le_montant_en_fifo_sur_les_periodes(): void
     {
         $employe = $this->makeEmployeAvecContrat(1_000_000);
+        $this->equiperPayeurEspeces($this->user, $employe->site_id);
         $janvier = $this->makeLignePeriode($employe, 1, 2025);
         $fevrier = $this->makeLignePeriode($employe, 2, 2025);
 

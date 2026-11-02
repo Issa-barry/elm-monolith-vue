@@ -38,7 +38,15 @@ indépendant, cf. `TelephoneOwnerLookupService`, désormais obsolète sur ce poi
   téléphone saisi correspond à un `Client` déjà créé par le staff et que ce client a déjà sa
   propre `Personne`, le nouveau compte est rattaché à **cette** `Personne` (jamais à la
   `Personne` "à la volée" créée en tête du flow d'inscription, qui est alors supprimée) — même
-  logique que pour un `Livreur`/`Proprietaire` déjà existant.
+  logique que pour un `Livreur`/`Proprietaire` déjà existant. Le prénom et le nom saisis
+  complètent uniquement ceux que cette `Personne` n'a pas encore (fiche back-office souvent
+  limitée à `nom_complet`) ; une valeur déjà renseignée n'est jamais écrasée et `nom_complet`
+  ne change pas.
+- **CLIENTPERSONNE-008** — Pré-remplissage de l'inscription et de l'invitation par téléphone
+  (`check-phone`, `register/lookup`) : l'identité d'un client se lit sur sa `Personne`, avec
+  repli sur ses colonnes `clients.prenom`/`nom`. L'écran verrouille les champs pré-remplis : une
+  identité sans prénom ou sans nom n'est donc jamais proposée (statut `not_found`, ou rôle suivant
+  livreur puis propriétaire), et la personne saisit son nom elle-même.
 - **CLIENTPERSONNE-007** — `UpdateProfileController` (espace client, self-service) : les champs
   modifiables (`pays`, `code_pays`, `ville`, `adresse`) sont écrits à la fois sur `Client` (pour
   les lectures existantes) et sur `Client->personne` si elle est renseignée, pour que la

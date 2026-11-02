@@ -14,6 +14,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Spinner } from '@/components/ui/spinner';
 import { usePaiementFiche } from '@/composables/usePaiementFiche';
 import AppLayout from '@/layouts/AppLayout.vue';
 import {
@@ -21,6 +22,7 @@ import {
     libellePeriodes,
 } from '@/lib/commissionFiltres';
 import { filtrerParMotCle } from '@/lib/tableKeywordSearch';
+import { traiterParLots } from '@/lib/traiterParLots';
 import { type BreadcrumbItem } from '@/types';
 import type { CommissionIndexSummary, FicheAPayer } from '@/types/commission';
 import type {
@@ -350,18 +352,88 @@ function flashToast(fallback: string) {
     });
 }
 
-function validerParts(parts: CreeePart[], label: string) {
-    router.post(
+// Lots successifs : chaque requête reste courte (sous le délai du serveur), quelle que soit la
+// taille de la sélection. Plafond serveur : CommissionAjustementController::VALIDATION_LOT_MAX.
+const LOT_VALIDATION = 200;
+const validationEnCours = ref(false);
+const progressionValidation = ref(0);
+
+async function validerLot(parts: CreeePart[]): Promise<void> {
+    const response = await fetch(
         '/backoffice/comptabilite/commissions/ajustements/valider',
-        { parts: parts.map((p) => ({ type: 'vente', id: p.id })) },
         {
-            preserveScroll: true,
-            onSuccess: () => {
-                selected.value = new Set();
-                flashToast(label);
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-XSRF-TOKEN': decodeURIComponent(
+                    document.cookie.match(
+                        /(?:^|;\s*)XSRF-TOKEN=([^;]+)/,
+                    )?.[1] ?? '',
+                ),
             },
+            body: JSON.stringify({
+                parts: parts.map((p) => ({ type: 'vente', id: p.id })),
+            }),
         },
     );
+    if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message ?? "Le serveur n'a pas répondu à temps.");
+    }
+}
+
+async function validerParts(parts: CreeePart[], label: string) {
+    if (validationEnCours.value || parts.length === 0) return;
+    validationEnCours.value = true;
+    progressionValidation.value = 0;
+
+    const { traites, erreur } = await traiterParLots(
+        parts,
+        LOT_VALIDATION,
+        validerLot,
+        (fait) => {
+            progressionValidation.value = Math.floor(
+                (fait / parts.length) * 100,
+            );
+        },
+    );
+
+    if (erreur === null) {
+        selected.value = new Set();
+        toast.add({
+            severity: 'success',
+            summary: 'Succès',
+            detail: label,
+            life: 5000,
+        });
+    } else {
+        toast.add({
+            severity: traites > 0 ? 'warn' : 'error',
+            summary: 'Validation interrompue',
+            detail:
+                traites > 0
+                    ? `Arrêt à ${progressionValidation.value} % : ${erreur} Ce qui est déjà validé reste enregistré, relancez pour traiter le reste.`
+                    : `Aucune commission validée : ${erreur}`,
+            life: 8000,
+        });
+    }
+
+    router.reload({
+        onSuccess: () => {
+            // Une ligne entièrement validée avant l'interruption ne se sélectionne plus.
+            const restantes = new Set(
+                selectableRows.value.map((b) => b.beneficiaire_id),
+            );
+            selected.value = new Set(
+                [...selected.value].filter((id) => restantes.has(id)),
+            );
+        },
+        onFinish: () => {
+            validationEnCours.value = false;
+        },
+    });
 }
 
 function validerRow(b: BeneficiaireRow) {
@@ -521,13 +593,25 @@ function fmtTel(tel: string | null | undefined): string {
                         <Button
                             variant="ghost"
                             size="sm"
+                            :disabled="validationEnCours"
                             @click="selected = new Set()"
                         >
                             Annuler
                         </Button>
-                        <Button size="sm" @click="validerSelection">
-                            <CheckCircle2 class="mr-1.5 h-4 w-4" />
-                            Valider la sélection
+                        <Button
+                            size="sm"
+                            :disabled="validationEnCours"
+                            :aria-busy="validationEnCours"
+                            @click="validerSelection"
+                        >
+                            <template v-if="validationEnCours">
+                                <Spinner class="mr-1.5 h-4 w-4" />
+                                Validation… {{ progressionValidation }} %
+                            </template>
+                            <template v-else>
+                                <CheckCircle2 class="mr-1.5 h-4 w-4" />
+                                Valider la sélection
+                            </template>
                         </Button>
                     </div>
                 </div>
@@ -816,6 +900,7 @@ function fmtTel(tel: string | null | undefined): string {
                                         variant="outline"
                                         size="sm"
                                         class="h-9 px-3 text-xs"
+                                        :disabled="validationEnCours"
                                         @click="validerRow(b)"
                                     >
                                         Valider
@@ -869,6 +954,7 @@ function fmtTel(tel: string | null | undefined): string {
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 class="cursor-pointer"
+                                                :disabled="validationEnCours"
                                                 @click="validerRow(b)"
                                             >
                                                 <CheckCircle2

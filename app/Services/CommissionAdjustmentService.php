@@ -70,6 +70,39 @@ class CommissionAdjustmentService
     }
 
     /**
+     * Même périmètre que partsNonValidees() + partsLogistiqueNonValidees(), compté en SQL : ce
+     * contrôle tourne après chaque validation, sur des périodes de plusieurs milliers de parts.
+     */
+    public static function nombrePartsNonValidees(PaiementPeriode $periode): int
+    {
+        return collect([CommissionEnveloppePart::class, CommissionLogistiquePart::class])
+            ->sum(fn (string $classe) => $classe::whereIn('id', self::idsSourcesPourPeriode($periode, $classe))
+                ->whereNull('validated_at')
+                ->where('montant_verse', '<=', 0)
+                ->count());
+    }
+
+    /**
+     * Toutes ces parts figurent-elles sur les fiches de cette période ?
+     *
+     * @param  iterable<CommissionEnveloppePart|CommissionLogistiquePart>  $parts
+     */
+    public static function figurentSurLaPeriode(iterable $parts, PaiementPeriode $periode): bool
+    {
+        return collect($parts)->groupBy(fn ($part) => $part::class)->every(
+            fn ($deLaClasse, string $classe) => $deLaClasse->pluck('id')
+                ->diff(self::idsSourcesPourPeriode($periode, $classe))
+                ->isEmpty()
+        );
+    }
+
+    public static function periodeADesCommissions(PaiementPeriode $periode): bool
+    {
+        return CommissionEnveloppePart::whereIn('id', self::idsSourcesPourPeriode($periode, CommissionEnveloppePart::class))->exists()
+            || CommissionLogistiquePart::whereIn('id', self::idsSourcesPourPeriode($periode, CommissionLogistiquePart::class))->exists();
+    }
+
+    /**
      * Bascule CREEE→IMPAYE (ou PAYE si montant nul) toutes les
      * CommissionEnveloppePart encore CREEE de cette période, ainsi que leur
      * CommissionEnveloppe parente — seul moment où une commission sort de
@@ -504,20 +537,41 @@ class CommissionAdjustmentService
     /** @param  iterable<CommissionEnveloppePart>  $parts */
     public static function validerLot(iterable $parts, User $user): int
     {
-        $count = 0;
-        $validees = [];
+        return self::validerLotCombine($parts, $user);
+    }
 
-        DB::transaction(function () use ($parts, $user, &$count, &$validees) {
-            foreach ($parts as $part) {
-                if (! $part->estValidee()) {
-                    self::poserValidation($part, $user);
-                    $validees[] = $part;
-                    $count++;
+    /**
+     * Valide d'un bloc des parts vente et/ou logistique, puis traite une seule fois les périodes
+     * concernées. En SQL groupé, jamais part par part : une sélection porte plusieurs centaines de
+     * parts, et le serveur coupait la requête avant la fin (504). Sans effet sur updated_at, pour la
+     * même raison que poserValidation().
+     *
+     * Les périodes sont traitées pour toutes les parts reçues, même déjà validées : si ce traitement
+     * échoue après l'enregistrement, renvoyer le lot suffit à terminer la période.
+     *
+     * @param  iterable<CommissionEnveloppePart|CommissionLogistiquePart>  $parts
+     */
+    public static function validerLotCombine(iterable $parts, User $user): int
+    {
+        $parts = collect($parts);
+        $aValider = $parts->reject(fn ($part) => $part->estValidee())->values();
+        $validation = ['validated_by' => $user->id, 'validated_at' => now()];
+        $count = 0;
+
+        DB::transaction(function () use ($aValider, $validation, &$count) {
+            foreach ($aValider->groupBy(fn ($part) => $part::class) as $classe => $parts) {
+                foreach ($parts->pluck('id')->chunk(500) as $ids) {
+                    // whereNull : une part validée entre-temps garde son validateur d'origine.
+                    $count += $classe::withoutTimestamps(fn () => $classe::whereIn('id', $ids->all())
+                        ->whereNull('validated_at')
+                        ->update($validation));
                 }
             }
         });
 
-        self::validerPeriodesConcernees($validees);
+        $aValider->each(fn ($part) => $part->forceFill($validation)->syncOriginal());
+
+        self::validerPeriodesConcernees($parts);
 
         return $count;
     }
@@ -547,6 +601,9 @@ class CommissionAdjustmentService
         if ($parts->isEmpty()) {
             return;
         }
+
+        (new Collection($parts->whereInstanceOf(CommissionEnveloppePart::class)->all()))->loadMissing('enveloppe');
+        (new Collection($parts->whereInstanceOf(CommissionLogistiquePart::class)->all()))->loadMissing('commission');
 
         $orgId = $parts->map(fn ($p) => $p instanceof CommissionEnveloppePart
             ? $p->enveloppe?->organization_id
@@ -1034,27 +1091,6 @@ class CommissionAdjustmentService
 
         self::poserValidation($part, $user);
         self::validerPeriodesConcernees([$part]);
-    }
-
-    /** @param  iterable<CommissionLogistiquePart>  $parts */
-    public static function validerLotLogistique(iterable $parts, User $user): int
-    {
-        $count = 0;
-        $validees = [];
-
-        DB::transaction(function () use ($parts, $user, &$count, &$validees) {
-            foreach ($parts as $part) {
-                if (! $part->estValidee()) {
-                    self::poserValidation($part, $user);
-                    $validees[] = $part;
-                    $count++;
-                }
-            }
-        });
-
-        self::validerPeriodesConcernees($validees);
-
-        return $count;
     }
 
     // ═════════════════════════════════════════════════════════════════════════

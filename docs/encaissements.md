@@ -21,8 +21,9 @@
   par défaut de l'événement). `TypeSupportTresorerie::fromMoyenPaiement()` classe le support
   (Caisse/Banque/Mobile Money) à partir de ces mêmes valeurs.
 - Paiements sans rapport avec les ventes : commissions (vente/site/propriétaire/consultant),
-  cashback, paiement de fiches (livreur/propriétaire), salaires — tous consomment
-  `ModePaiement::options()` via `resources/js/components/PaymentDialogCompact.vue`.
+  cashback, paiement de fiches (livreur/propriétaire), salaires — tous reposent sur ces 4 valeurs,
+  via `PaymentCard` en mode décaissement (fiches, ADR 0009 ; salaires, ADR 0049) ou
+  `resources/js/components/PaymentDialogCompact.vue` (paiement direct historique).
 
 **Conséquence directe** : stocker `mode_paiement = "orange_money"` sur un encaissement ferait
 échouer la résolution du compte de trésorerie dédié (`CompteMappingResolver` ne reconnaît pas
@@ -211,10 +212,10 @@ d'information (bleu).
 Toute future page d'encaissement de vente doit réutiliser ce composant plutôt que recréer un
 dialog ad hoc, et lui passer `moyens_encaissement` (sinon seules les espèces sont proposées).
 
-**`resources/js/components/PaymentDialogCompact.vue` est un composant différent**, partagé par des
-paiements sans rapport (commissions, salaires, paie, cashback, paiement de fiches — cf. liste
-ci-dessus). Ne pas le confondre avec `PaymentCard` : la règle « moyens = supports de l'agence » ne
-s'y applique pas encore (paiements sortants, hors périmètre du 24/09/2026).
+**`resources/js/components/PaymentDialogCompact.vue` est un composant différent**, qui ne sert plus
+qu'au paiement direct historique de l'écran Commission Logistique. Ne pas le confondre avec
+`PaymentCard` : la règle « moyens = supports de l'agence » ne s'y applique pas. Tout nouveau paiement
+sortant utilise `PaymentCard` en mode décaissement.
 
 ## Comptabilisation : caisse dédiée de l'agent (espèces)
 
@@ -313,6 +314,9 @@ verrou (`TresorerieDisponibiliteService::garantirSoldeSuffisant()`, partagé ave
 fonds). Détail : [commissions.md](commissions.md) et
 [ADR 0009](adr/0009-paiement-de-fiche-decaissement-tresorerie.md). Le mode `encaissement` (défaut)
 est inchangé.
+
+Le paiement des **salaires** suit les mêmes règles depuis le 01/11/2026, sur l'agence du salarié :
+[paie.md](paie.md) et [ADR 0049](adr/0049-paiement-salaire-decaissement-reel.md).
 
 ## Backend comme source de vérité
 

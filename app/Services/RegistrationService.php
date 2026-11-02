@@ -177,8 +177,13 @@ class RegistrationService
     private function findPersonPrefill(string $phone): ?array
     {
         $client = Client::where('telephone', $phone)->whereNull('user_id')->first();
-        if ($client) {
-            return ['prenom' => $client->prenom, 'nom' => $client->nom];
+        // L'identité civile d'un client vit sur sa Personne : clients.nom/prenom ne sont
+        // jamais saisis par l'interface (seul nom_complet l'est).
+        if ($prefill = UserInvitationService::identitePrefill(
+            $client?->personne?->prenom ?? $client?->prenom,
+            $client?->personne?->nom ?? $client?->nom,
+        )) {
+            return $prefill;
         }
 
         $normalise = Personne::normaliserTelephone($phone);
@@ -186,18 +191,15 @@ class RegistrationService
         $livreur = Livreur::whereNull('user_id')
             ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->first();
-        if ($livreur) {
-            return ['prenom' => $livreur->prenom, 'nom' => $livreur->nom];
+        if ($prefill = UserInvitationService::identitePrefill($livreur?->prenom, $livreur?->nom)) {
+            return $prefill;
         }
 
         $proprietaire = Proprietaire::whereNull('user_id')
             ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->first();
-        if ($proprietaire) {
-            return ['prenom' => $proprietaire->prenom, 'nom' => $proprietaire->nom];
-        }
 
-        return null;
+        return UserInvitationService::identitePrefill($proprietaire?->prenom, $proprietaire?->nom);
     }
 
     private function linkPersonRecords(User $user, string $phone): void
@@ -250,7 +252,10 @@ class RegistrationService
      * découvre ici qu'il s'agit en réalité de la même personne physique qu'un rôle métier déjà
      * existant (même téléphone) — on rattache le compte à CETTE Personne (celle du rôle,
      * rattachée à son organisation) plutôt que de garder deux fiches distinctes pour le même
-     * humain, et on supprime la fiche provisoire devenue orpheline.
+     * humain, et on supprime la fiche provisoire devenue orpheline. Le prénom/nom saisis à
+     * l'inscription complètent seulement ceux que cette Personne n'a pas encore (fiche
+     * back-office souvent limitée à nom_complet) : sans cela ils seraient perdus avec la
+     * fiche provisoire. Une valeur déjà renseignée n'est jamais écrasée.
      */
     private function rattacherMemePersonne(User $user, Personne $personneDuRole, string $organizationId): void
     {
@@ -258,6 +263,10 @@ class RegistrationService
         $user->update(['organization_id' => $organizationId, 'personne_id' => $personneDuRole->id]);
 
         if ($ancienne->id !== $personneDuRole->id) {
+            $personneDuRole->update([
+                'prenom' => filled($personneDuRole->prenom) ? $personneDuRole->prenom : $ancienne->prenom,
+                'nom' => filled($personneDuRole->nom) ? $personneDuRole->nom : $ancienne->nom,
+            ]);
             $ancienne->delete();
         }
     }

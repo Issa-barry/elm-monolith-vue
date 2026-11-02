@@ -138,7 +138,10 @@
                                                     ]
                                                 },
                                                 "prefill": {
-                                                    "type": "object",
+                                                    "type": [
+                                                        "object",
+                                                        "null"
+                                                    ],
                                                     "properties": {
                                                         "prenom": {
                                                             "type": "string"

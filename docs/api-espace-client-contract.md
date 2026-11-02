@@ -317,6 +317,10 @@ Liste des véhicules du proprietaire (les siens) ou du livreur (ceux de son
 
 - `conducteur` (ajouté le 26/08/2026) : nom du membre d'équipe au rôle
   `chauffeur`, `null` si aucune équipe ou aucun chauffeur assigné.
+- `equipe[].prenom` et `equipe[].nom` (ajoutés le 02/11/2026) : `nom_complet` peut
+  être une désignation provisoire (« Chauffeur-1 ») ; l'espace client affiche
+  prénom et nom quand les deux sont renseignés, sinon `nom_complet`. Le back-office
+  garde sa propre règle.
 - **Pas de statut "Entretien"/maintenance** — seul `is_active` (booléen)
   existe dans le modèle ELM. N'affichez pas un statut de ce type sans colonne
   backend dédiée (elle n'existe pas).
@@ -361,11 +365,17 @@ Accessible au proprietaire **et** au livreur (même périmètre que
 large que le calcul de solde du dashboard (`GET /v1/mobile/dashboard`, §5) qui,
 lui, ignore les dépenses côté livreur.
 
+Un livreur voit aussi les dépenses rattachées **directement à lui**
+(`beneficiaire_type = livreur`, ex. avance sur salaire) : `vehicule` vaut alors
+`null`. Il ne voit jamais celles d'un autre livreur, et un propriétaire ne voit
+pas celles des livreurs. Les dépenses rattachées directement à un propriétaire
+ne sont pas listées ici.
+
 Query params (tous optionnels) :
 
 | Param | Effet |
 |---|---|
-| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles — sinon liste vide) |
+| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles — sinon liste vide) ; exclut les dépenses rattachées directement au livreur |
 | `depense_type_id` | Filtre par type de dépense (catégorie) |
 | `statut` | Valeur de `StatutDepense` : `brouillon`, `soumis`, `valide`, `rejete`, `annule` — **aucun filtre par défaut**, contrairement au calcul du dashboard qui ne compte que `valide` |
 | `date_debut`, `date_fin` | Filtre par `date_depense` — **aucune période par défaut** (liste complète si non fourni) |
@@ -477,6 +487,12 @@ Query params (tous optionnels) :
   (`earnings`) — noms de champs du moteur réel, pas une reformulation.
   `balance` ne descend jamais sous 0 (un solde négatif n'est jamais affiché
   comme dette du propriétaire, comportement du moteur, pas de cet endpoint).
+- `depenses_total` (ajouté le 02/11/2026, hors `summary`, affichage seul) :
+  `frais_depenses_total` + dépenses validées rattachées directement au livreur
+  sur la période (ex. avance sur salaire), sauf filtre `vehicule_id`. C'est le
+  montant de la carte « Dépenses ». **Jamais déduit de `balance`** :
+  `frais_depenses_total` reste réservé aux frais de véhicule d'un propriétaire,
+  et l'espace client Inertia n'expose pas ce champ.
 - `summary_evolution` (ajouté le 27/08/2026, champ **additif** — `summary`
   lui-même ne change pas) : évolution de chacun des 5 champs de `summary`.
   **Le pourcentage compare la période sélectionnée à la période

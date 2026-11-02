@@ -15,10 +15,15 @@ class PaiePaiement extends Model
 
     protected $fillable = [
         'paie_ligne_id',
+        'site_id',
         'montant',
         'date_paiement',
         'mode_paiement',
+        'moyen_paiement_detail',
+        'reference_paiement',
+        'compte_tresorerie_id',
         'note',
+        'created_by',
     ];
 
     protected $casts = [
@@ -55,5 +60,11 @@ class PaiePaiement extends Model
     public function ligne(): BelongsTo
     {
         return $this->belongsTo(PaieLigne::class, 'paie_ligne_id');
+    }
+
+    /** Support d'où l'argent est sorti — null pour un paiement antérieur à l'ADR 0049. */
+    public function compteTresorerie(): BelongsTo
+    {
+        return $this->belongsTo(CompteTresorerie::class, 'compte_tresorerie_id');
     }
 }

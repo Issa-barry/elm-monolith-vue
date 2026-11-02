@@ -385,9 +385,11 @@ class CommissionAjustementTest extends TestCase
 
     public function test_valider_lot_valide_plusieurs_parts_en_une_fois(): void
     {
+        $this->travelTo('2026-06-10 12:00:00');
         ['part' => $part1] = $this->makeCommissionAvecPart(100000);
         ['part' => $part2] = $this->makeCommissionAvecPart(150000);
-        $periode = $this->makePeriode();
+        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
 
         $this->actingAs($this->user)
             ->post(route('comptabilite.periodes.ajustements.valider-lot', $periode), [
