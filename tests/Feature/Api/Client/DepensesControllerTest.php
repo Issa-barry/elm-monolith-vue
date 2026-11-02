@@ -136,6 +136,117 @@ class DepensesControllerTest extends TestCase
             ->assertJsonPath('data.0.montant', 7000);
     }
 
+    private function makeDepensePersonnelle(Organization $org, string $livreurId, array $overrides = []): Depense
+    {
+        return Depense::factory()->create(array_merge([
+            'organization_id' => $org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreurId,
+            'depense_type_id' => $this->depenseType($org, 'avance_salaire', 'Avance sur salaire')->id,
+            'statut' => StatutDepense::VALIDE->value,
+            'montant' => 25000,
+            'date_depense' => now()->toDateString(),
+        ], $overrides));
+    }
+
+    public function test_livreur_sees_depense_attached_directly_to_them(): void
+    {
+        // Régression 02/11 : une avance sur salaire validée au back-office (concerné = livreur,
+        // sans véhicule) n'apparaissait jamais dans son espace.
+        $org = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+        $this->makeDepensePersonnelle($org, $user->livreur->id);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.montant', 25000)
+            ->assertJsonPath('data.0.type_label', 'Avance sur salaire')
+            ->assertJsonPath('data.0.vehicule', null);
+    }
+
+    public function test_livreur_sees_own_depenses_with_those_of_their_teams_vehicule(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+        $vehicule = $this->makeVehicule($org, $this->makeProprietaireUser($org)->proprietaire->id);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $org->id,
+            'vehicule_id' => $vehicule->id,
+            'nom' => 'Equipe Test',
+            'is_active' => true,
+            'taux_commission_proprietaire' => 0,
+        ]);
+        EquipeLivreur::create([
+            'equipe_id' => $equipe->id,
+            'livreur_id' => $user->livreur->id,
+            'role' => 'chauffeur',
+            'ordre' => 1,
+        ]);
+
+        $this->makeDepense($org, $vehicule, ['montant' => 7000]);
+        $this->makeDepensePersonnelle($org, $user->livreur->id);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $response = $this->getJson(route('client.depenses.mine'))->assertOk();
+        $this->assertEqualsCanonicalizing([7000.0, 25000.0], collect($response->json('data'))->pluck('montant')->all());
+
+        $this->getJson(route('client.depenses.mine', ['vehicule_id' => $vehicule->id]))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.montant', 7000);
+    }
+
+    public function test_livreur_filters_apply_to_their_own_depenses(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+        $this->makeDepensePersonnelle($org, $user->livreur->id, ['statut' => StatutDepense::BROUILLON->value]);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine', ['statut' => StatutDepense::VALIDE->value]))
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    public function test_never_shows_another_livreurs_depense(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+        $this->makeDepensePersonnelle($org, $this->makeLivreurUser($org)->livreur->id);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine'))->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_never_shows_a_livreurs_depense_to_a_proprietaire(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $this->makeDepensePersonnelle($org, $this->makeLivreurUser($org)->livreur->id);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine'))->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_livreur_does_not_see_personal_depense_of_another_organization(): void
+    {
+        $org = Organization::factory()->create();
+        $autreOrg = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+        $this->makeDepensePersonnelle($autreOrg, $user->livreur->id);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine'))->assertOk()->assertJsonCount(0, 'data');
+    }
+
     public function test_isolates_another_proprietaires_depenses(): void
     {
         $org = Organization::factory()->create();

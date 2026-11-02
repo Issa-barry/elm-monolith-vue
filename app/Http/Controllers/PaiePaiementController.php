@@ -21,22 +21,13 @@ class PaiePaiementController extends Controller
     {
         $this->authorize('pay', $ligne->periode);
 
-        $data = $request->validate([
-            'montant' => ['required', 'numeric', 'min:0.01'],
-            'date_paiement' => ['required', 'date'],
-            'mode_paiement' => ['required', 'string', 'in:especes,virement,cheque,mobile_money'],
-            'note' => ['nullable', 'string', 'max:500'],
-        ]);
+        $data = $request->validate(
+            PaiementSalaireService::regles() + ['date_paiement' => ['required', 'date']],
+            PaiementSalaireService::messages(),
+        );
 
         try {
-            $paiements->payerLigne(
-                $ligne,
-                $request->user(),
-                (float) $data['montant'],
-                $data['mode_paiement'],
-                $data['date_paiement'],
-                $data['note'] ?? null,
-            );
+            $paiements->payerLigne($ligne, $request->user(), $data);
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['montant' => $e->getMessage()]);
         } catch (HttpExceptionInterface $e) {

@@ -18,10 +18,12 @@ use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -29,6 +31,12 @@ use Inertia\Response;
 
 class CommissionAjustementController extends Controller
 {
+    /**
+     * Borne la durée d'une requête de validerParts() : l'écran envoie une grande sélection en lots
+     * successifs, sous le délai du serveur (même principe que le Monitoring des commissions).
+     */
+    public const VALIDATION_LOT_MAX = 500;
+
     /**
      * Point d'entrée direct "Répartir" depuis Comptabilité > Commissions : le comptable clique
      * sur un véhicule sans jamais passer par le menu Périodes. Contrairement à vehicule()
@@ -460,26 +468,22 @@ class CommissionAjustementController extends Controller
      * propriétaire, pas à une période) pour rester visible dans son historique — même
      * event AuditEvent::VALIDATED que validerLot(), qui l'attache à la période.
      */
-    public function validerParts(Request $request): RedirectResponse
+    public function validerParts(Request $request): RedirectResponse|JsonResponse
     {
         $data = $request->validate([
-            'parts' => ['required', 'array', 'min:1'],
+            'parts' => ['required', 'array', 'min:1', 'max:'.self::VALIDATION_LOT_MAX],
             'parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
             'parts.*.id' => ['required', 'string'],
         ]);
 
-        $resolved = collect($data['parts'])->map(function (array $p) {
-            $part = $this->resolvePart($p['type'], $p['id']);
-            $this->authorizeSurPart($part);
+        $resolved = $this->resolveParts($data['parts']);
+        $resolved->each(fn ($part) => $this->authorizeSurPart($part));
 
-            return $part;
-        });
+        // Avant la validation : un lot renvoyé après une interruption n'ajoute à l'historique que ce
+        // qu'il valide réellement.
+        $partsVente = $resolved->filter(fn ($p) => $p instanceof CommissionEnveloppePart && ! $p->estValidee())->values();
 
-        $partsVente = $resolved->filter(fn ($p) => $p instanceof CommissionEnveloppePart)->values();
-        $partsLogistique = $resolved->reject(fn ($p) => $p instanceof CommissionEnveloppePart)->values();
-
-        $count = CommissionAdjustmentService::validerLot($partsVente, $request->user())
-            + CommissionAdjustmentService::validerLotLogistique($partsLogistique, $request->user());
+        $count = CommissionAdjustmentService::validerLotCombine($resolved, $request->user());
 
         $auditLog = app(AuditLogService::class);
         foreach ($partsVente->groupBy('beneficiaire_id') as $partsDuBeneficiaire) {
@@ -495,24 +499,32 @@ class CommissionAjustementController extends Controller
             ]);
         }
 
+        if ($request->wantsJson()) {
+            return response()->json(['validees' => $count]);
+        }
+
         return back()->with('success', "{$count} commission(s) validée(s).");
     }
 
+    /**
+     * Le droit sur la période ne suffit pas : chaque part reçue doit appartenir à l'organisation de
+     * l'utilisateur et figurer sur cette période. Une seule part refusée refuse tout le lot.
+     */
     public function validerLot(Request $request, PaiementPeriode $periode): RedirectResponse
     {
         $this->authorize('ajuster', $periode);
 
         $data = $request->validate([
-            'parts' => ['required', 'array', 'min:1'],
+            'parts' => ['required', 'array', 'min:1', 'max:'.self::VALIDATION_LOT_MAX],
             'parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
             'parts.*.id' => ['required', 'string'],
         ]);
 
-        $resolved = collect($data['parts'])->map(fn (array $p) => $this->resolvePart($p['type'], $p['id']));
+        $resolved = $this->resolveParts($data['parts']);
+        $resolved->each(fn ($part) => $this->authorizeSurPart($part));
+        abort_unless(CommissionAdjustmentService::figurentSurLaPeriode($resolved, $periode), 403, 'Accès refusé.');
 
-        $count = $resolved->first() instanceof CommissionEnveloppePart
-            ? CommissionAdjustmentService::validerLot($resolved, $request->user())
-            : CommissionAdjustmentService::validerLotLogistique($resolved, $request->user());
+        $count = CommissionAdjustmentService::validerLotCombine($resolved, $request->user());
 
         app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, $request->user(), null, null, [
             'module' => 'ajustements_commissions',
@@ -644,8 +656,7 @@ class CommissionAjustementController extends Controller
             $resultats[] = ['nom' => $nomVehicule, 'count' => $parts->count(), 'erreur' => null];
         }
 
-        CommissionAdjustmentService::validerLot($partsAValider->filter(fn ($p) => $p instanceof CommissionEnveloppePart), auth()->user());
-        CommissionAdjustmentService::validerLotLogistique($partsAValider->reject(fn ($p) => $p instanceof CommissionEnveloppePart), auth()->user());
+        CommissionAdjustmentService::validerLotCombine($partsAValider, auth()->user());
 
         $auditLog = app(AuditLogService::class);
         foreach ($resultats as $resultat) {
@@ -670,6 +681,29 @@ class CommissionAjustementController extends Controller
             'logistique' => CommissionLogistiquePart::findOrFail($partId),
             default => abort(404),
         };
+    }
+
+    /**
+     * Version groupée de resolvePart() pour une sélection : une part introuvable refuse tout le
+     * lot (404), parent préchargé pour le contrôle d'organisation d'authorizeSurPart().
+     *
+     * @param  list<array{type: string, id: string}>  $demandes
+     * @return Collection<int, CommissionLogistiquePart|CommissionEnveloppePart>
+     */
+    private function resolveParts(array $demandes): Collection
+    {
+        $idsParType = collect($demandes)->groupBy('type')->map(fn (Collection $d) => $d->pluck('id')->unique());
+        $idsVente = $idsParType->get('vente', collect());
+        $idsLogistique = $idsParType->get('logistique', collect());
+
+        $parts = collect([
+            ...CommissionEnveloppePart::whereIn('id', $idsVente)->with('enveloppe')->get(),
+            ...CommissionLogistiquePart::whereIn('id', $idsLogistique)->with('commission')->get(),
+        ]);
+
+        abort_if($parts->count() !== $idsVente->count() + $idsLogistique->count(), 404);
+
+        return $parts;
     }
 
     private function authorizeSurPart(CommissionLogistiquePart|CommissionEnveloppePart $part): void

@@ -4,13 +4,11 @@ namespace App\Http\Controllers\Auth;
 
 use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
-use App\Models\Client;
-use App\Models\Livreur;
 use App\Models\Personne;
-use App\Models\Proprietaire;
 use App\Models\UserAuthIdentity;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
+use App\Services\UserInvitationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -26,7 +24,7 @@ class RegisterLookupController extends Controller
      *
      * Dans les deux derniers cas, un OTP est généré et stocké en session.
      */
-    public function __invoke(Request $request, OtpService $otp): JsonResponse
+    public function __invoke(Request $request, OtpService $otp, UserInvitationService $invitations): JsonResponse
     {
         $request->validate([
             'telephone' => ['required', 'string'],
@@ -46,32 +44,7 @@ class RegisterLookupController extends Controller
         }
 
         // 2. Rechercher un préremplissage dans les tables métier
-        $prefill = null;
-        $normalise = Personne::normaliserTelephone($phone);
-
-        // Priorité : client sans user_id
-        $client = Client::where('telephone', $phone)->whereNull('user_id')->first();
-        if ($client) {
-            $prefill = ['prenom' => $client->prenom, 'nom' => $client->nom];
-        }
-
-        // Livreur (pas de user_id dans la table livreurs)
-        if (! $prefill) {
-            $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
-            if ($livreur) {
-                $prefill = ['prenom' => $livreur->prenom, 'nom' => $livreur->nom];
-            }
-        }
-
-        // Propriétaire sans user_id
-        if (! $prefill) {
-            $proprietaire = Proprietaire::whereNull('user_id')
-                ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
-                ->first();
-            if ($proprietaire) {
-                $prefill = ['prenom' => $proprietaire->prenom, 'nom' => $proprietaire->nom];
-            }
-        }
+        $prefill = $invitations->phonePrefill($phone);
 
         if (! $otp->canSend($phone)) {
             return response()->json(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.'], 429);

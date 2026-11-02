@@ -67,11 +67,8 @@ class PeriodeValidationService
         // deux ne doit jamais être ignorée. Sans effet sur une période SALARIE
         // (partsPourPeriode y est structurellement toujours vide, aucune fiche salarié
         // ne référence CommissionEnveloppePart).
-        $nonValidees = CommissionAdjustmentService::partsLogistiqueNonValidees($periode)
-            ->merge(CommissionAdjustmentService::partsNonValidees($periode));
-        if ($nonValidees->isNotEmpty()) {
-            $n = $nonValidees->count();
-
+        $n = CommissionAdjustmentService::nombrePartsNonValidees($periode);
+        if ($n > 0) {
             return "{$n} commission".($n > 1 ? 's' : '').' non validée'.($n > 1 ? 's' : '').". Passez par l'écran d'ajustement avant de valider la période.";
         }
 
@@ -159,9 +156,7 @@ class PeriodeValidationService
             return false;
         }
 
-        $aDesCommissions = CommissionAdjustmentService::partsPourPeriode($periode)->isNotEmpty()
-            || CommissionAdjustmentService::partsLogistiquePourPeriode($periode)->isNotEmpty();
-        if (! $aDesCommissions) {
+        if (! CommissionAdjustmentService::periodeADesCommissions($periode)) {
             return false;
         }
 

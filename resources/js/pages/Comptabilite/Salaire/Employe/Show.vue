@@ -4,9 +4,10 @@ import CommissionDetailHeader from '@/components/commission/CommissionDetailHead
 import CommissionDetailTable from '@/components/commission/CommissionDetailTable.vue';
 import CommissionDetailTabs from '@/components/commission/CommissionDetailTabs.vue';
 import CommissionExpensesTable from '@/components/commission/CommissionExpensesTable.vue';
-import CommissionPaymentDialog from '@/components/commission/CommissionPaymentDialog.vue';
 import CommissionPaymentsTable from '@/components/commission/CommissionPaymentsTable.vue';
 import CommissionSummaryCards from '@/components/commission/CommissionSummaryCards.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
+import { usePaiementSalaire } from '@/composables/usePaiementSalaire';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -17,6 +18,7 @@ import type {
     CommissionPaymentRow,
     CommissionSummary,
     ModePaiementOption,
+    TresorerieFiche,
 } from '@/types/commission';
 import { Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
@@ -31,6 +33,7 @@ const props = defineProps<{
     // Reste des seuls mois validés : le paiement d'un mois non validé est refusé.
     reste_payable: number;
     can_payer: boolean;
+    tresorerie: TresorerieFiche | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -41,7 +44,17 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const activeTab = ref<CommissionDetailTab>('informations');
-const showPaiementDialog = ref(false);
+const paiement = usePaiementSalaire();
+
+function openPaiement() {
+    if (!props.tresorerie) return;
+    paiement.open({
+        url: `/backoffice/comptabilite/salaires/employes/${props.employe.id}/paiements`,
+        beneficiaire_nom: props.employe.nom,
+        reste: props.reste_payable,
+        tresorerie: props.tresorerie,
+    });
+}
 </script>
 
 <template>
@@ -55,7 +68,7 @@ const showPaiementDialog = ref(false);
                 :telephone="employe.telephone"
                 :can-pay="can_payer && reste_payable > 0"
                 :pay-label="`Payer ${formatGNF(reste_payable)}`"
-                @pay="showPaiementDialog = true"
+                @pay="openPaiement"
             />
 
             <CommissionSummaryCards
@@ -139,11 +152,21 @@ const showPaiementDialog = ref(false);
         </div>
     </AppLayout>
 
-    <CommissionPaymentDialog
-        v-model:visible="showPaiementDialog"
-        :beneficiaire-nom="employe.nom"
-        :solde-a-payer="reste_payable"
-        :modes-paiement="modes_paiement"
-        :payment-route="`/backoffice/comptabilite/salaires/employes/${employe.id}/paiements`"
+    <PaymentCard
+        v-if="paiement.salaire.value"
+        v-model:visible="paiement.visible.value"
+        title="Payer un salaire"
+        :info-rows="paiement.infoRows.value"
+        sens="decaissement"
+        solde-label="Reste à payer"
+        :solde="paiement.salaire.value.reste"
+        :moyens="paiement.salaire.value.tresorerie.moyens"
+        :especes-disponibles="
+            paiement.salaire.value.tresorerie.especes_disponibles
+        "
+        :solde-especes="paiement.salaire.value.tresorerie.solde_especes"
+        :processing="paiement.processing.value"
+        :errors="paiement.errors.value"
+        @submit="paiement.submit"
     />
 </template>

@@ -4,13 +4,11 @@ namespace App\Http\Controllers\Api\Public;
 
 use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
-use App\Models\Client;
-use App\Models\Livreur;
 use App\Models\Personne;
-use App\Models\Proprietaire;
 use App\Models\UserAuthIdentity;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
+use App\Services\UserInvitationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -22,7 +20,7 @@ use Illuminate\Http\Request;
  */
 class RegisterLookupController extends Controller
 {
-    public function __invoke(Request $request, OtpService $otp): JsonResponse
+    public function __invoke(Request $request, OtpService $otp, UserInvitationService $invitations): JsonResponse
     {
         $request->validate([
             'telephone' => ['required', 'string'],
@@ -40,29 +38,7 @@ class RegisterLookupController extends Controller
             return response()->json(['status' => 'user_exists']);
         }
 
-        $prefill = null;
-        $normalise = Personne::normaliserTelephone($phone);
-
-        $client = Client::where('telephone', $phone)->whereNull('user_id')->first();
-        if ($client) {
-            $prefill = ['prenom' => $client->prenom, 'nom' => $client->nom];
-        }
-
-        if (! $prefill) {
-            $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
-            if ($livreur) {
-                $prefill = ['prenom' => $livreur->prenom, 'nom' => $livreur->nom];
-            }
-        }
-
-        if (! $prefill) {
-            $proprietaire = Proprietaire::whereNull('user_id')
-                ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
-                ->first();
-            if ($proprietaire) {
-                $prefill = ['prenom' => $proprietaire->prenom, 'nom' => $proprietaire->nom];
-            }
-        }
+        $prefill = $invitations->phonePrefill($phone);
 
         if (! $otp->canSend($phone)) {
             return response()->json(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.'], 429);

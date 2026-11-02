@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Enums\StatutPeriodePaie;
 use App\Models\PaiePeriode;
+use App\Services\Comptabilite\PaiementSalaireService;
+use App\Services\Tresorerie\DecaissementSalaireResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -87,16 +89,28 @@ class PaieController extends Controller
             ->with('success', 'Période de paie créée.');
     }
 
-    public function show(Request $request, PaiePeriode $paie): Response
+    public function show(Request $request, PaiePeriode $paie, PaiementSalaireService $paiementsSalaire, DecaissementSalaireResolver $decaissement): Response
     {
         $this->authorize('view', $paie);
 
         $paie->load([
-            'lignes.employe:id,personne_id,matricule',
+            'lignes.employe:id,organization_id,site_id,personne_id,matricule',
             'lignes.employe.personne',
             'lignes.variables',
             'lignes.paiements',
         ]);
+
+        // Données du dialogue de paiement, seulement pour les salariés que le serveur accepterait de
+        // payer : `tresorerie` à null masque aussi le bouton (règle 3 des standards UI).
+        $payeur = $request->user();
+        $employesPayables = $payeur->can('pay', $paie)
+            ? $paie->lignes
+                ->filter(fn ($l) => $l->employe !== null && $paiementsSalaire->peutPayerEmploye($l->employe, $payeur))
+                ->map(fn ($l) => $l->employe)
+                ->unique('id')
+                ->values()
+            : collect();
+        $tresorerie = $decaissement->optionsPourEmployes($employesPayables, $payeur);
 
         $lignes = $paie->lignes->map(fn ($l) => [
             'id' => $l->id,
@@ -119,6 +133,7 @@ class PaieController extends Controller
             'reste_a_payer' => (float) $l->reste_a_payer,
             'statut' => $l->statut->value,
             'statut_label' => $l->statut->label(),
+            'tresorerie' => $tresorerie[$l->employe_id] ?? null,
             'variables' => $l->variables->map(fn ($v) => [
                 'id' => $v->id,
                 'type' => $v->type->value,

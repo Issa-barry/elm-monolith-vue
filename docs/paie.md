@@ -28,14 +28,18 @@ le lot 5. Son retrait (ADR 0037) reste à décider.
 
 1. **RH** prépare, valide (fige) et transmet la version du mois (*RH → Transmission de paie*).
 2. **Comptabilité → Paiement salaire**, mois choisi : un bandeau indique l'état de la transmission
-   (aucune, version N à reprendre, version N reprise, version plus récente à reprendre).
+   (aucune, version N à reprendre, version N reprise, version plus récente à reprendre). Sans mois
+   choisi (01/11/2026), l'écran ouvre le **mois précédent tant qu'il reste un salarié à payer** dans
+   le périmètre de l'utilisateur (reste à payer > 0, période non clôturée), sinon le mois en cours.
+   Un mois précédent sans paie reprise n'a aucune ligne : l'écran ouvre alors le mois en cours.
 3. **Reprendre la transmission RH** : les lignes de paie sont créées depuis la version validée par
    les RH (disponible dès sa validation, ADR 0047). Avant, l'écran montre l'étape de la paie du mois
    (aucune paie, brouillon provisoire, à recalculer, prête à valider côté RH, validée par les RH,
    reprise, validée par la Comptabilité, payée, clôturée) et le brouillon RH en lecture seule, jamais
    repris ni payé.
 4. **Valider la période** : les salaires deviennent payables ; le mois est figé côté RH.
-5. **Payer** (inchangé).
+5. **Payer** : sortie réelle d'un support de trésorerie, même dialogue que les commissions
+   ([ADR 0049](adr/0049-paiement-salaire-decaissement-reel.md), section *Paiement*).
 
 ## Période de paie
 
@@ -92,6 +96,22 @@ le lot 5. Son retrait (ADR 0037) reste à décider.
   (y compris pour un paiement global réparti sur plusieurs mois).
 - Paiement global d'un salarié : répartition du plus ancien mois au plus récent (FIFO), refusée si
   le montant touche un mois non validé.
+- **Décaissement réel** (01/11/2026, [ADR 0049](adr/0049-paiement-salaire-decaissement-reel.md)) :
+  payer un salaire sort l'argent d'un support de trésorerie, comme une commission (ADR 0009), sur les
+  trois chemins.
+  - **Agence** : celle du salarié ; salarié sans agence → site central de trésorerie (ADR 0017) ; sans
+    site central, paiement impossible. Jamais l'agence de l'utilisateur, jamais un choix manuel.
+  - **Moyens** : espèces = caisse dédiée active **du payeur** sur cette agence ; Mobile Money, virement,
+    chèque = supports actifs de l'agence. Référence obligatoire en Mobile Money.
+  - **Solde** : relu au grand livre, sous verrou du support, juste avant la sortie. Solde insuffisant =
+    refus sans aucun effet. Paiement global : contrôlé sur le montant total.
+  - **Écriture** : la ligne de trésorerie vise le compte du support débité, la pièce est rattachée à
+    l'agence d'où sort l'argent. Annuler un paiement rend l'argent au support (contrepassation).
+  - **Historique** : les paiements antérieurs (sans support) ne sont jamais reclassés.
+  - **Écran** : `PaymentCard` en mode décaissement (*Paiement salaire*, fiche du salarié, ancien écran
+    *Paie*). Titre « Payer un salaire » ; Bénéficiaire, Période, Montant dû, Déjà payé ; bloc « Reste à
+    payer » ; solde disponible du moyen choisi. Le paiement global n'affiche que le bénéficiaire et le
+    reste des mois validés.
 
 ## Dépenses et paie
 
@@ -141,11 +161,11 @@ retenues. La prévision n'écrit rien (elle ne crée plus de période ni de lign
 ## Limites connues (lots suivants)
 
 - Les fiches « salariés » de *Comptabilité → Périodes* existent toujours, non payables.
-- Le paiement n'est rattaché à aucun support de trésorerie (mode de paiement seul) ; lot 6.
 - Pas d'écriture d'engagement (charge / dette) à la validation ; lot 6.
 
 Tests : `ReprisePaieTest` (reprise, lot 5), `SalaireValidationPeriodeTest`,
-`SalairePaiementSecuriteTest`, `SalairePayerLigneTest`, `SalaireEmployeDetailTest`, `PaieTest`,
+`SalaireDecaissementTest` (décaissement réel, ADR 0049), `SalairePaiementSecuriteTest`,
+`SalairePayerLigneTest`, `SalaireEmployeDetailTest`, `PaieTest`,
 `ContratTest`, `DepenseComptabiliteTest` (dépenses → paie), `DepenseTypeTest` (effet sur la paie),
 `TypeRemunerationTest`, `AffectationRemunerationTest`, `TransmissionPaieTest` (référentiel,
 affectations, transmission).

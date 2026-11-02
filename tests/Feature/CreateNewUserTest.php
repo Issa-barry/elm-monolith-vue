@@ -8,6 +8,7 @@ use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Services\OtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -236,6 +237,63 @@ class CreateNewUserTest extends TestCase
         ]);
 
         $this->assertEquals($user->id, $client->fresh()->user_id);
+    }
+
+    public function test_create_user_completes_blank_identity_of_existing_personne(): void
+    {
+        $org = Organization::factory()->create();
+        Feature::for($org)->activate(ModuleFeature::INSCRIPTION);
+        $personne = Personne::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224622000011',
+            'prenom' => null,
+            'nom' => null,
+            'nom_complet' => 'Mamadou D.',
+        ]);
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'personne_id' => $personne->id,
+            'telephone' => '+224622000011',
+            'user_id' => null,
+            'prenom' => null,
+            'nom' => null,
+        ]);
+
+        $this->verifyOtp('+224622000011');
+
+        $user = (new CreateNewUser)->create($this->validInput(['telephone_local' => '622000011']));
+
+        $personne->refresh();
+        $this->assertSame($personne->id, $user->fresh()->personne_id);
+        $this->assertSame('Mamadou', $personne->prenom);
+        $this->assertSame('DIALLO', $personne->nom);
+        $this->assertSame('Mamadou D.', $personne->nom_complet);
+    }
+
+    public function test_create_user_does_not_overwrite_identity_of_existing_personne(): void
+    {
+        $org = Organization::factory()->create();
+        Feature::for($org)->activate(ModuleFeature::INSCRIPTION);
+        $personne = Personne::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224622000012',
+            'prenom' => 'Rayanatou',
+            'nom' => 'SYLLA',
+        ]);
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'personne_id' => $personne->id,
+            'telephone' => '+224622000012',
+            'user_id' => null,
+        ]);
+
+        $this->verifyOtp('+224622000012');
+
+        (new CreateNewUser)->create($this->validInput(['telephone_local' => '622000012']));
+
+        $personne->refresh();
+        $this->assertSame('Rayanatou', $personne->prenom);
+        $this->assertSame('SYLLA', $personne->nom);
     }
 
     public function test_create_user_creates_client_from_livreur(): void

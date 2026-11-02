@@ -51,15 +51,8 @@ class DecaissementFicheResolver
         }
 
         $sites = $fiches->mapWithKeys(fn (PaiementFiche $f) => [$f->id => $this->siteTresorerie($f)]);
-        $options = $this->supports->optionsPourSites($payeur->organization_id, $sites->filter()->unique()->values(), $payeur);
 
-        return $sites->map(fn (?string $siteId) => [
-            'site_id' => $siteId,
-            'moyens' => $siteId ? ($options[$siteId]['moyens'] ?? []) : [],
-            'especes_disponibles' => $siteId ? ($options[$siteId]['especes_disponibles'] ?? false) : false,
-            'solde_especes' => $siteId ? ($options[$siteId]['solde_especes'] ?? null) : null,
-            'message' => $siteId ? null : self::MESSAGE_SANS_SITE_CENTRAL,
-        ])->all();
+        return $this->supports->optionsParCle($payeur->organization_id, $sites, $payeur, self::MESSAGE_SANS_SITE_CENTRAL);
     }
 
     /**

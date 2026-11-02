@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import MontantInput from '@/components/MontantInput.vue';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import { Button } from '@/components/ui/button';
+import { usePaiementSalaire } from '@/composables/usePaiementSalaire';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { TresorerieFiche } from '@/types/commission';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { FilterMatchMode } from '@primevue/core/api';
 import { BadgeCheck, Calculator, Lock, Plus, Trash2, X } from 'lucide-vue-next';
@@ -51,6 +53,8 @@ interface Ligne {
     reste_a_payer: number;
     statut: string;
     statut_label: string;
+    // Moyens de l'agence et caisse du payeur ; null si l'utilisateur ne peut pas payer ce salarié.
+    tresorerie: TresorerieFiche | null;
     variables: Variable[];
     paiements: Paiement[];
 }
@@ -243,45 +247,20 @@ function supprimerVariable(variable: Variable) {
     });
 }
 
-// ── Modal paiement (PaymentDialogCompact) ─────────────────────────────────────
-const showPaiementModal = ref(false);
-const paiementProcessing = ref(false);
-const paiementErrors = ref<Record<string, string>>({});
+// ── Modal paiement (PaymentCard, comme les commissions) ───────────────────────
+const paiement = usePaiementSalaire();
 
 function openPaiementModal(ligne: Ligne) {
-    selectedLigne.value = ligne;
-    paiementErrors.value = {};
-    showPaiementModal.value = true;
-}
-
-function submitPaiement(payload: { montant: number; mode_paiement: string }) {
-    if (!selectedLigne.value) return;
-    paiementProcessing.value = true;
-    paiementErrors.value = {};
-
-    router.post(
-        `/backoffice/paie-lignes/${selectedLigne.value.id}/paiements`,
-        {
-            montant: payload.montant,
-            mode_paiement: payload.mode_paiement,
-            date_paiement: new Date().toISOString().slice(0, 10),
-        },
-        {
-            onSuccess: () => {
-                showPaiementModal.value = false;
-                paiementProcessing.value = false;
-                toast.add({
-                    severity: 'success',
-                    summary: 'Paiement enregistré',
-                    life: 3000,
-                });
-            },
-            onError: (errors) => {
-                paiementErrors.value = errors as Record<string, string>;
-                paiementProcessing.value = false;
-            },
-        },
-    );
+    if (!ligne.tresorerie) return;
+    paiement.open({
+        url: `/backoffice/paie-lignes/${ligne.id}/paiements`,
+        beneficiaire_nom: ligne.employe_nom,
+        periode: props.periode.label,
+        montant_du: ligne.net,
+        deja_paye: ligne.deja_paye,
+        reste: ligne.reste_a_payer,
+        tresorerie: ligne.tresorerie,
+    });
 }
 
 function supprimerPaiement(paiement: Paiement) {
@@ -465,7 +444,11 @@ function fmt(n: number) {
                 <Column header="Payer" style="width: 7rem">
                     <template #body="{ data }">
                         <Button
-                            v-if="can.pay && data.reste_a_payer > 0"
+                            v-if="
+                                can.pay &&
+                                data.tresorerie &&
+                                data.reste_a_payer > 0
+                            "
                             size="sm"
                             @click="openPaiementModal(data)"
                         >
@@ -608,7 +591,11 @@ function fmt(n: number) {
                                     Historique paiements
                                 </h3>
                                 <Button
-                                    v-if="can.pay && data.reste_a_payer > 0"
+                                    v-if="
+                                        can.pay &&
+                                        data.tresorerie &&
+                                        data.reste_a_payer > 0
+                                    "
                                     size="sm"
                                     variant="outline"
                                     @click="openPaiementModal(data)"
@@ -762,15 +749,23 @@ function fmt(n: number) {
             </form>
         </Dialog>
 
-        <!-- Modal paiement — réutilise PaymentDialogCompact comme les commissions -->
-        <PaymentDialogCompact
-            v-if="selectedLigne"
-            v-model:visible="showPaiementModal"
-            :title="`Payer — ${selectedLigne.employe_nom}`"
-            :solde="selectedLigne.reste_a_payer"
-            :processing="paiementProcessing"
-            :errors="paiementErrors"
-            @submit="submitPaiement"
+        <!-- Modal paiement — même PaymentCard que les commissions -->
+        <PaymentCard
+            v-if="paiement.salaire.value"
+            v-model:visible="paiement.visible.value"
+            title="Payer un salaire"
+            :info-rows="paiement.infoRows.value"
+            sens="decaissement"
+            solde-label="Reste à payer"
+            :solde="paiement.salaire.value.reste"
+            :moyens="paiement.salaire.value.tresorerie.moyens"
+            :especes-disponibles="
+                paiement.salaire.value.tresorerie.especes_disponibles
+            "
+            :solde-especes="paiement.salaire.value.tresorerie.solde_especes"
+            :processing="paiement.processing.value"
+            :errors="paiement.errors.value"
+            @submit="paiement.submit"
         />
     </AppLayout>
 </template>

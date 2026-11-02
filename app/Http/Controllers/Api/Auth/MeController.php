@@ -29,6 +29,15 @@ class MeController extends Controller
             'id' => $user->id,
             'prenom' => $user->prenom,
             'nom' => $user->nom,
+            // Prénom + nom s'ils sont tous les deux connus, même si nom_complet contient une
+            // désignation provisoire ("Chauffeur-1") ; sinon le nom complet de la fiche.
+            'nom_affichage' => filled($user->prenom) && filled($user->nom)
+                ? trim("{$user->prenom} {$user->nom}")
+                : ($identity->proprietaire?->nom_affichage
+                    ?: $identity->livreur?->nom_complet
+                    ?: $identity->client?->nom_complet
+                    ?: $user->personne?->nom_complet
+                    ?: null),
             'telephone' => $user->telephone,
             'email' => $user->email,
             // Recast typé requis pour que Scramble documente roles[] comme un tableau de

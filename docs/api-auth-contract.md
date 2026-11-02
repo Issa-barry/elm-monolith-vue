@@ -36,7 +36,7 @@ par ce document.
 
 ```json
 {
-  "id": "...", "prenom": "...", "nom": "...", "telephone": "...", "email": "...",
+  "id": "...", "prenom": "...", "nom": "...", "nom_affichage": "...", "telephone": "...", "email": "...",
   "roles": ["proprietaire"], "is_active": true,
   "qr_payload": "https://.../proprietaires/xxx" ,
   "context": {
@@ -51,6 +51,15 @@ par ce document.
 `context` est résolu via `App\Services\Client\ClientIdentityResolver` — jamais à
 partir d'un paramètre envoyé par le client, toujours depuis l'utilisateur
 authentifié. N'expose ni permissions détaillées, ni attributs Eloquent bruts.
+
+`prenom` et `nom` valent `null` pour une fiche connue par son seul `nom_complet`
+(cf. `docs/identite-client-personne.md`). Pour afficher un nom, utiliser
+`nom_affichage` : prénom et nom s'ils sont **tous les deux** renseignés, même si
+`nom_complet` contient une désignation provisoire (« Chauffeur-1 ») ; sinon nom
+d'affichage du propriétaire, puis nom complet du livreur, du client et de la
+`Personne` (qui se replie sur le seul prénom ou nom connu) ; `null` si aucun n'est
+connu. Cette priorité vaut pour l'espace client uniquement : le back-office garde
+`nom_complet` en premier (`Livreur::libelleAffichage()`).
 
 ### `GET /v1/mobile/profile` (auth:sanctum + rôle `client|proprietaire|livreur`)
 

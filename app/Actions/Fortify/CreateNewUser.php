@@ -196,7 +196,10 @@ class CreateNewUser implements CreatesNewUsers
      * découvre ici qu'il s'agit en réalité de la même personne physique qu'un rôle métier déjà
      * existant (même téléphone) — on rattache le compte à CETTE Personne (celle du rôle,
      * rattachée à son organisation) plutôt que de garder deux fiches distinctes pour le même
-     * humain, et on supprime la fiche provisoire devenue orpheline.
+     * humain, et on supprime la fiche provisoire devenue orpheline. Le prénom/nom saisis à
+     * l'inscription complètent seulement ceux que cette Personne n'a pas encore (fiche
+     * back-office souvent limitée à nom_complet) : sans cela ils seraient perdus avec la
+     * fiche provisoire. Une valeur déjà renseignée n'est jamais écrasée.
      */
     private function rattacherMemePersonne(User $user, Personne $personneDuRole, string $organizationId): void
     {
@@ -204,6 +207,10 @@ class CreateNewUser implements CreatesNewUsers
         $user->update(['organization_id' => $organizationId, 'personne_id' => $personneDuRole->id]);
 
         if ($ancienne->id !== $personneDuRole->id) {
+            $personneDuRole->update([
+                'prenom' => filled($personneDuRole->prenom) ? $personneDuRole->prenom : $ancienne->prenom,
+                'nom' => filled($personneDuRole->nom) ? $personneDuRole->nom : $ancienne->nom,
+            ]);
             $ancienne->delete();
         }
     }

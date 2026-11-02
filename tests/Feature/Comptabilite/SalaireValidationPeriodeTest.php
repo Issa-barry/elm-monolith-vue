@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\Feature\Concerns\HasPaieSalaries;
 use Tests\TestCase;
@@ -21,7 +22,7 @@ use Tests\TestCase;
  */
 class SalaireValidationPeriodeTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, HasPaieSalaries, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, HasPaieSalaries, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -38,6 +39,7 @@ class SalaireValidationPeriodeTest extends TestCase
     public function test_valider_une_periode_brouillon_calculee_la_rend_payable(): void
     {
         $employe = $this->creerSalarie($this->user->sites()->first());
+        $this->equiperPayeurEspeces($this->user, $employe->site_id);
         $periode = $this->creerPeriodeCalculee(1, 2025, StatutPeriodePaie::BROUILLON);
 
         $this->actingAs($this->user)->valider($periode)->assertRedirect()->assertSessionHasNoErrors();

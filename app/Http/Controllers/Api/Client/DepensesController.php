@@ -21,7 +21,8 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  * VehiculeFraisController, dont c'est la version consolidée) — volontairement
  * PLUS LARGE que ClientEarningsService::fraisDepensesParVehicule() (qui, lui,
  * est proprietaire-only car il nourrit un calcul de solde à payer, pas une
- * simple consultation).
+ * simple consultation). Un livreur voit aussi les dépenses rattachées directement
+ * à lui (ex. avance sur salaire, `vehicule` vaut alors null), sauf filtre véhicule.
  */
 class DepensesController extends Controller
 {
@@ -35,6 +36,7 @@ class DepensesController extends Controller
         /** @var User $user */
         $user = $request->user();
         $identity = $this->identityResolver->resolve($user);
+        $livreur = $identity->livreur;
 
         $filters = $request->filters();
 
@@ -48,13 +50,19 @@ class DepensesController extends Controller
                 'depenseType:id,libelle,code',
                 'vehiculeBeneficiaire:id,nom_vehicule,immatriculation',
             ])
-            ->where('beneficiaire_type', 'vehicule')
             ->where('organization_id', $identity->organizationId)
-            ->when(
-                $filters['vehicule_id'] !== null,
-                fn ($q) => $q->whereIn('beneficiaire_id', array_intersect($vehiculeIds, [$filters['vehicule_id']])),
-                fn ($q) => $q->whereIn('beneficiaire_id', $vehiculeIds)
-            )
+            ->where(function ($q) use ($filters, $vehiculeIds, $livreur) {
+                $q->where('beneficiaire_type', 'vehicule')
+                    ->when(
+                        $filters['vehicule_id'] !== null,
+                        fn ($sq) => $sq->whereIn('beneficiaire_id', array_intersect($vehiculeIds, [$filters['vehicule_id']])),
+                        fn ($sq) => $sq->whereIn('beneficiaire_id', $vehiculeIds)
+                    );
+
+                if ($livreur !== null && $filters['vehicule_id'] === null) {
+                    $q->orWhere(fn ($sq) => $sq->where('beneficiaire_type', 'livreur')->where('beneficiaire_id', $livreur->id));
+                }
+            })
             ->when($filters['depense_type_id'], fn ($q) => $q->where('depense_type_id', $filters['depense_type_id']))
             ->when($filters['statut'], fn ($q) => $q->where('statut', $filters['statut']))
             ->when($filters['date_debut'], fn ($q) => $q->whereDate('date_depense', '>=', $filters['date_debut']))
