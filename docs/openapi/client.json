@@ -486,46 +486,21 @@
                                                     ]
                                                 },
                                                 "prefill": {
-                                                    "anyOf": [
-                                                        {
-                                                            "type": "null"
+                                                    "type": [
+                                                        "object",
+                                                        "null"
+                                                    ],
+                                                    "properties": {
+                                                        "prenom": {
+                                                            "type": "string"
                                                         },
-                                                        {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "prenom": {
-                                                                    "type": "string"
-                                                                },
-                                                                "nom": {
-                                                                    "type": "string"
-                                                                }
-                                                            },
-                                                            "required": [
-                                                                "prenom",
-                                                                "nom"
-                                                            ]
-                                                        },
-                                                        {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "prenom": {
-                                                                    "type": [
-                                                                        "string",
-                                                                        "null"
-                                                                    ]
-                                                                },
-                                                                "nom": {
-                                                                    "type": [
-                                                                        "string",
-                                                                        "null"
-                                                                    ]
-                                                                }
-                                                            },
-                                                            "required": [
-                                                                "prenom",
-                                                                "nom"
-                                                            ]
+                                                        "nom": {
+                                                            "type": "string"
                                                         }
+                                                    },
+                                                    "required": [
+                                                        "prenom",
+                                                        "nom"
                                                     ]
                                                 }
                                             },
@@ -651,7 +626,10 @@
                                                     ]
                                                 },
                                                 "prefill": {
-                                                    "type": "object",
+                                                    "type": [
+                                                        "object",
+                                                        "null"
+                                                    ],
                                                     "properties": {
                                                         "prenom": {
                                                             "type": "string"

@@ -13,6 +13,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\TestCase;
 
@@ -27,11 +28,13 @@ use Tests\TestCase;
  */
 class SalairePayerLigneTest extends TestCase
 {
-    use PrepareLaPaieDepuisLesRh, RefreshDatabase;
+    use HasCaissesDediees, PrepareLaPaieDepuisLesRh, RefreshDatabase;
 
     private Organization $org;
 
     private Site $site;
+
+    private User $user;
 
     protected function setUp(): void
     {
@@ -52,7 +55,7 @@ class SalairePayerLigneTest extends TestCase
         $user->givePermissionTo($permissions);
         $user->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
 
-        return $user;
+        return $this->user = $user;
     }
 
     private function makeLigne(StatutPeriodePaie $statutPeriode): PaieLigne
@@ -69,6 +72,7 @@ class SalairePayerLigneTest extends TestCase
             'personne_id' => $personne->id,
             'matricule' => '000001',
             'type_employe' => 'interne',
+            'site_id' => $this->site->id,
             'statut' => 'actif',
         ]);
 
@@ -93,6 +97,7 @@ class SalairePayerLigneTest extends TestCase
     {
         $ligne = $this->makeLigne(StatutPeriodePaie::VALIDE_RH);
         $user = $this->makeUser(['comptabilite.payer']); // pas de rh-paie.pay
+        $this->equiperPayeurEspeces($user, $this->site->id);
 
         $this->actingAs($user)
             ->post(route('comptabilite.salaires.payer', $ligne), [
@@ -158,6 +163,7 @@ class SalairePayerLigneTest extends TestCase
     {
         $ligne = $this->makeLigne(StatutPeriodePaie::VALIDE_RH);
         $user = $this->makeUser(['comptabilite.payer', 'rh-paie.pay']);
+        $this->equiperPayeurEspeces($user, $this->site->id);
 
         $this->actingAs($user)
             ->post(route('comptabilite.salaires.payer', $ligne), [

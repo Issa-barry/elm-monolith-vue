@@ -119,6 +119,7 @@ class ComptabilisationBloquanteTest extends TestCase
 
         $periode = $this->preparerPaieDepuisRh($this->org, 8, 2026, StatutPeriodePaie::VALIDE_RH);
         $ligne = PaieLigne::where('paie_periode_id', $periode->id)->where('employe_id', $employe->id)->firstOrFail();
+        $this->equiperPayeurEspeces($this->user, $site->id);
 
         $this->casserMapping('paiement_salaire');
 

@@ -7,6 +7,7 @@ use App\Mail\EmailVerificationMail;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -103,6 +104,101 @@ class ApiRegistrationTest extends TestCase
             ->assertJson([
                 'status' => 'prefill_available',
                 'prefill' => ['prenom' => 'Alpha', 'nom' => 'BARRY'],
+            ]);
+    }
+
+    public function test_check_phone_prefills_client_identity_from_its_personne(): void
+    {
+        $org = Organization::factory()->create();
+        $personne = Personne::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000204',
+            'prenom' => 'Rayanatou',
+            'nom' => 'SYLLA',
+        ]);
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'personne_id' => $personne->id,
+            'telephone' => '+224620000204',
+            'user_id' => null,
+            'prenom' => null,
+            'nom' => null,
+        ]);
+
+        $this->postJson(route('api.auth.register.check-phone'), ['telephone' => '+224620000204'])
+            ->assertOk()
+            ->assertJson([
+                'status' => 'prefill_available',
+                'prefill' => ['prenom' => 'Rayanatou', 'nom' => 'SYLLA'],
+            ]);
+    }
+
+    public function test_check_phone_does_not_prefill_client_known_only_by_nom_complet(): void
+    {
+        // Régression prod 01/11 : un client créé au back-office n'a que nom_complet. Le
+        // prefill {prenom: null, nom: null} verrouillait des champs vides à l'inscription.
+        $org = Organization::factory()->create();
+        $personne = Personne::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000205',
+            'prenom' => null,
+            'nom' => null,
+            'nom_complet' => 'Moussa Sidibe',
+        ]);
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'personne_id' => $personne->id,
+            'telephone' => '+224620000205',
+            'user_id' => null,
+            'prenom' => null,
+            'nom' => null,
+            'nom_complet' => 'Moussa Sidibe',
+        ]);
+
+        $this->postJson(route('api.auth.register.check-phone'), ['telephone' => '+224620000205'])
+            ->assertOk()
+            ->assertExactJson(['status' => 'not_found', 'prefill' => null]);
+    }
+
+    public function test_check_phone_does_not_prefill_partial_identity(): void
+    {
+        $org = Organization::factory()->create();
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000206',
+            'user_id' => null,
+            'prenom' => '  ',
+            'nom' => 'SOCIETE XYZ',
+        ]);
+
+        $this->postJson(route('api.auth.register.check-phone'), ['telephone' => '+224620000206'])
+            ->assertOk()
+            ->assertExactJson(['status' => 'not_found', 'prefill' => null]);
+    }
+
+    public function test_check_phone_falls_back_to_livreur_when_client_identity_is_incomplete(): void
+    {
+        $org = Organization::factory()->create();
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000207',
+            'user_id' => null,
+            'prenom' => null,
+            'nom' => null,
+        ]);
+        Livreur::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000207',
+            'user_id' => null,
+            'prenom' => 'Ibrahima',
+            'nom' => 'CAMARA',
+        ]);
+
+        $this->postJson(route('api.auth.register.check-phone'), ['telephone' => '+224620000207'])
+            ->assertOk()
+            ->assertJson([
+                'status' => 'prefill_available',
+                'prefill' => ['prenom' => 'Ibrahima', 'nom' => 'CAMARA'],
             ]);
     }
 
@@ -330,6 +426,61 @@ class ApiRegistrationTest extends TestCase
 
         $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000100'))->first();
         $this->assertEquals($user->id, $client->fresh()->user_id);
+    }
+
+    public function test_register_completes_blank_identity_of_existing_personne(): void
+    {
+        Mail::fake();
+        $org = Organization::factory()->create();
+        $personne = Personne::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000100',
+            'prenom' => null,
+            'nom' => null,
+            'nom_complet' => 'Mamadou D.',
+        ]);
+        $client = Client::factory()->create([
+            'organization_id' => $org->id,
+            'personne_id' => $personne->id,
+            'telephone' => '+224620000100',
+            'user_id' => null,
+            'prenom' => null,
+            'nom' => null,
+            'nom_complet' => 'Mamadou D.',
+        ]);
+
+        $this->postJson(route('api.auth.register.store'), $this->validPayload())->assertCreated();
+
+        $personne->refresh();
+        $this->assertSame('Mamadou', $personne->prenom);
+        $this->assertSame('DIALLO', $personne->nom);
+        $this->assertSame('Mamadou D.', $personne->nom_complet);
+        $this->assertSame($personne->id, $client->fresh()->user->personne_id);
+        $this->assertSame('Mamadou D.', $client->fresh()->nom_complet);
+    }
+
+    public function test_register_does_not_overwrite_identity_of_existing_personne(): void
+    {
+        Mail::fake();
+        $org = Organization::factory()->create();
+        $personne = Personne::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000100',
+            'prenom' => 'Rayanatou',
+            'nom' => 'SYLLA',
+        ]);
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'personne_id' => $personne->id,
+            'telephone' => '+224620000100',
+            'user_id' => null,
+        ]);
+
+        $this->postJson(route('api.auth.register.store'), $this->validPayload())->assertCreated();
+
+        $personne->refresh();
+        $this->assertSame('Rayanatou', $personne->prenom);
+        $this->assertSame('SYLLA', $personne->nom);
     }
 
     public function test_register_links_livreur_and_assigns_role(): void

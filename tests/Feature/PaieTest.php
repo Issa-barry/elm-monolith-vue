@@ -18,12 +18,13 @@ use App\Services\PaieCalculService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\TestCase;
 
 class PaieTest extends TestCase
 {
-    use PrepareLaPaieDepuisLesRh, RefreshDatabase;
+    use HasCaissesDediees, PrepareLaPaieDepuisLesRh, RefreshDatabase;
 
     private Organization $org;
 
@@ -77,6 +78,7 @@ class PaieTest extends TestCase
             'personne_id' => $personne->id,
             'matricule' => str_pad((string) $seq, 6, '0', STR_PAD_LEFT),
             'type_employe' => 'interne',
+            'site_id' => $this->site->id,
             'statut' => 'actif',
         ]);
 
@@ -268,6 +270,7 @@ class PaieTest extends TestCase
 
     public function test_paiement_partiel_met_a_jour_reste(): void
     {
+        $this->equiperPayeurEspeces($this->user, $this->site->id);
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
@@ -291,6 +294,7 @@ class PaieTest extends TestCase
 
     public function test_paiement_complet_marque_paye(): void
     {
+        $this->equiperPayeurEspeces($this->user, $this->site->id);
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
@@ -396,6 +400,7 @@ class PaieTest extends TestCase
 
     public function test_destroy_paiement_annule_et_recalcule_le_reste(): void
     {
+        $this->equiperPayeurEspeces($this->user, $this->site->id);
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
@@ -425,6 +430,7 @@ class PaieTest extends TestCase
 
     public function test_destroy_paiement_retourne_403_sans_permission(): void
     {
+        $this->equiperPayeurEspeces($this->user, $this->site->id);
         $periode = $this->makePeriode(['statut' => StatutPeriodePaie::VALIDE_RH]);
         [$employe, $contrat] = $this->makeEmployeAvecContrat('2025-01-01', null, 1_000_000);
 
@@ -460,6 +466,7 @@ class PaieTest extends TestCase
         Permission::firstOrCreate(['name' => 'comptabilite.payer', 'guard_name' => 'web']);
         $autreUser->givePermissionTo(['rh-paie.read', 'rh-paie.pay', 'comptabilite.payer']);
         $autreUser->sites()->attach($autreSite->id, ['role' => 'employe', 'is_default' => true]);
+        $this->equiperPayeurEspeces($autreUser, $autreSite->id);
 
         $periode = PaiePeriode::create([
             'organization_id' => $autreOrg->id,
@@ -478,6 +485,7 @@ class PaieTest extends TestCase
             'personne_id' => $personne->id,
             'matricule' => '999998',
             'type_employe' => 'interne',
+            'site_id' => $autreSite->id,
             'statut' => 'actif',
         ]);
         Contrat::create([

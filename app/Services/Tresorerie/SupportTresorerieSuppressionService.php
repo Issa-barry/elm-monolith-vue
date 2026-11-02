@@ -12,6 +12,7 @@ use App\Models\EncaissementVente;
 use App\Models\MouvementFonds;
 use App\Models\PaiementFichePaiement;
 use App\Models\PaiementFournisseur;
+use App\Models\PaiePaiement;
 use App\Models\RemboursementVente;
 use App\Models\SoldeOuvertureTresorerie;
 use App\Models\TiersComptable;
@@ -95,6 +96,7 @@ class SupportTresorerieSuppressionService
                 ->exists()
             || EncaissementVente::where('compte_tresorerie_id', $support->id)->exists()
             || PaiementFichePaiement::where('compte_tresorerie_id', $support->id)->exists()
+            || PaiePaiement::where('compte_tresorerie_id', $support->id)->exists()
             || PaiementFournisseur::where('compte_tresorerie_id', $support->id)->exists()
             || RemboursementVente::where('compte_tresorerie_id', $support->id)->exists();
     }

@@ -44,18 +44,33 @@ class PaieComptabilisationService
             return null;
         }
 
+        // Depuis l'ADR 0049, la sortie vise le compte du support réellement débité (caisse dédiée du
+        // payeur, wallet, banque) : son solde baisse. Un paiement antérieur, sans support, garde la
+        // résolution par compta_mappings — jamais reclassé.
+        $support = $paiement->compteTresorerie;
+        $ligneTresorerie = $support
+            ? [
+                'compte_comptable_id' => $support->compte_comptable_id,
+                'journal_role' => 'tresorerie',
+                'moyen_paiement' => $paiement->mode_paiement,
+                'sens' => 'credit',
+                'montant' => (float) $paiement->montant,
+                'libelle' => 'Paiement salaire — '.($employe->nom_complet ?? '—')." — {$support->libelle}",
+            ]
+            : [
+                'role' => 'tresorerie',
+                'sens' => 'credit',
+                'montant' => (float) $paiement->montant,
+                'moyen_paiement' => $paiement->mode_paiement,
+            ];
+
         $lignes = [
             [
                 'role' => 'charge_salaire',
                 'sens' => 'debit',
                 'montant' => (float) $paiement->montant,
             ],
-            [
-                'role' => 'tresorerie',
-                'sens' => 'credit',
-                'montant' => (float) $paiement->montant,
-                'moyen_paiement' => $paiement->mode_paiement,
-            ],
+            $ligneTresorerie,
         ];
 
         return $this->ecritures->comptabiliser(
@@ -65,7 +80,10 @@ class PaieComptabilisationService
             dateComptable: Carbon::parse($paiement->date_paiement ?? now()),
             libelle: 'Paiement salaire — '.($employe->nom_complet ?? '—'),
             lignes: $lignes,
-            siteId: $employe->site_id,
+            // Agence d'où sort l'argent (site central pour un salarié sans agence) ; agence du salarié
+            // pour un paiement antérieur.
+            siteId: $paiement->site_id ?? $employe->site_id,
+            createdBy: $paiement->created_by,
         );
     }
 }

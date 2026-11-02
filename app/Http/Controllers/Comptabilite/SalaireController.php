@@ -21,6 +21,7 @@ use App\Services\Comptabilite\ReprisePaieService;
 use App\Services\Comptabilite\ValidationPeriodePaieService;
 use App\Services\PaieCalculService;
 use App\Services\SiteScopeService;
+use App\Services\Tresorerie\DecaissementSalaireResolver;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
@@ -59,6 +60,7 @@ class SalaireController extends Controller
         private PaiementSalaireService $paiementSalaire,
         private ReprisePaieService $reprise,
         private SourceDonneesPaie $sourcePaie,
+        private DecaissementSalaireResolver $decaissement,
     ) {}
 
     public function index(Request $request): Response
@@ -67,8 +69,11 @@ class SalaireController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filtreMois = (int) $request->input('mois', now()->month);
-        $filtreAnnee = (int) $request->input('annee', now()->year);
+        [$moisParDefaut, $anneeParDefaut] = $request->hasAny(['mois', 'annee'])
+            ? [now()->month, now()->year]
+            : $this->moisParDefaut($user, $orgId);
+        $filtreMois = (int) $request->input('mois', $moisParDefaut);
+        $filtreAnnee = (int) $request->input('annee', $anneeParDefaut);
         $filtreStatut = (string) $request->input('statut', '');
         $search = trim((string) $request->input('search', ''));
 
@@ -97,6 +102,21 @@ class SalaireController extends Controller
                 );
             }
 
+            // Données du dialogue de paiement (moyens de l'agence, caisse du payeur, soldes), seulement
+            // pour les lignes que l'utilisateur peut réellement payer.
+            $tresorerie = $this->decaissement->optionsPourEmployes(
+                $peutPayerPeriode
+                    ? $allLignes
+                        ->filter(fn ($l) => (float) $l->reste_a_payer > 0
+                            && $l->employe !== null
+                            && $this->paiementSalaire->peutPayerEmploye($l->employe, $user))
+                        ->map(fn ($l) => $l->employe)
+                        ->unique('id')
+                        ->values()
+                    : collect(),
+                $user,
+            );
+
             $lignes = $allLignes->map(fn ($l) => [
                 'id' => $l->id,
                 'employe_id' => $l->employe_id,
@@ -118,6 +138,7 @@ class SalaireController extends Controller
                 'peut_payer' => $peutPayerPeriode
                     && $l->employe !== null
                     && $this->paiementSalaire->peutPayerEmploye($l->employe, $user),
+                'tresorerie' => $tresorerie[$l->employe_id] ?? null,
                 'elements' => $elementsParSalarie->get($l->employe_id, []),
             ])->values();
         }
@@ -185,22 +206,13 @@ class SalaireController extends Controller
 
         $this->authorize('pay', $ligne->periode);
 
-        $data = $request->validate([
-            'montant' => ['required', 'numeric', 'min:0.01'],
-            'date_paiement' => ['required', 'date'],
-            'mode_paiement' => ['required', 'string', 'in:especes,virement,cheque,mobile_money'],
-            'note' => ['nullable', 'string', 'max:500'],
-        ]);
+        $data = $request->validate(
+            PaiementSalaireService::regles() + ['date_paiement' => ['required', 'date']],
+            PaiementSalaireService::messages(),
+        );
 
         try {
-            $this->paiementSalaire->payerLigne(
-                $ligne,
-                auth()->user(),
-                (float) $data['montant'],
-                $data['mode_paiement'],
-                $data['date_paiement'],
-                $data['note'] ?? null,
-            );
+            $this->paiementSalaire->payerLigne($ligne, auth()->user(), $data);
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['montant' => $e->getMessage()]);
         } catch (HttpExceptionInterface $e) {
@@ -312,6 +324,9 @@ class SalaireController extends Controller
             'modes_paiement' => self::MODES_PAIEMENT,
             'reste_payable' => $restePayable,
             'can_payer' => $canPayer,
+            'tresorerie' => $canPayer
+                ? $this->decaissement->optionsPourEmployes(collect([$employe]), auth()->user())[$employe->id]
+                : null,
         ]);
     }
 
@@ -322,21 +337,10 @@ class SalaireController extends Controller
         $orgId = auth()->user()->organization_id;
         $employe = Employe::where('organization_id', $orgId)->findOrFail($employeId);
 
-        $data = $request->validate([
-            'montant' => ['required', 'numeric', 'min:0.01'],
-            'mode_paiement' => ['required', 'string', 'in:especes,virement,cheque,mobile_money'],
-            'note' => ['nullable', 'string', 'max:500'],
-        ]);
+        $data = $request->validate(PaiementSalaireService::regles(), PaiementSalaireService::messages());
 
         try {
-            $this->paiementSalaire->payerEmploye(
-                $employe,
-                auth()->user(),
-                (float) $data['montant'],
-                $data['mode_paiement'],
-                now()->toDateString(),
-                $data['note'] ?? null,
-            );
+            $this->paiementSalaire->payerEmploye($employe, auth()->user(), [...$data, 'date_paiement' => now()->toDateString()]);
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['montant' => $e->getMessage()]);
         } catch (HttpExceptionInterface $e) {
@@ -486,6 +490,27 @@ class SalaireController extends Controller
      * Lignes d'une période visibles par l'utilisateur : périmètre de consultation des agences
      * (SiteScopeService), puis filtres de l'écran. Sans agence rattachée ni vision 360°, aucune ligne.
      */
+    /**
+     * Mois affiché sans choix de l'utilisateur (docs/paie.md) : le mois précédent tant qu'il reste un
+     * salarié à payer dans son périmètre, sinon le mois en cours. Ne crée aucune période.
+     *
+     * @return array{int, int}
+     */
+    private function moisParDefaut(User $user, string $orgId): array
+    {
+        $precedent = now()->startOfMonth()->subMonth();
+        $periode = PaiePeriode::where('organization_id', $orgId)
+            ->where('mois', $precedent->month)
+            ->where('annee', $precedent->year)
+            ->first();
+
+        $resteAPayer = $periode !== null
+            && ! $periode->statut->estCloture()
+            && $this->lignesDuPerimetre($periode, $user, [], '')->where('reste_a_payer', '>', 0)->exists();
+
+        return $resteAPayer ? [$precedent->month, $precedent->year] : [now()->month, now()->year];
+    }
+
     private function lignesDuPerimetre(PaiePeriode $periode, User $user, array $filtreSiteIds, string $filtreStatut): Builder
     {
         return PaieLigne::with(['employe.site', 'contrat'])

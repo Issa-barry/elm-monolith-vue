@@ -3,7 +3,7 @@ import AuditDrawer from '@/components/AuditDrawer.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
-import PaymentDialogCompact from '@/components/PaymentDialogCompact.vue';
+import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,8 +22,10 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
+import { usePaiementSalaire } from '@/composables/usePaiementSalaire';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { TresorerieFiche } from '@/types/commission';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     CircleCheck,
@@ -80,6 +82,8 @@ interface LignePaie {
     statut: string;
     statut_label: string;
     peut_payer: boolean;
+    // Moyens de l'agence et caisse du payeur ; null si l'utilisateur ne peut pas payer cette ligne.
+    tresorerie: TresorerieFiche | null;
     elements: ElementTransmis[];
 }
 
@@ -299,10 +303,7 @@ function exportPdf() {
     );
 }
 
-const showPaiementDialog = ref(false);
-const selectedLigne = ref<LignePaie | null>(null);
-const paiementProcessing = ref(false);
-const paiementErrors = ref<Record<string, string>>({});
+const paiement = usePaiementSalaire();
 
 const showAudit = ref(false);
 const auditLigneId = ref('');
@@ -315,33 +316,16 @@ function openAudit(l: LignePaie) {
 }
 
 function openPaiement(ligne: LignePaie) {
-    selectedLigne.value = ligne;
-    showPaiementDialog.value = true;
-}
-
-function handlePaiementSubmit(payload: {
-    montant: number;
-    mode_paiement: string;
-}) {
-    if (!selectedLigne.value) return;
-    paiementProcessing.value = true;
-    paiementErrors.value = {};
-    router.post(
-        `/backoffice/comptabilite/salaires/${selectedLigne.value.id}/payer`,
-        { ...payload, date_paiement: new Date().toISOString().slice(0, 10) },
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                showPaiementDialog.value = false;
-            },
-            onError: (e) => {
-                paiementErrors.value = e as Record<string, string>;
-            },
-            onFinish: () => {
-                paiementProcessing.value = false;
-            },
-        },
-    );
+    if (!ligne.tresorerie) return;
+    paiement.open({
+        url: `/backoffice/comptabilite/salaires/${ligne.id}/payer`,
+        beneficiaire_nom: ligne.employe_nom,
+        periode: props.periode?.label,
+        montant_du: ligne.net,
+        deja_paye: ligne.deja_paye,
+        reste: ligne.reste_a_payer,
+        tresorerie: ligne.tresorerie,
+    });
 }
 
 function statutDotClass(s: string) {
@@ -802,6 +786,7 @@ const periodeCourante = computed(
                                                 v-if="
                                                     can_payer &&
                                                     l.peut_payer &&
+                                                    l.tresorerie &&
                                                     l.reste_a_payer > 0
                                                 "
                                             >
@@ -847,15 +832,22 @@ const periodeCourante = computed(
         </div>
     </AppLayout>
 
-    <PaymentDialogCompact
-        v-model:visible="showPaiementDialog"
-        :title="
-            selectedLigne ? `Payer — ${selectedLigne.employe_nom}` : 'Payer'
+    <PaymentCard
+        v-if="paiement.salaire.value"
+        v-model:visible="paiement.visible.value"
+        title="Payer un salaire"
+        :info-rows="paiement.infoRows.value"
+        sens="decaissement"
+        solde-label="Reste à payer"
+        :solde="paiement.salaire.value.reste"
+        :moyens="paiement.salaire.value.tresorerie.moyens"
+        :especes-disponibles="
+            paiement.salaire.value.tresorerie.especes_disponibles
         "
-        :solde="selectedLigne?.reste_a_payer ?? 0"
-        :processing="paiementProcessing"
-        :errors="paiementErrors"
-        @submit="handlePaiementSubmit"
+        :solde-especes="paiement.salaire.value.tresorerie.solde_especes"
+        :processing="paiement.processing.value"
+        :errors="paiement.errors.value"
+        @submit="paiement.submit"
     />
 
     <Dialog

@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\Feature\Concerns\HasPaieSalaries;
 use Tests\TestCase;
@@ -23,7 +24,7 @@ use Tests\TestCase;
  */
 class SalairePaiementSecuriteTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, HasPaieSalaries, RefreshDatabase;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, HasPaieSalaries, RefreshDatabase;
 
     private Site $agenceA;
 
@@ -70,6 +71,7 @@ class SalairePaiementSecuriteTest extends TestCase
         $employe = $this->creerSalarie($this->agenceA);
         $periode = $this->creerPeriodeCalculee(1, 2025, StatutPeriodePaie::VALIDE_RH);
         $ligne = $this->ligneDe($periode, $employe);
+        $this->equiperPayeurEspeces($this->user, $this->agenceA->id);
         CompteMapping::where('organization_id', $this->org->id)->where('evenement', 'paiement_salaire')->delete();
 
         $this->actingAs($this->user)->payerLigne($ligne->id, 400_000)->assertSessionHasErrors('comptabilisation');
@@ -83,6 +85,7 @@ class SalairePaiementSecuriteTest extends TestCase
         $employe = $this->creerSalarie($this->agenceA);
         $janvier = $this->creerPeriodeCalculee(1, 2025, StatutPeriodePaie::VALIDE_RH);
         $fevrier = $this->creerPeriodeCalculee(2, 2025, StatutPeriodePaie::VALIDE_RH);
+        $this->equiperPayeurEspeces($this->user, $this->agenceA->id);
         CompteMapping::where('organization_id', $this->org->id)->where('evenement', 'paiement_salaire')->delete();
 
         $this->actingAs($this->user)
@@ -142,6 +145,7 @@ class SalairePaiementSecuriteTest extends TestCase
         $salarieB = $this->creerSalarie($this->agenceB);
         $periode = $this->creerPeriodeCalculee(1, 2025, StatutPeriodePaie::VALIDE_RH);
         $comptable = $this->creerComptable([$this->agenceA]);
+        $this->equiperPayeurEspeces($comptable, $this->agenceA->id);
 
         $this->actingAs($comptable)->payerLigne($this->ligneDe($periode, $salarieB)->id, 100_000)->assertForbidden();
         $this->actingAs($comptable)

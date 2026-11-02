@@ -128,6 +128,22 @@ class RegisterLookupTest extends TestCase
 
     // ─── Statut not_found ─────────────────────────────────────────────────────
 
+    public function test_lookup_does_not_prefill_client_with_incomplete_identity(): void
+    {
+        $org = Organization::factory()->create();
+        Client::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000007',
+            'user_id' => null,
+            'prenom' => null,
+            'nom' => null,
+        ]);
+
+        $this->postJson(route('register.lookup'), ['telephone' => '+224620000007'])
+            ->assertOk()
+            ->assertJson(['status' => 'not_found', 'prefill' => null]);
+    }
+
     public function test_lookup_returns_not_found_for_unknown_phone(): void
     {
         $this->postJson(route('register.lookup'), ['telephone' => '+224699999999'])

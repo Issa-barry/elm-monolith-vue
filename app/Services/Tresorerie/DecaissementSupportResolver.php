@@ -6,12 +6,14 @@ use App\Enums\ModePaiement;
 use App\Models\CompteTresorerie;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Décaissement réel depuis une AGENCE (ADR 0009) : d'où peut sortir l'argent, et depuis quel
- * support. Partagé par le paiement des fiches de commission (DecaissementFicheResolver) et le
- * paiement des factures fournisseurs (ADR 0022) — une seule règle, jamais une copie :
+ * support. Partagé par le paiement des fiches de commission (DecaissementFicheResolver), des salaires
+ * (DecaissementSalaireResolver, ADR 0049) et des factures fournisseurs (ADR 0022) — une seule règle,
+ * jamais une copie :
  * - moyens hors espèces = MoyensEncaissementResolver de l'agence ;
  * - espèces = caisse dédiée active DU PAYEUR sur cette agence (CaisseAgentResolver).
  */
@@ -54,6 +56,26 @@ class DecaissementSupportResolver
                 'solde_especes' => $caisse ? $this->disponibilite->soldePourSupport($caisse, now()) : null,
             ]];
         })->all();
+    }
+
+    /**
+     * Mêmes données, par bénéficiaire à payer (fiche, salarié) : à chaque clé, son agence de trésorerie
+     * ou null si elle n'en a aucune, ce qui rend le paiement impossible ($messageSansAgence).
+     *
+     * @param  Collection<string, string|null>  $sitesParCle
+     * @return array<string, array{site_id: ?string, moyens: list<array<string, mixed>>, especes_disponibles: bool, solde_especes: ?float, message: ?string}>
+     */
+    public function optionsParCle(string $organizationId, Collection $sitesParCle, User $payeur, string $messageSansAgence): array
+    {
+        $options = $this->optionsPourSites($organizationId, $sitesParCle->filter()->unique()->values(), $payeur);
+
+        return $sitesParCle->map(fn (?string $siteId) => [
+            'site_id' => $siteId,
+            'moyens' => $siteId ? ($options[$siteId]['moyens'] ?? []) : [],
+            'especes_disponibles' => $siteId ? ($options[$siteId]['especes_disponibles'] ?? false) : false,
+            'solde_especes' => $siteId ? ($options[$siteId]['solde_especes'] ?? null) : null,
+            'message' => $siteId ? null : $messageSansAgence,
+        ])->all();
     }
 
     /**

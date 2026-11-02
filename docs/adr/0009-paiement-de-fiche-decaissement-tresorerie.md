@@ -57,8 +57,8 @@ qu'une commission était payée. L'écran de paiement était aussi différent de
   (ADR 0018) : c'est le chemin pour payer en espèces avec l'argent de l'agence.
 - Le circuit Paie (`/comptabilite/salaires`) n'est pas modifié. Il a le même défaut que celui corrigé
   ici (mode générique, espèces hors caisse dédiée, pas de contrôle de solde) : son passage au
-  décaissement réel est un **chantier séparé**, qui pourra réutiliser `garantirSoldeSuffisant()` et
-  la résolution des moyens de `DecaissementFicheResolver`.
+  décaissement réel est un **chantier séparé**, réalisé le 01/11/2026 par
+  l'[ADR 0049](0049-paiement-salaire-decaissement-reel.md).
 - Paiements de fiches salariés déjà enregistrés : aucune écriture comptable et ignorés par la
   `PaieLigne`. À recenser en production (`paiement_fiche_paiements` joint à `paiement_fiches` où
   `beneficiaire_type = 'salarie'`) pour détecter un éventuel double paiement ; aucune reprise

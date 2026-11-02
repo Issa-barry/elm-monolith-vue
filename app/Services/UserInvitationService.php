@@ -230,14 +230,16 @@ class UserInvitationService
 
     /**
      * Look up prefill data (nom/prenom) from business tables using a normalized phone number.
-     * Mirrors the logic in RegisterLookupController.
+     * Shared with the RegisterLookupController endpoints.
+     *
+     * @return array{prenom: string, nom: string}|null
      */
     public function phonePrefill(string $normalizedPhone): ?array
     {
         $client = Client::where('telephone', $normalizedPhone)->whereNull('user_id')->first();
         // L'identité civile d'un client vit sur sa Personne : clients.nom/prenom ne sont
         // jamais saisis par l'interface (seul nom_complet l'est).
-        if ($prefill = $this->identitePrefill(
+        if ($prefill = self::identitePrefill(
             $client?->personne?->prenom ?? $client?->prenom,
             $client?->personne?->nom ?? $client?->nom,
         )) {
@@ -247,7 +249,7 @@ class UserInvitationService
         $normalise = Personne::normaliserTelephone($normalizedPhone);
 
         $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
-        if ($prefill = $this->identitePrefill($livreur?->prenom, $livreur?->nom)) {
+        if ($prefill = self::identitePrefill($livreur?->prenom, $livreur?->nom)) {
             return $prefill;
         }
 
@@ -255,17 +257,17 @@ class UserInvitationService
             ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->first();
 
-        return $this->identitePrefill($proprietaire?->prenom, $proprietaire?->nom);
+        return self::identitePrefill($proprietaire?->prenom, $proprietaire?->nom);
     }
 
     /**
      * Le pré-remplissage verrouille les champs Prénom/Nom côté écran : une identité
-     * incomplète (ex. client entreprise sans prénom) bloquerait l'invité sur un champ
-     * vide non modifiable, on ne la propose donc pas.
+     * incomplète (ex. client connu par son seul nom_complet) bloquerait la personne sur
+     * un champ vide non modifiable, on ne la propose donc pas.
      *
      * @return array{prenom: string, nom: string}|null
      */
-    private function identitePrefill(?string $prenom, ?string $nom): ?array
+    public static function identitePrefill(?string $prenom, ?string $nom): ?array
     {
         $prenom = trim((string) $prenom);
         $nom = trim((string) $nom);

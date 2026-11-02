@@ -38,6 +38,7 @@ use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\Feature\Concerns\PrepareLaPaieDepuisLesRh;
 use Tests\Feature\Concerns\SimuleUnePanneDuJournal;
@@ -55,7 +56,7 @@ use Tests\TestCase;
  */
 class ReprisePaieTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, PrepareLaPaieDepuisLesRh, RefreshDatabase, SimuleUnePanneDuJournal;
+    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser, PrepareLaPaieDepuisLesRh, RefreshDatabase, SimuleUnePanneDuJournal;
 
     private Site $site;
 
@@ -507,6 +508,7 @@ class ReprisePaieTest extends TestCase
         ])->assertForbidden();
 
         $this->valider($periode)->assertSessionHasNoErrors();
+        $this->equiperPayeurEspeces($this->user, $this->site->id);
         $this->actingAs($this->user)->post(route('comptabilite.salaires.payer', $ligneB->id), [
             'montant' => 1500000, 'date_paiement' => '2026-11-30', 'mode_paiement' => 'especes',
         ])->assertSessionHasNoErrors();
