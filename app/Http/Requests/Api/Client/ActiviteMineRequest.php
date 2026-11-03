@@ -4,6 +4,7 @@ namespace App\Http\Requests\Api\Client;
 
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutTransfert;
+use App\Support\Periodes\PeriodeComptableFiltre;
 use App\Support\Vehicules\SituationPeriode;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
@@ -20,6 +21,9 @@ use Illuminate\Validation\Rule;
  * `periode` (périodes rapides, résolues ici par SituationPeriode, jamais par le
  * navigateur) exclut `date_debut`/`date_fin` : 422 plutôt qu'un choix silencieux
  * entre deux périodes contradictoires. La période en cours s'arrête à maintenant.
+ *
+ * La période comptable (annee/mois/quinzaine) exclut de même `periode` et
+ * `date_debut`/`date_fin`.
  */
 class ActiviteMineRequest extends FormRequest
 {
@@ -60,6 +64,7 @@ class ActiviteMineRequest extends FormRequest
             ],
             'vehicule_id' => ['nullable', 'string'],
             'periode' => ['nullable', Rule::in(self::PERIODES), 'prohibits:date_debut,date_fin'],
+            ...PeriodeComptableFiltre::regles(['periode', 'date_debut', 'date_fin']),
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -70,12 +75,16 @@ class ActiviteMineRequest extends FormRequest
     public function filters(): array
     {
         [$debut, $fin] = $this->bornes();
+        $periodeComptable = PeriodeComptableFiltre::depuisRequete($this);
 
         return [
             'type' => $this->input('type'),
             'statut' => $this->input('statut'),
             'vehicule_id' => $this->input('vehicule_id'),
             'periode' => $this->input('periode'),
+            'annee' => $periodeComptable?->annee,
+            'mois' => $periodeComptable?->mois,
+            'quinzaine' => $periodeComptable?->quinzaine,
             'date_debut' => $debut?->toDateString(),
             'date_fin' => $fin?->toDateString(),
         ];
@@ -88,6 +97,12 @@ class ActiviteMineRequest extends FormRequest
      */
     public function bornes(): array
     {
+        $periodeComptable = PeriodeComptableFiltre::depuisRequete($this);
+
+        if ($periodeComptable !== null) {
+            return [$periodeComptable->debut, $periodeComptable->fin];
+        }
+
         $cle = $this->input('periode');
 
         if ($cle !== null) {

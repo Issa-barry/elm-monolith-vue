@@ -3,8 +3,10 @@
 namespace Tests\Feature\OpenApi;
 
 use App\Http\Requests\Api\Client\ActiviteMineRequest;
+use App\Http\Requests\Api\Client\DashboardMineRequest;
 use App\Models\Organization;
 use App\Models\User;
+use App\Support\Periodes\PeriodeComptableFiltre;
 use Dedoc\Scramble\Generator;
 use Dedoc\Scramble\Scramble;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -149,6 +151,22 @@ class OpenApiDocumentationTest extends TestCase
 
         $this->assertSame([...ActiviteMineRequest::PERIODES, null], $parametres['periode']['schema']['enum']);
         $this->assertEquals(1, $parametres['page']['schema']['minimum']);
+    }
+
+    public function test_commissions_ventes_et_depenses_documentent_la_periode_comptable(): void
+    {
+        $paths = $this->generate('default')['paths'];
+
+        foreach (['/v1/mobile/dashboard', '/v1/mobile/activite', '/v1/mobile/depenses/mine'] as $path) {
+            $parametres = collect($paths[$path]['get']['parameters'])->keyBy('name');
+
+            $this->assertEquals(12, $parametres['mois']['schema']['maximum'], $path);
+            $this->assertEquals(2000, $parametres['annee']['schema']['minimum'], $path);
+            $this->assertSame([...PeriodeComptableFiltre::QUINZAINES, null], $parametres['quinzaine']['schema']['enum'], $path);
+        }
+
+        $parametres = collect($paths['/v1/mobile/dashboard']['get']['parameters'])->keyBy('name');
+        $this->assertSame([...DashboardMineRequest::PERIODES, null], $parametres['periode']['schema']['enum']);
     }
 
     public function test_endpoints_are_grouped_by_tag_not_left_flat(): void

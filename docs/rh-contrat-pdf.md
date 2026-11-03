@@ -58,16 +58,17 @@ droits. Le reste du contrat ne change pas pour les autres utilisateurs.
 - **Date proposée** : le début du contrat, ou le premier jour modifiable si ce mois est figé ; le
   mois suivant pour une prime ponctuelle si le contrat commence en cours de mois (elle couvre le mois
   entier). Modifiable ; une date non modifiée suit celle du contrat.
-- **Fin** : une prime mensuelle s'arrête à la fin du CDD, ou plus tôt si le type prend fin avant.
-  Refus si elle commence avant le contrat ou après la fin du CDD.
+- **Fin** : une prime mensuelle **ne s'arrête pas à la fin du CDD** (ADR 0052) : elle appartient au
+  salarié et continue, par exemple lors d'un passage en CDI. Seule la fin d'application de son type
+  lui impose une date. Refus si elle commence avant le contrat ou après la fin du CDD.
 - **Doublons** : une prime déjà attribuée au salarié sur la période, ou déjà choisie sur une autre
   ligne, n'est pas proposée (`resources/js/lib/primesAttribuees.ts`). Le serveur applique les règles
   de `AffectationRemunerationService::affecter()` (AFF-002 à AFF-005, AFF-009).
 - **Une seule opération** (`ContratService::creerAvecPrimes`) : si une ligne est refusée, ni le
   contrat ni aucune prime n'est enregistré, et l'erreur s'affiche sur la ligne concernée.
 - **En modification** : pas de lignes de saisie. La page montre les primes reprises au contrat en
-  lecture seule (droit `rh-affectations-remuneration.read`), avec un lien vers « Primes des
-  salariés », qui garde l'historique des montants (AFF-006, AFF-007).
+  lecture seule (droit `rh-affectations-remuneration.read`), avec un lien vers la fiche du salarié,
+  qui garde l'historique des montants (AFF-006, AFF-007).
 
 ### Données reprises automatiquement
 
@@ -78,7 +79,7 @@ droits. Le reste du contrat ne change pas pour les autres utilisateurs.
 | Fiche du salarié | `salarie.civilite`, `salarie.nom_complet`, `salarie.prenom`, `salarie.nom`, `salarie.matricule`, `salarie.date_naissance`, `salarie.lieu_naissance`, `salarie.nationalite`, `salarie.adresse`, `salarie.date_embauche`, `poste.fonction`, `poste.service`, `poste.agence` |
 | Agence du salarié | `poste.lieu_travail` (« Matoto, Conakry » : agence et sa ville) |
 | Contrat | `contrat.type`, `contrat.date_debut`, `contrat.date_fin` (CDD), `contrat.salaire_base`, `contrat.periode_essai` (« 3 mois », « 2 semaines », « aucune »), `contrat.horaires` (« 40 heures par semaine »), `contrat.motif_cdd` (CDD) |
-| Primes des salariés | `contrat.avantages` : **toutes** les affectations **validées** du salarié, en cours ou à venir (« Prime de transport (50 000 GNF par mois) », pourcentage du salaire de base, montant variable, avantage en nature avec sa valeur estimée, date de fin) ; « aucune prime ni aucun avantage » sinon. Jamais une proposition à valider, annulée, terminée ou d'un autre salarié |
+| Primes du salarié | `contrat.avantages` : **toutes** les affectations **validées** du salarié, en cours ou à venir (« Prime de transport (50 000 GNF par mois) », pourcentage du salaire de base, montant variable, avantage en nature avec sa valeur estimée, date de fin) ; « aucune prime ni aucun avantage » sinon. Jamais une proposition à valider, annulée, terminée ou d'un autre salarié |
 | Document | `document.date` (date de génération), `document.lieu_signature` = **laissé en blanc** (« Fait à ……………………, ») : le lieu s'écrit à la main au moment de la signature |
 
 ### Information manquante

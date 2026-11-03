@@ -11,13 +11,18 @@ import { ref } from 'vue';
 defineProps<{ label: string }>();
 
 // Survol, focus clavier ou appui : un écran tactile n'a pas de survol, l'appui ouvre et ferme
-// l'explication (un appui ailleurs la ferme aussi).
+// l'explication (un appui ailleurs la ferme aussi). Seul le focus clavier ouvre : sous Android,
+// l'appui donne aussi le focus juste avant le clic, qui refermerait aussitôt la bulle.
 const ouvert = ref(false);
 </script>
 
 <template>
     <TooltipProvider :delay-duration="150">
-        <Tooltip v-model:open="ouvert" disable-closing-trigger>
+        <Tooltip
+            v-model:open="ouvert"
+            disable-closing-trigger
+            ignore-non-keyboard-focus
+        >
             <TooltipTrigger as-child>
                 <button
                     type="button"

@@ -24,6 +24,20 @@ class UpdateProfileRequest extends FormRequest
         return array_column(static::supportedPays(), 0);
     }
 
+    /**
+     * Mêmes pays avec leur code ISO, pour afficher le drapeau sans recopier la liste côté frontend.
+     *
+     * @return list<array{label: string, code: string}>
+     */
+    public static function paysOptions(): array
+    {
+        return array_map(
+            fn (string $code, array $pays): array => ['label' => $pays[0], 'code' => $code],
+            array_keys(static::supportedPays()),
+            array_values(static::supportedPays()),
+        );
+    }
+
     protected function prepareForValidation(): void
     {
         // Une valeur mal formée (tableau) n'est pas normalisée : les règles la refusent en 422.

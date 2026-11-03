@@ -169,6 +169,15 @@ describe('Contrats — colonne Primes', () => {
         expect(nombre(3).text()).toBe('3 primes');
     });
 
+    it('mène à la fiche du salarié, seulement avec le droit de l’ouvrir', () => {
+        expect(nombre(2).element.tagName).toBe('SPAN');
+
+        permissions.add('rh-employes.read');
+        expect(nombre(2).attributes('href')).toBe(
+            '/backoffice/employes/01JEMPLOYE',
+        );
+    });
+
     it('n’affiche pas la colonne sans le droit de consulter les primes', () => {
         permissions.delete('rh-affectations-remuneration.read');
 

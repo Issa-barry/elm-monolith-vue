@@ -20,6 +20,7 @@ use App\Services\Rh\AffectationRemunerationService;
 use App\Services\Rh\TypeRemunerationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -128,10 +129,17 @@ class AffectationRemunerationTest extends TestCase
         ]);
     }
 
+    /** Les primes se gèrent sur la fiche : il faut aussi pouvoir l'ouvrir. */
+    private function peutLireLesFiches(User $user): void
+    {
+        Permission::firstOrCreate(['name' => 'rh-employes.read', 'guard_name' => 'web']);
+        $user->givePermissionTo('rh-employes.read');
+    }
+
     private function affecter(array $donnees, ?User $user = null)
     {
         return $this->actingAs($user ?? $this->user)
-            ->from(route('affectations-remuneration.index'))
+            ->from(route('employes.index'))
             ->post(route('affectations-remuneration.store'), $donnees);
     }
 
@@ -228,7 +236,7 @@ class AffectationRemunerationTest extends TestCase
         $this->affecter(['employe_id' => $employe->id, 'type_remuneration_id' => $type->id, 'date_debut' => '2026-11-01', 'montant' => 100000]);
         $type->update(['statut' => StatutTypeRemuneration::FERME->value]);
 
-        $this->actingAs($super)->from(route('affectations-remuneration.index'))
+        $this->actingAs($super)->from(route('employes.index'))
             ->patch(route('affectations-remuneration.valider', AffectationRemuneration::sole()))
             ->assertSessionHasErrors('type_remuneration_id');
         $this->assertSame(StatutAffectationRemuneration::A_VALIDER, AffectationRemuneration::sole()->statut);
@@ -295,19 +303,20 @@ class AffectationRemunerationTest extends TestCase
         Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Ailleurs', 'type' => 'depot']);
         $this->affectationValidee($this->employe([], $autreOrg), $this->type([], $autreOrg));
 
-        $this->actingAs($this->user)->get(route('affectations-remuneration.index'))
+        $this->peutLireLesFiches($this->user);
+
+        $this->actingAs($this->user)->get(route('employes.show', $employe))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('employes', function ($employes) use ($employe, $sansPrime, $transport, $logement, $autreOrg) {
-                    $parId = collect($employes)->keyBy('value');
-                    $primes = collect($parId[$employe->id]['primes']);
+                ->where('primes_options.primes_occupees', function ($occupees) use ($transport, $logement) {
+                    $primes = collect($occupees);
 
                     return $primes->count() === 2
                         && $primes->pluck('type_id')->sort()->values()->all() === collect([$transport->id, $logement->id])->sort()->values()->all()
                         && $primes->firstWhere('type_id', $logement->id)['a_valider'] === true
-                        && $primes->firstWhere('type_id', $transport->id)['date_fin'] === null
-                        && $parId[$sansPrime->id]['primes'] === []
-                        && ! $parId->contains(fn ($e) => Employe::find($e['value'])?->organization_id === $autreOrg->id);
+                        && $primes->firstWhere('type_id', $transport->id)['date_fin'] === null;
                 }));
+        $this->actingAs($this->user)->get(route('employes.show', $sansPrime))
+            ->assertInertia(fn (Assert $page) => $page->where('primes_options.primes_occupees', []));
     }
 
     public function test_le_cumul_autorise_permet_plusieurs_affectations_simultanees(): void
@@ -360,8 +369,9 @@ class AffectationRemunerationTest extends TestCase
         $this->affecter(['employe_id' => $this->employe()->id, 'type_remuneration_id' => $type->id, 'date_debut' => '2026-11-01', 'montant' => 150000])
             ->assertSessionHasNoErrors();
 
-        $this->actingAs($this->user)->get(route('affectations-remuneration.index'))
-            ->assertInertia(fn (Assert $page) => $page->where('affectations.0.type.valorise', true));
+        $this->peutLireLesFiches($this->user);
+        $this->actingAs($this->user)->get(route('employes.show', AffectationRemuneration::sole()->employe_id))
+            ->assertInertia(fn (Assert $page) => $page->where('primes.0.type.valorise', true));
     }
 
     // ── Historique : changement de montant, fin d'effet ───────────────────────
@@ -373,7 +383,7 @@ class AffectationRemunerationTest extends TestCase
         $type = $this->type();
         $initiale = $this->affectationValidee($employe, $type, ['date_debut' => '2026-10-01']);
 
-        $this->actingAs($this->user)->from(route('affectations-remuneration.index'))
+        $this->actingAs($this->user)->from(route('employes.index'))
             ->post(route('affectations-remuneration.changement-montant', $initiale), ['date_effet' => '2026-11-15', 'montant' => 600000])
             ->assertSessionHasNoErrors();
 
@@ -400,7 +410,7 @@ class AffectationRemunerationTest extends TestCase
         $type = $this->type();
         $affectation = $this->affectationValidee($employe, $type, ['date_debut' => '2026-10-01', 'date_fin' => '2026-12-31']);
         $url = route('affectations-remuneration.changement-montant', $affectation);
-        $requete = fn (array $d) => $this->actingAs($this->user)->from(route('affectations-remuneration.index'))->post($url, $d);
+        $requete = fn (array $d) => $this->actingAs($this->user)->from(route('employes.index'))->post($url, $d);
 
         $requete(['date_effet' => '2026-10-01', 'montant' => 600000])->assertSessionHasErrors('date_effet');
         $requete(['date_effet' => '2027-01-01', 'montant' => 600000])->assertSessionHasErrors('date_effet');
@@ -415,7 +425,7 @@ class AffectationRemunerationTest extends TestCase
         $super = $this->superAdmin();
         $affectation = $this->affectationValidee($this->employe(), $this->type(), ['date_debut' => '2026-10-01']);
 
-        $this->actingAs($this->user)->from(route('affectations-remuneration.index'))
+        $this->actingAs($this->user)->from(route('employes.index'))
             ->post(route('affectations-remuneration.fin', $affectation), ['date_fin' => '2026-11-30', 'motif' => 'Changement de poste'])
             ->assertSessionHasNoErrors();
 
@@ -440,7 +450,7 @@ class AffectationRemunerationTest extends TestCase
         $employe = $this->employe();
         $type = $this->type();
         $affectation = $this->affectationValidee($employe, $type, ['date_debut' => '2026-09-01']);
-        $depuis = fn () => $this->actingAs($this->user)->from(route('affectations-remuneration.index'));
+        $depuis = fn () => $this->actingAs($this->user)->from(route('employes.index'));
 
         $this->affecter(['employe_id' => $employe->id, 'type_remuneration_id' => $this->type()->id, 'date_debut' => '2026-10-15', 'montant' => 1000])
             ->assertSessionHasErrors('date_debut');
@@ -471,7 +481,7 @@ class AffectationRemunerationTest extends TestCase
     {
         $super = $this->superAdmin();
         $affectation = $this->affectationValidee($this->employe(), $this->type(['nature_montant' => 'variable']), ['montant' => null]);
-        $saisir = fn (User $u, array $d) => $this->actingAs($u)->from(route('affectations-remuneration.index'))
+        $saisir = fn (User $u, array $d) => $this->actingAs($u)->from(route('employes.index'))
             ->post(route('affectations-remuneration.saisies.store', $affectation), $d);
 
         $saisir($this->user, ['annee' => 2026, 'mois' => 11, 'montant' => 150000])->assertSessionHasNoErrors();
@@ -495,7 +505,7 @@ class AffectationRemunerationTest extends TestCase
     public function test_un_element_a_montant_fixe_n_a_pas_de_saisie_mensuelle(): void
     {
         $affectation = $this->affectationValidee($this->employe(), $this->type());
-        $this->actingAs($this->user)->from(route('affectations-remuneration.index'))
+        $this->actingAs($this->user)->from(route('employes.index'))
             ->post(route('affectations-remuneration.saisies.store', $affectation), ['annee' => 2026, 'mois' => 11, 'montant' => 1])
             ->assertSessionHasErrors('mois');
     }
@@ -533,7 +543,7 @@ class AffectationRemunerationTest extends TestCase
         ]);
         $transmission->update(['statut' => 'validee']);
 
-        $this->actingAs($super)->from(route('affectations-remuneration.index'))
+        $this->actingAs($super)->from(route('employes.index'))
             ->patch(route('affectations-remuneration.annuler', $transmise))->assertSessionHasErrors('statut');
         $this->actingAs($super)->patch(route('affectations-remuneration.annuler', $affectation))->assertSessionHasNoErrors();
         $this->assertSame(StatutAffectationRemuneration::ANNULEE, $affectation->fresh()->statut);
@@ -632,26 +642,30 @@ class AffectationRemunerationTest extends TestCase
             ->assertSessionHasErrors('employe_id');
         $this->actingAs($superAilleurs)->patch(route('affectations-remuneration.valider', $affectation))->assertForbidden();
         $this->actingAs($superAilleurs)->getJson(route('affectations-remuneration.historique', $affectation))->assertForbidden();
-        $this->actingAs($superAilleurs)->get(route('affectations-remuneration.index'))
-            ->assertInertia(fn (Assert $page) => $page->has('affectations', 0));
+        $this->actingAs($superAilleurs)->get(route('employes.show', $employe))->assertForbidden();
+        // Ses propres chiffres : rien de l'autre organisation dans le bandeau, ni dans le filtre.
+        $this->actingAs($superAilleurs)->get(route('employes.index', ['primes' => 'a_valider']))
+            ->assertInertia(fn (Assert $page) => $page->where('nb_primes_a_valider', 0)->has('employes', 0));
         $this->assertNotNull($affectation->fresh()->date_fin_demandee);
     }
 
     public function test_un_utilisateur_limite_a_son_agence_ne_voit_ni_ne_modifie_les_autres_agences(): void
     {
         $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kindia', 'type' => 'depot']);
-        $manager = $this->managerAgence($this->site, self::GESTION);
+        $manager = $this->managerAgence($this->site, [...self::GESTION, 'rh-employes.read']);
         $chezMoi = $this->employe();
         $ailleurs = $this->employe([], null, $autreSite);
         $type = $this->type();
         $this->affectationValidee($chezMoi, $type);
         $affectationAilleurs = $this->affectationValidee($ailleurs, $type);
 
-        $this->actingAs($manager)->get(route('affectations-remuneration.index'))
+        $this->actingAs($manager)->get(route('employes.show', $chezMoi))
             ->assertInertia(fn (Assert $page) => $page
-                ->has('affectations', 1)
-                ->where('affectations.0.employe.id', $chezMoi->id)
-                ->where('affectations.0.peut_agir', true));
+                ->has('primes', 1)
+                ->where('primes.0.employe.id', $chezMoi->id)
+                ->where('primes.0.peut_agir', true)
+                ->where('primes_options.peut_attribuer', true));
+        $this->actingAs($manager)->get(route('employes.show', $ailleurs))->assertForbidden();
 
         $this->affecter(['employe_id' => $ailleurs->id, 'type_remuneration_id' => $this->type()->id, 'date_debut' => '2026-11-01', 'montant' => 1], $manager)
             ->assertForbidden();
@@ -666,7 +680,6 @@ class AffectationRemunerationTest extends TestCase
         $sans = $this->managerAgence($this->site, []);
         $affectation = $this->affectationValidee($this->employe(), $this->type());
 
-        $this->actingAs($sans)->get(route('affectations-remuneration.index'))->assertForbidden();
         // Permission contrôlée avant les champs : pas de message de validation qui renseignerait.
         $this->actingAs($sans)->post(route('affectations-remuneration.store'), [])->assertForbidden();
         $this->actingAs($sans)->post(route('affectations-remuneration.fin', $affectation), [])->assertForbidden();
@@ -688,7 +701,94 @@ class AffectationRemunerationTest extends TestCase
 
         $lecteur = $this->managerAgence($this->site, ['rh-employes.read']);
         $this->actingAs($lecteur)->get(route('employes.show', $employe))
-            ->assertInertia(fn (Assert $page) => $page->where('primes', null));
+            ->assertInertia(fn (Assert $page) => $page->where('primes', null)->where('primes_options', null));
+    }
+
+    // ── Fiche salarié : seul écran de gestion (ADR 0052) ─────────────────────
+
+    public function test_la_page_primes_des_salaries_n_existe_plus(): void
+    {
+        $this->assertFalse(Route::has('affectations-remuneration.index'));
+        $this->actingAs($this->user)->get('/backoffice/affectations-remuneration')->assertStatus(405);
+    }
+
+    public function test_une_action_ramene_sur_la_fiche_du_salarie(): void
+    {
+        $this->peutLireLesFiches($this->user);
+        $employe = $this->employe();
+        $fiche = route('employes.show', $employe);
+
+        $this->actingAs($this->user)->from($fiche)
+            ->post(route('affectations-remuneration.store'), ['employe_id' => $employe->id, 'type_remuneration_id' => $this->type()->id, 'date_debut' => '2026-11-01', 'montant' => 1000])
+            ->assertRedirect($fiche)
+            ->assertSessionHas('success', 'Prime enregistrée : elle attend sa validation.');
+    }
+
+    public function test_la_fiche_montre_toutes_les_primes_annulees_comprises(): void
+    {
+        $this->peutLireLesFiches($this->user);
+        $employe = $this->employe();
+        $this->affectationValidee($employe, $this->type(), ['date_debut' => '2026-10-01']);
+        $this->affectationValidee($employe, $this->type(), ['date_debut' => '2026-01-01', 'date_fin' => '2026-03-31']);
+        $this->affectationValidee($employe, $this->type(), ['date_debut' => '2026-02-01', 'statut' => StatutAffectationRemuneration::ANNULEE->value]);
+        $this->affectationValidee($this->employe(), $this->type());
+
+        $this->actingAs($this->user)->get(route('employes.show', $employe))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('primes', 3)
+                ->where('primes', fn ($primes) => collect($primes)->pluck('etat')->sort()->values()->all() === ['annulee', 'en_cours', 'terminee']));
+    }
+
+    public function test_la_fiche_fournit_les_options_et_le_droit_d_attribuer(): void
+    {
+        $this->peutLireLesFiches($this->user);
+        $actif = $this->type(['libelle' => 'Actif', 'montant_defaut' => 100000]);
+        $this->type(['libelle' => 'Fermé', 'statut' => StatutTypeRemuneration::FERME->value]);
+        $autreOrg = Organization::factory()->create();
+        Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Ailleurs', 'type' => 'depot']);
+        $this->type(['libelle' => 'Autre organisation'], $autreOrg);
+
+        $this->actingAs($this->user)->get(route('employes.show', $this->employe()))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('primes_options.peut_attribuer', true)
+                ->where('primes_options.premier_jour_modifiable', null)
+                ->where('primes_options.types', function ($types) use ($actif) {
+                    $liste = collect($types);
+
+                    return $liste->pluck('label')->sort()->values()->all() === ['Actif', 'Fermé']
+                        && $liste->firstWhere('value', $actif->id)['attribuable'] === true
+                        && $liste->firstWhere('label', 'Fermé')['attribuable'] === false
+                        && $liste->firstWhere('value', $actif->id)['montant_defaut'] == 100000;
+                }));
+
+        // Lecture 360° sans rattachement à l'agence, ou salarié sorti sans date : pas d'attribution.
+        $this->actingAs($this->user)->get(route('employes.show', $this->employe(['statut' => 'sorti', 'date_sortie' => null])))
+            ->assertInertia(fn (Assert $page) => $page->where('primes_options.peut_attribuer', false));
+    }
+
+    public function test_la_liste_employes_signale_et_filtre_les_primes_a_valider(): void
+    {
+        $this->peutLireLesFiches($this->user);
+        $type = $this->type();
+        $proposition = $this->employe();
+        $this->affectationValidee($proposition, $type, ['statut' => StatutAffectationRemuneration::A_VALIDER->value]);
+        $finDemandee = $this->employe();
+        $this->affectationValidee($finDemandee, $type, ['date_fin_demandee' => '2026-11-30']);
+        $sansAttente = $this->employe();
+        $this->affectationValidee($sansAttente, $type);
+
+        $this->actingAs($this->user)->get(route('employes.index'))
+            ->assertInertia(fn (Assert $page) => $page->where('nb_primes_a_valider', 2)->has('employes', 3));
+        $this->actingAs($this->user)->get(route('employes.index', ['primes' => 'a_valider']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('employes', 2)
+                ->where('employes', fn ($employes) => collect($employes)->pluck('id')->sort()->values()->all()
+                    === collect([$proposition->id, $finDemandee->id])->sort()->values()->all()));
+
+        // Sans le droit de voir les primes : ni bandeau, et le filtre ne révèle rien.
+        $lecteur = $this->managerAgence($this->site, ['rh-employes.read']);
+        $this->actingAs($lecteur)->get(route('employes.index', ['primes' => 'a_valider']))
+            ->assertInertia(fn (Assert $page) => $page->where('nb_primes_a_valider', null)->has('employes', 3));
     }
 
     // ── Liste, filtres, historique ────────────────────────────────────────────
@@ -778,34 +878,18 @@ class AffectationRemunerationTest extends TestCase
         $this->assertSame('ponctuelle', $type->fresh()->periodicite->value);
     }
 
-    public function test_la_liste_fournit_la_valeur_par_defaut_pour_preremplir_un_montant_variable(): void
+    public function test_la_fiche_fournit_la_valeur_par_defaut_pour_preremplir_un_montant_variable(): void
     {
+        $this->peutLireLesFiches($this->user);
         $variable = $this->type(['nature_montant' => 'variable', 'montant_defaut' => 200000]);
-        $this->affectationValidee($this->employe(), $variable, ['date_debut' => '2026-11-01', 'montant' => null]);
+        $employe = $this->employe();
+        $this->affectationValidee($employe, $variable, ['date_debut' => '2026-11-01', 'montant' => null]);
 
-        $this->actingAs($this->user)->get(route('affectations-remuneration.index'))
+        $this->actingAs($this->user)->get(route('employes.show', $employe))
             ->assertInertia(fn (Assert $p) => $p
-                ->where('affectations.0.type.nature_montant', 'variable')
-                ->where('affectations.0.type.montant_defaut', 200000)
-                ->where('affectations.0.type.taux_defaut', null));
-    }
-
-    public function test_la_liste_filtre_par_salarie_type_et_periode(): void
-    {
-        $a = $this->employe();
-        $b = $this->employe();
-        $prime = $this->type();
-        $avantage = $this->type(['categorie' => 'avantage_nature']);
-        $this->affectationValidee($a, $prime, ['date_debut' => '2026-01-01', 'date_fin' => '2026-03-31']);
-        $this->affectationValidee($a, $avantage, ['date_debut' => '2026-10-01']);
-        $this->affectationValidee($b, $prime, ['date_debut' => '2026-10-01']);
-        $liste = fn (array $filtres) => $this->actingAs($this->user)->get(route('affectations-remuneration.index', $filtres));
-
-        $liste(['employe_id' => $a->id])->assertInertia(fn (Assert $p) => $p->has('affectations', 2));
-        $liste(['type_remuneration_id' => $prime->id])->assertInertia(fn (Assert $p) => $p->has('affectations', 2));
-        $liste(['periode_du' => '2026-11-01', 'periode_au' => '2026-11-30'])->assertInertia(fn (Assert $p) => $p->has('affectations', 2));
-        $liste(['etat' => 'terminee'])->assertInertia(fn (Assert $p) => $p->has('affectations', 1)->where('affectations.0.etat', 'terminee'));
-        $liste(['site_ids' => [$this->site->id]])->assertInertia(fn (Assert $p) => $p->has('affectations', 3));
+                ->where('primes.0.type.nature_montant', 'variable')
+                ->where('primes.0.type.montant_defaut', 200000)
+                ->where('primes.0.type.taux_defaut', null));
     }
 
     public function test_l_historique_retrace_chaque_operation(): void

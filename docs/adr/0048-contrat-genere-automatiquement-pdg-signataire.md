@@ -56,7 +56,8 @@ l'étape était oubliée, le texte libre donnait des valeurs incohérentes (« t
    contrat », **uniquement validées**, donc réservées à qui peut attribuer et valider. Elles passent
    par le service des primes existant (pas de second système) ; contrat et primes sont enregistrés
    dans une seule transaction, le PDF ensuite. Pas de saisie en modification : les changements de
-   montant gardent leur procédure et leur historique.
+   montant gardent leur procédure et leur historique. Depuis le 03/11/2026, ces primes survivent à
+   la fin d'un CDD et se gèrent sur la fiche du salarié (ADR 0052).
 
 ## Conséquences
 

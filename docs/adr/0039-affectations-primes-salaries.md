@@ -1,7 +1,8 @@
 # ADR 0039 — Affectations datées des primes et avantages aux salariés
 
 - **Date** : 2026-10-29
-- **Statut** : accepté — lot 3 livré le 2026-10-29 (non commité)
+- **Statut** : accepté — lot 3 livré le 2026-10-29. Écran de liste remplacé par la fiche salarié
+  (ADR 0052, 03/11/2026) ; les règles ci-dessous restent en vigueur.
 - **Périmètre** : RH, attribution des types du référentiel (ADR 0038) aux salariés — cf.
   [primes-avantages.md](../primes-avantages.md)
 

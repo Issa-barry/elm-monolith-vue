@@ -52,18 +52,6 @@ enum StatutAffectationRemuneration: string
         return [self::A_VALIDER->value, self::VALIDEE->value];
     }
 
-    /** @return list<array{value: string, label: string}> */
-    public static function optionsEtat(): array
-    {
-        return [
-            ['value' => 'a_valider', 'label' => 'À valider'],
-            ['value' => 'a_venir', 'label' => 'À venir'],
-            ['value' => 'en_cours', 'label' => 'En cours'],
-            ['value' => 'terminee', 'label' => 'Terminée'],
-            ['value' => 'annulee', 'label' => 'Annulée'],
-        ];
-    }
-
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
