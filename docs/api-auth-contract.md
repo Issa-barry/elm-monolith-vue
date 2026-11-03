@@ -43,7 +43,8 @@ par ce document.
     "organization_id": "...",
     "client_id": null,
     "proprietaire_id": "...",
-    "livreur_id": null
+    "livreur_id": null,
+    "parrain_id": null
   }
 }
 ```
@@ -51,6 +52,10 @@ par ce document.
 `context` est résolu via `App\Services\Client\ClientIdentityResolver` — jamais à
 partir d'un paramètre envoyé par le client, toujours depuis l'utilisateur
 authentifié. N'expose ni permissions détaillées, ni attributs Eloquent bruts.
+
+`parrain_id` vient à part de `ActivitesCompteResolver` : il ne suit que le
+rattachement posé au back-office (ADR 0050), jamais le téléphone. Voir
+`docs/api-espace-parrain-contract.md`.
 
 `prenom` et `nom` valent `null` pour une fiche connue par son seul `nom_complet`
 (cf. `docs/identite-client-personne.md`). Pour afficher un nom, utiliser

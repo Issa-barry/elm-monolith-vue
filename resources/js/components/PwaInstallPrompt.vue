@@ -11,10 +11,16 @@
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import { Button } from '@/components/ui/button';
 import { usePwaInstall } from '@/composables/usePwaInstall';
+import type { AppPageProps } from '@/types';
+import { usePage } from '@inertiajs/vue3';
 import { Download, Share, X } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import { computed } from 'vue';
 
 const { showPrompt, showIosSheet, promptInstall, dismiss } = usePwaInstall();
+
+const page = usePage<AppPageProps>();
+const pwaName = computed(() => page.props.pwaName);
 </script>
 
 <template>
@@ -41,10 +47,12 @@ const { showPrompt, showIosSheet, promptInstall, dismiss } = usePwaInstall();
                 </div>
                 <div class="flex-1 space-y-2 pr-5">
                     <div>
-                        <p class="text-sm font-semibold">Installer ELM</p>
+                        <p class="text-sm font-semibold">
+                            Installer {{ pwaName }}
+                        </p>
                         <p class="text-sm text-muted-foreground">
-                            Ajoutez ELM à votre écran d'accueil pour l'ouvrir
-                            comme une application.
+                            Ajoutez {{ pwaName }} à votre écran d'accueil pour
+                            l'ouvrir comme une application.
                         </p>
                     </div>
                     <div class="flex items-center gap-2">
@@ -72,7 +80,7 @@ const { showPrompt, showIosSheet, promptInstall, dismiss } = usePwaInstall();
     <Dialog
         v-model:visible="showIosSheet"
         modal
-        header="Installer ELM"
+        :header="`Installer ${pwaName}`"
         :style="{ width: 'min(94vw, 26rem)' }"
         :draggable="false"
     >

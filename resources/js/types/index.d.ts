@@ -81,7 +81,9 @@ export type StandalonePermission =
     | 'rh-transmissions-paie.read'
     | 'rh-transmissions-paie.preparer'
     | 'rh-transmissions-paie.valider'
-    | 'rh-transmissions-paie.transmettre';
+    | 'rh-transmissions-paie.transmettre'
+    | 'parrains.read'
+    | 'rattachements-comptes.gerer';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**
@@ -157,6 +159,7 @@ export type AppPageProps<
     T extends Record<string, unknown> = Record<string, unknown>,
 > = T & {
     name: string;
+    pwaName: string;
     appVersion: string;
     appVersionLabel: string;
     quote: { message: string; author: string };

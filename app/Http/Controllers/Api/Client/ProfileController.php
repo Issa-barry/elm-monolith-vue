@@ -29,8 +29,8 @@ class ProfileController extends Controller
             .'l\'inventer côté frontend). Aucun champ "quartier" séparé — seuls `pays`, `ville`, '
             .'`adresse` existent, un quartier doit être saisi dans `adresse` en texte libre. '
             .'`profile` vaut `null` si le rôle est présent mais qu\'aucune fiche métier n\'est '
-            .'réellement rattachée (cas limite). Seuls `pays`/`code_pays`/`ville`/`adresse` sont '
-            .'modifiables via `PATCH` — voir cet endpoint pour le détail exact.',
+            .'réellement rattachée (cas limite). `pays_disponibles` liste les pays sélectionnables. '
+            .'Les champs modifiables sont détaillés sur le `PATCH` de cette route.',
     )]
     public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {

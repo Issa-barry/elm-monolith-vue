@@ -242,10 +242,13 @@ l'écran "Mon profil".
     "localisation": { "pays": "Guinée", "code_pays": "GN", "code_phone_pays": "+224", "ville": "Conakry", "adresse": "Matoto, Carrefour" },
     "actif": true,
     "notifications": { "activite": true }
-  }
+  },
+  "pays_disponibles": ["Guinée", "Guinée-Bissau", "Sénégal", "..."]
 }
 ```
 
+- `pays_disponibles` : seules valeurs acceptées pour `pays` par le `PATCH`. À
+  utiliser pour alimenter le sélecteur, sans recopier la liste côté frontend.
 - `profile.type` vaut `"proprietaire"`, `"client"` ou `"livreur"` selon le
   profil réel (priorité proprietaire > client > livreur si cumul).
 - Propriétaire entreprise : `entreprise: { "raison_sociale": "..." }` (jamais
@@ -259,19 +262,51 @@ l'écran "Mon profil".
 
 ### `PATCH /v1/mobile/profile`
 
-Modifie **uniquement** la localisation :
+Modifie l'identité et la localisation du compte connecté (ADR 0051) :
 
 ```json
 // Requête (champs tous optionnels, seuls les envoyés sont modifiés)
-{ "pays": "Guinée", "code_pays": "GN", "ville": "Kindia", "adresse": "Quartier Manquépas" }
+{
+  "prenom": "Ya Moussa", "nom": "Camara", "email": "nouvelle@example.com",
+  "pays": "Guinée", "ville": "Kindia", "adresse": "Quartier Manquépas"
+}
 ```
 
-Réponse : identique à `GET /v1/mobile/profile`. `404` si aucun profil rattaché.
+| Champ | Règle | Effet |
+|---|---|---|
+| `prenom`, `nom` | 2 à 100 caractères, ne peuvent pas être vidés | Immédiat. Normalisés (`Ya Moussa`, `CAMARA`). |
+| `email` | Adresse valide, libre sur toute la plateforme, ne peut pas être vidée | **Différé** : aucune écriture avant l'ouverture du lien envoyé à la nouvelle adresse. |
+| `pays` | Une valeur de `pays_disponibles`, ou `null` | Immédiat. |
+| `ville`, `adresse` | Texte libre, `null` accepté | Immédiat. |
+
+Réponse : identique à `GET /v1/mobile/profile`, plus `email_confirmation` :
+
+```json
+// null si aucun changement d'adresse n'a été demandé
+"email_confirmation": { "adresse": "nouvelle@example.com", "envoyee": true }
+```
+
+`envoyee: false` : l'envoi du lien a échoué, l'adresse reste inchangée, les autres
+champs sont enregistrés. Dans tous les cas, `user.email` et `/me` gardent l'ancienne
+adresse tant que le lien n'a pas été ouvert.
+
+Erreurs :
+
+- `422` avec `errors.<champ>` : champ invalide, adresse déjà utilisée, ou plus de 5
+  demandes de changement d'adresse en une heure. Rien n'est enregistré.
+- `404` : localisation envoyée sans fiche métier rattachée. `prenom`, `nom` et
+  `email` restent modifiables dans ce cas, avec `profile: null`.
 
 **Non modifiables par ce endpoint** (silencieusement ignorés si envoyés) :
-`nom`/`prenom`/`surnom` (identité civile), `telephone`/`email` (identifiants de
-connexion), `raison_sociale`/`type` (identité légale), `actif` — réservés au
-backoffice.
+`telephone`, `code_pays`/`code_phone_pays` (recomposent le téléphone dans les
+formulaires du back-office), `surnom`, `raison_sociale`/`type`, `actif`.
+
+### `GET /auth/confirm-email/{userId}` (lien reçu par e-mail)
+
+Lien signé, valable 24 h, ouvert sans session. Répond par une page HTML : `200`
+adresse appliquée et vérifiée, `404` lien altéré ou déjà utilisé (toute modification
+de l'adresse rend les anciens liens caducs), `410` lien expiré, `409` adresse prise
+entre-temps. Ne s'appelle jamais depuis un frontend.
 
 ### `PATCH /v1/mobile/profile/notification-preferences`
 
@@ -1068,7 +1103,8 @@ aucune vérification de propriété).
 | Historique complet livraisons pour un proprietaire | **Fait** (26/08/2026) — `GET /v1/mobile/activite`, §5 |
 | Dashboard financier API (net à payer, reste à payer...) | **Fait** (26/08/2026) — `GET /v1/mobile/dashboard`, §5 |
 | Propositions de véhicule (créer/lister) | **Fait** (26/08/2026) — `POST`/`GET /v1/mobile/propositions-vehicules`, §4 |
-| Écriture sur le profil au-delà de la localisation | **Inexistant** — nom/téléphone/email/raison sociale restent backoffice-only |
+| Modification du prénom, du nom et de l'e-mail | **Fait** (02/11/2026, ADR 0051) — `PATCH /v1/mobile/profile`, §3 |
+| Modification du téléphone ou de la raison sociale par le titulaire | **Inexistant** — restent backoffice-only |
 | Champ "quartier" séparé d'`adresse` | **Inexistant** en base |
 | Statut véhicule "Entretien"/maintenance | **Inexistant** en base — seul `is_active` |
 | Identifiant légal type SIRET | **Inexistant** — absent du modèle ELM, ne pas l'inventer |

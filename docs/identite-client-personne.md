@@ -47,10 +47,13 @@ indépendant, cf. `TelephoneOwnerLookupService`, désormais obsolète sur ce poi
   repli sur ses colonnes `clients.prenom`/`nom`. L'écran verrouille les champs pré-remplis : une
   identité sans prénom ou sans nom n'est donc jamais proposée (statut `not_found`, ou rôle suivant
   livreur puis propriétaire), et la personne saisit son nom elle-même.
-- **CLIENTPERSONNE-007** — `UpdateProfileController` (espace client, self-service) : les champs
-  modifiables (`pays`, `code_pays`, `ville`, `adresse`) sont écrits à la fois sur `Client` (pour
-  les lectures existantes) et sur `Client->personne` si elle est renseignée, pour que la
-  localisation reste cohérente entre tous les rôles d'une même personne.
+- **CLIENTPERSONNE-007** — `UpdateProfileController` (espace client, self-service, ADR 0051) : la
+  localisation (`pays`, `ville`, `adresse`) est écrite à la fois sur `Client` (pour les lectures
+  existantes) et sur `Client->personne` si elle est renseignée, pour rester cohérente entre tous
+  les rôles d'une même personne. `prenom`, `nom` et, après confirmation par lien, `email` sont
+  écrits sur chaque `Personne` du compte et sur `Client`. `nom_complet` n'est jamais réécrit :
+  c'est un libellé géré au back-office, qui peut garder une désignation provisoire.
+  `code_pays`/`code_phone_pays` ne changent pas non plus : ils décrivent le pays du téléphone.
 
 ## Backfill
 

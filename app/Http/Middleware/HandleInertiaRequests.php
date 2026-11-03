@@ -428,6 +428,7 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'name' => config('app.name'),
+            'pwaName' => config('pwa.name'),
             'appVersion' => AppVersion::current(),
             'appVersionLabel' => AppVersion::label(),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
