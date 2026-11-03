@@ -16,6 +16,7 @@ use App\Models\Packing;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\PaiePeriode;
+use App\Models\Parrain;
 use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\ProduitType;
@@ -38,6 +39,7 @@ use App\Policies\PackingPolicy;
 use App\Policies\PaiementFichePolicy;
 use App\Policies\PaiementPeriodePolicy;
 use App\Policies\PaiePolicy;
+use App\Policies\ParrainPolicy;
 use App\Policies\PrestatairePolicy;
 use App\Policies\ProduitPolicy;
 use App\Policies\ProduitTypePolicy;
@@ -60,6 +62,7 @@ class AuthServiceProvider extends ServiceProvider
         Fournisseur::class => FournisseurPolicy::class,
         Livreur::class => LivreurPolicy::class,
         Proprietaire::class => ProprietairePolicy::class,
+        Parrain::class => ParrainPolicy::class,
         Produit::class => ProduitPolicy::class,
         ProduitType::class => ProduitTypePolicy::class,
         Packing::class => PackingPolicy::class,

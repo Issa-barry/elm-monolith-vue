@@ -486,7 +486,7 @@ class VehiculeController extends Controller
             ),
             // Onglet Parrain : sa part actuelle par processus et catégorie (lecture seule) ; une part
             // positive impose de refaire la répartition pour le remplacer ou le retirer.
-            'parrain_remuneration' => $this->remunerationParrain($vehicule),
+            'parrain_remuneration' => PartParrainService::remuneration($vehicule),
             // PARRAIN-021/022 : part à définir / définie ; à partir de la date d'activation de
             // l'organisation, une part « à répartir » refuse les ventes du partage concerné.
             'parrain_part' => [
@@ -498,42 +498,6 @@ class VehiculeController extends Controller
                 ? ['id' => $vehicule->parrain->id, 'nom_complet' => $vehicule->parrain->nom_complet]
                 : null,
         ]);
-    }
-
-    /** @return list<array{processus_code: string, processus_label: string, categorie_nom: string, montant: int, a_repartir: bool, depuis: ?string}> */
-    private function remunerationParrain(Vehicule $vehicule): array
-    {
-        if (! $vehicule->parrain_id || ! $vehicule->equipe) {
-            return [];
-        }
-
-        $processus = CommissionProcessus::where('organization_id', $vehicule->organization_id)
-            ->whereIn('code', CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN)
-            ->get()
-            ->keyBy('id');
-
-        return EquipeLivraisonPartageCategorie::where('equipe_id', $vehicule->equipe->id)
-            ->whereIn('processus_id', $processus->keys())
-            ->where('parrain_id', $vehicule->parrain_id)
-            ->actifA(now())
-            ->with('categorie:id,nom')
-            ->get()
-            ->map(fn (EquipeLivraisonPartageCategorie $p) => [
-                'processus_code' => $processus->get($p->processus_id)->code,
-                'processus_label' => CommissionRegleController::processusLabel($processus->get($p->processus_id)->code),
-                'categorie_nom' => $p->categorie?->nom ?? '—',
-                'montant' => (int) $p->montant_unitaire,
-                'a_repartir' => $p->partParrainARepartir(),
-                // PARRAIN-023 : date de début de la part en vigueur.
-                'depuis' => $p->effective_from?->toDateString(),
-                // PARRAIN-024 : date de début des droits en attente de la répartition de l'équipe.
-                'droits_en_attente' => $p->droits_parrain_depuis?->toDateString(),
-            ])
-            // Ordre métier des onglets Équipe : Ventes, Transferts logistiques, Transferts
-            // grossistes, Distribution client.
-            ->sortBy(fn (array $r) => [array_search($r['processus_code'], CommissionProcessusDefaults::codesPartageEquipe(), true), $r['categorie_nom']])
-            ->values()
-            ->all();
     }
 
     public function storeFrais(Request $request, Vehicule $vehicule): RedirectResponse

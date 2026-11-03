@@ -12,6 +12,7 @@ use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
 use App\Services\Client\Data\ActiviteRow;
 use App\Services\Client\Data\VehiculeSummary;
+use Carbon\CarbonImmutable;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -28,14 +29,20 @@ use Illuminate\Support\Collection;
  * accueilli ici aussi (même résolution véhicule/équipe que l'endpoint
  * "en cours"), mais ce n'est pas son usage principal.
  *
- * Pagination calculée en mémoire (pas de UNION SQL) : deux modèles différents
- * (CommandeVente, TransfertLogistique) sont fusionnés puis triés par date —
- * chaque sous-requête est filtrée en base (véhicule/statut/période) avant
- * fusion, donc le volume réellement chargé reste borné à l'activité d'UN
- * propriétaire, jamais à toute la table.
+ * Pagination sans UNION SQL : deux modèles différents (CommandeVente,
+ * TransfertLogistique) sont filtrés en base (véhicule/statut/période), comptés,
+ * puis seules les `page × per_page` premières lignes de chacun sont chargées,
+ * fusionnées et triées : ces lignes contiennent forcément la page demandée.
+ *
+ * La date filtrée et triée est celle affichée sur la ligne : validation ou
+ * départ réel, à défaut création.
  */
 class ActiviteController extends Controller
 {
+    private const DATE_VENTE = 'COALESCE(validated_at, created_at)';
+
+    private const DATE_TRANSFERT = 'COALESCE(date_depart_reelle, created_at)';
+
     public function __construct(
         private readonly ClientIdentityResolver $identityResolver,
         private readonly ClientEarningsService $earningsService,
@@ -46,7 +53,8 @@ class ActiviteController extends Controller
             .'pour `type=vente`, `StatutTransfert` pour `type=logistique`) — aucune correspondance '
             .'n\'est inventée entre les deux. `statut` **exige `type`** (422 explicite sinon, message '
             .'"Le filtre statut nécessite de préciser type"). `type` omis = les deux mélangés, triés '
-            .'par date décroissante, mais alors sans filtre `statut` possible.',
+            .'par date décroissante, mais alors sans filtre `statut` possible. `periode` (période rapide '
+            .'résolue par le serveur) exclut `date_debut`/`date_fin` (422 sinon).',
     )]
     public function __invoke(ActiviteMineRequest $request): JsonResponse
     {
@@ -79,23 +87,33 @@ class ActiviteController extends Controller
             return $this->emptyPage($request);
         }
 
-        $items = collect();
+        $bornes = $request->bornes();
+        $perPage = $request->perPage();
+        $page = $request->page();
+        $fenetre = $page * $perPage;
 
-        if ($filters['type'] !== 'logistique') {
-            $items = $items->concat($this->ventes($identity->organizationId, $vehiculeIds, $filters));
+        $items = collect();
+        $total = 0;
+
+        if ($filters['type'] !== 'logistique' && $vehiculeIds->isNotEmpty()) {
+            $ventes = $this->ventesQuery($identity->organizationId, $vehiculeIds, $filters, $bornes);
+            $total += $ventes->count();
+            $items = $items->concat($this->ventes($ventes, $fenetre));
         }
 
         if ($filters['type'] !== 'vente') {
-            $items = $items->concat($this->transferts($identity->organizationId, $vehiculeIds, $equipeIds, $filters));
+            $transferts = $this->transfertsQuery($identity->organizationId, $vehiculeIds, $equipeIds, $filters, $bornes);
+            $total += $transferts->count();
+            $items = $items->concat($this->transferts($transferts, $fenetre));
         }
 
-        $items = $items->sortByDesc('dateSort')->values();
+        $slice = $items
+            ->sortBy([['dateSort', 'desc'], ['id', 'desc']])
+            ->values()
+            ->forPage($page, $perPage)
+            ->values();
 
-        $perPage = $request->perPage();
-        $page = $request->page();
-        $slice = $items->forPage($page, $perPage)->values();
-
-        $paginator = new LengthAwarePaginator($slice, $items->count(), $perPage, $page, [
+        $paginator = new LengthAwarePaginator($slice, $total, $perPage, $page, [
             'path' => $request->url(),
             'query' => $request->query(),
         ]);
@@ -128,22 +146,24 @@ class ActiviteController extends Controller
         ]);
     }
 
-    /** @return Collection<int, ActiviteRow> */
-    private function ventes(?string $organizationId, Collection $vehiculeIds, array $filters): Collection
+    /** @param array{0: ?CarbonImmutable, 1: ?CarbonImmutable} $bornes */
+    private function ventesQuery(?string $organizationId, Collection $vehiculeIds, array $filters, array $bornes): Builder
     {
-        if ($vehiculeIds->isEmpty()) {
-            return collect();
-        }
-
         return CommandeVente::query()
-            ->with(['site:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'client:id,nom,prenom', 'lignes:id,commande_vente_id,quantite_demandee'])
             ->when($organizationId, fn (Builder $q) => $q->where('organization_id', $organizationId))
             ->whereIn('vehicule_id', $vehiculeIds)
             ->when($filters['type'] === 'vente' && $filters['statut'], fn (Builder $q) => $q->where('statut', $filters['statut']))
-            ->when($filters['date_debut'], fn (Builder $q) => $q->whereDate('validated_at', '>=', $filters['date_debut']))
-            ->when($filters['date_fin'], fn (Builder $q) => $q->whereDate('validated_at', '<=', $filters['date_fin']))
-            ->orderByDesc('validated_at')
-            ->limit(200)
+            ->tap(fn (Builder $q) => $this->filtrerPeriode($q, self::DATE_VENTE, $bornes));
+    }
+
+    /** @return Collection<int, ActiviteRow> */
+    private function ventes(Builder $query, int $limite): Collection
+    {
+        return $query
+            ->with(['site:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'client:id,nom,prenom', 'lignes:id,commande_vente_id,quantite_demandee'])
+            ->orderByRaw(self::DATE_VENTE.' DESC')
+            ->orderByDesc('id')
+            ->limit($limite)
             ->get()
             ->map(function (CommandeVente $c) {
                 $client = $c->client;
@@ -169,25 +189,27 @@ class ActiviteController extends Controller
             });
     }
 
-    /** @return Collection<int, ActiviteRow> */
-    private function transferts(?string $organizationId, Collection $vehiculeIds, Collection $equipeIds, array $filters): Collection
+    /** @param array{0: ?CarbonImmutable, 1: ?CarbonImmutable} $bornes */
+    private function transfertsQuery(?string $organizationId, Collection $vehiculeIds, Collection $equipeIds, array $filters, array $bornes): Builder
     {
-        if ($vehiculeIds->isEmpty() && $equipeIds->isEmpty()) {
-            return collect();
-        }
-
         return TransfertLogistique::query()
-            ->with(['siteSource:id,nom', 'siteDestination:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'lignes'])
             ->when($organizationId, fn (Builder $q) => $q->where('organization_id', $organizationId))
             ->where(fn (Builder $q) => $q
                 ->when($vehiculeIds->isNotEmpty(), fn (Builder $q2) => $q2->orWhereIn('vehicule_id', $vehiculeIds))
                 ->when($equipeIds->isNotEmpty(), fn (Builder $q2) => $q2->orWhereIn('equipe_livraison_id', $equipeIds))
             )
             ->when($filters['type'] === 'logistique' && $filters['statut'], fn (Builder $q) => $q->where('statut', $filters['statut']))
-            ->when($filters['date_debut'], fn (Builder $q) => $q->whereDate('date_depart_reelle', '>=', $filters['date_debut']))
-            ->when($filters['date_fin'], fn (Builder $q) => $q->whereDate('date_depart_reelle', '<=', $filters['date_fin']))
-            ->orderByDesc('date_depart_reelle')
-            ->limit(200)
+            ->tap(fn (Builder $q) => $this->filtrerPeriode($q, self::DATE_TRANSFERT, $bornes));
+    }
+
+    /** @return Collection<int, ActiviteRow> */
+    private function transferts(Builder $query, int $limite): Collection
+    {
+        return $query
+            ->with(['siteSource:id,nom', 'siteDestination:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'lignes'])
+            ->orderByRaw(self::DATE_TRANSFERT.' DESC')
+            ->orderByDesc('id')
+            ->limit($limite)
             ->get()
             ->map(function (TransfertLogistique $t) {
                 $date = $t->date_depart_reelle ?? $t->created_at;
@@ -210,6 +232,16 @@ class ActiviteController extends Controller
                     nbPacks: (int) $t->lignes->sum('quantite_chargee'),
                 );
             });
+    }
+
+    /** @param array{0: ?CarbonImmutable, 1: ?CarbonImmutable} $bornes */
+    private function filtrerPeriode(Builder $query, string $colonneDate, array $bornes): void
+    {
+        [$debut, $fin] = $bornes;
+
+        $query
+            ->when($debut, fn (Builder $q) => $q->whereRaw("{$colonneDate} >= ?", [$debut->toDateTimeString()]))
+            ->when($fin, fn (Builder $q) => $q->whereRaw("{$colonneDate} <= ?", [$fin->toDateTimeString()]));
     }
 
     /** @return Collection<int, string> */

@@ -141,6 +141,8 @@ use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiePaiementController;
 use App\Http\Controllers\PaieVariableController;
+use App\Http\Controllers\Parrains\CompteParrainController;
+use App\Http\Controllers\Parrains\ParrainController;
 use App\Http\Controllers\PieceIdentiteController;
 use App\Http\Controllers\PrestataireController;
 use App\Http\Controllers\Produits\AjusterStockProduitController;
@@ -649,6 +651,12 @@ Route::prefix('backoffice')->group(function () {
             Route::post('vehicules/{vehicule}/parrain', StoreParrainController::class)->name('vehicules.parrain.store');
             Route::put('vehicules/{vehicule}/parrain', UpdateParrainController::class)->name('vehicules.parrain.update');
             Route::delete('vehicules/{vehicule}/parrain', DestroyParrainController::class)->name('vehicules.parrain.destroy');
+            // Liste et fiche des parrains, compte rattaché (ADR 0050) : un parrain se crée depuis son véhicule.
+            Route::get('parrains', [ParrainController::class, 'index'])->name('parrains.index');
+            Route::get('parrains/{parrain}', [ParrainController::class, 'show'])->name('parrains.show');
+            Route::get('parrains/{parrain}/compte/candidat', [CompteParrainController::class, 'candidat'])->name('parrains.compte.candidat');
+            Route::post('parrains/{parrain}/compte', [CompteParrainController::class, 'store'])->name('parrains.compte.store');
+            Route::delete('parrains/{parrain}/compte', [CompteParrainController::class, 'destroy'])->name('parrains.compte.destroy');
             Route::resource('proprietaires', ProprietaireController::class);
             Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])
                 ->name('proprietaires.definir-interne');

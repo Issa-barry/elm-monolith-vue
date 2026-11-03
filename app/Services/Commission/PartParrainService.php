@@ -2,6 +2,7 @@
 
 namespace App\Services\Commission;
 
+use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
@@ -29,6 +30,47 @@ class PartParrainService
     public const A_DEFINIR = 'a_definir';
 
     public const DEFINIE = 'definie';
+
+    /**
+     * Parts en vigueur du parrain actuel du véhicule, sans celles des livreurs : onglet Parrain du
+     * back-office et espace parrain.
+     *
+     * @return list<array{processus_code: string, processus_label: string, categorie_nom: string, montant: int, a_repartir: bool, depuis: ?string, droits_en_attente: ?string}>
+     */
+    public static function remuneration(Vehicule $vehicule): array
+    {
+        if (! $vehicule->parrain_id || ! $vehicule->equipe) {
+            return [];
+        }
+
+        $processus = CommissionProcessus::where('organization_id', $vehicule->organization_id)
+            ->whereIn('code', CommissionProcessusDefaults::PROCESSUS_REMUNERANT_LE_PARRAIN)
+            ->get()
+            ->keyBy('id');
+
+        return EquipeLivraisonPartageCategorie::where('equipe_id', $vehicule->equipe->id)
+            ->whereIn('processus_id', $processus->keys())
+            ->where('parrain_id', $vehicule->parrain_id)
+            ->actifA(now())
+            ->with('categorie:id,nom')
+            ->get()
+            ->map(fn (EquipeLivraisonPartageCategorie $p) => [
+                'processus_code' => $processus->get($p->processus_id)->code,
+                'processus_label' => CommissionRegleController::processusLabel($processus->get($p->processus_id)->code),
+                'categorie_nom' => $p->categorie?->nom ?? '—',
+                'montant' => (int) $p->montant_unitaire,
+                'a_repartir' => $p->partParrainARepartir(),
+                // PARRAIN-023 : date de début de la part en vigueur.
+                'depuis' => $p->effective_from?->toDateString(),
+                // PARRAIN-024 : date de début des droits en attente de la répartition de l'équipe.
+                'droits_en_attente' => $p->droits_parrain_depuis?->toDateString(),
+            ])
+            // Ordre métier des onglets Équipe : Ventes, Transferts logistiques, Transferts
+            // grossistes, Distribution client.
+            ->sortBy(fn (array $r) => [array_search($r['processus_code'], CommissionProcessusDefaults::codesPartageEquipe(), true), $r['categorie_nom']])
+            ->values()
+            ->all();
+    }
 
     /** Statut d'un véhicule, null s'il n'a pas de parrain. */
     public static function statut(Vehicule $vehicule): ?string

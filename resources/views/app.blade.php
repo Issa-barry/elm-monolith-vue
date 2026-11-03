@@ -39,6 +39,7 @@
 
         {{-- PWA — cf. docs/pwa.md. Pas de donnée de session/utilisateur dans le manifest. --}}
         <link rel="manifest" href="/manifest.json">
+        <meta name="apple-mobile-web-app-title" content="{{ config('pwa.short_name') }}">
         <meta name="theme-color" content="#fafafa">
 
         {{-- For 'system' appearance, the server can't know the OS preference; correct the favicon client-side --}}

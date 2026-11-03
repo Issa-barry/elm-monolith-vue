@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\OpenApi;
 
+use App\Http\Requests\Api\Client\ActiviteMineRequest;
 use App\Models\Organization;
 use App\Models\User;
 use Dedoc\Scramble\Generator;
@@ -140,6 +141,14 @@ class OpenApiDocumentationTest extends TestCase
         foreach ($expected as $path) {
             $this->assertArrayHasKey($path, $doc['paths'], "Missing documented path: $path");
         }
+    }
+
+    public function test_activite_documente_les_periodes_rapides_et_la_page(): void
+    {
+        $parametres = collect($this->generate('default')['paths']['/v1/mobile/activite']['get']['parameters'])->keyBy('name');
+
+        $this->assertSame([...ActiviteMineRequest::PERIODES, null], $parametres['periode']['schema']['enum']);
+        $this->assertEquals(1, $parametres['page']['schema']['minimum']);
     }
 
     public function test_endpoints_are_grouped_by_tag_not_left_flat(): void

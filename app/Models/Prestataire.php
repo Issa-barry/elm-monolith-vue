@@ -141,6 +141,15 @@ class Prestataire extends Model
         return $this->belongsTo(EntrepriseTierce::class);
     }
 
+    /**
+     * Compte du consultant personne physique (ADR 0050) : non mass-assignable, seul
+     * RattachementCompteService le pose. Une entreprise passe par ses interlocuteurs.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────────
 
     public function scopeActifs(Builder $q): Builder

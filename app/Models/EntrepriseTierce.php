@@ -68,6 +68,11 @@ class EntrepriseTierce extends Model
         return $this->hasMany(Prestataire::class);
     }
 
+    public function interlocuteurs(): HasMany
+    {
+        return $this->hasMany(EntrepriseInterlocuteur::class);
+    }
+
     /**
      * Cherche une EntrepriseTierce existante dans l'organisation par téléphone normalisé, sinon
      * en crée une nouvelle — même principe que Personne::resoudreOuCreer() : le téléphone

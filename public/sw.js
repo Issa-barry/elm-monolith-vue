@@ -9,15 +9,16 @@
 //
 // Procédure de retrait / désactivation : voir docs/pwa.md.
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `elm-pwa-${CACHE_VERSION}`;
 
-// Liste blanche fixe : icônes + manifest (ne changent jamais de nom, pas de hash).
+// Liste blanche fixe : icônes (ne changent jamais de nom, pas de hash). Jamais
+// /manifest.json : généré par Laravel selon l'environnement, un exemplaire en
+// cache empêcherait un changement de nom d'atteindre les téléphones.
 const STATIC_ALLOWLIST = [
     '/icons/icon-192.png',
     '/icons/icon-512.png',
     '/icons/icon-maskable-512.png',
-    '/manifest.json',
 ];
 
 // Le build normal écrit dans public/build/, le build E2E dans public/build-e2e/
@@ -127,8 +128,8 @@ self.addEventListener('fetch', (event) => {
     if (url.origin !== self.location.origin) return;
 
     // Liste blanche explicite par chemin : seuls les assets Vite hashés du
-    // build courant et les icônes/manifest fixes sont éligibles à une réponse
-    // depuis le cache. Toute requête Inertia (X-Inertia), API (/api/*) ou
+    // build courant et les icônes fixes sont éligibles à une réponse depuis le
+    // cache. Toute requête Inertia (X-Inertia), API (/api/*) ou
     // applicative ne matche jamais ce filtre et continue vers le réseau
     // exactement comme en l'absence de service worker.
     const buildDir = getBuildDir();

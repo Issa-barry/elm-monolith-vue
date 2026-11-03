@@ -91,6 +91,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.create',      'prestataires.read',      'prestataires.update',      'prestataires.delete',
             'livreurs.create',          'livreurs.read',          'livreurs.update',          'livreurs.delete',
             'proprietaires.create',     'proprietaires.read',     'proprietaires.update',     'proprietaires.delete',
+            'parrains.read',            'rattachements-comptes.gerer',
             'pieces-identite.create',   'pieces-identite.read',   'pieces-identite.update',   'pieces-identite.delete',
             'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
             'imports-flotte.create',    'imports-flotte.read',

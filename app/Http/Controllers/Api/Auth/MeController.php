@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Auth;
 use App\Http\Controllers\Controller;
 use App\Services\Client\ClientIdentityResolver;
 use App\Services\Client\QrPayloadResolver;
+use App\Services\Comptes\ActivitesCompteResolver;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,9 +19,10 @@ class MeController extends Controller
             .'conception déjà rencontré côté frontend). Un frontend doit vérifier '
             ."`roles.some(r => ['client','proprietaire','livreur'].includes(r))` pour l'accès espace "
             .'client, jamais une égalité stricte. `context` est résolu exclusivement via '
-            .'`ClientIdentityResolver` à partir du compte authentifié, jamais un paramètre client.',
+            .'`ClientIdentityResolver` à partir du compte authentifié, jamais un paramètre client. '
+            .'`context.parrain_id` suit uniquement le rattachement posé au back-office (ADR 0050).',
     )]
-    public function __invoke(Request $request, ClientIdentityResolver $identityResolver, QrPayloadResolver $qrPayloadResolver): JsonResponse
+    public function __invoke(Request $request, ClientIdentityResolver $identityResolver, QrPayloadResolver $qrPayloadResolver, ActivitesCompteResolver $activites): JsonResponse
     {
         $user = $request->user();
         $identity = $identityResolver->resolve($user);
@@ -54,6 +56,8 @@ class MeController extends Controller
                 'client_id' => $identity->client?->id,
                 'proprietaire_id' => $identity->proprietaire?->id,
                 'livreur_id' => $identity->livreur?->id,
+                // Lu sur le rattachement posé au back-office (ADR 0050), jamais sur le téléphone.
+                'parrain_id' => $activites->resolve($user)->parrain?->id,
             ],
         ]);
     }

@@ -17,8 +17,8 @@ use Illuminate\Http\Request;
  * pour la fiche véhicule).
  *
  * Partagée aussi par le rapport d'activité et « Ma situation » (RapportPerimetreResolver), qui
- * lisent un autre paramètre d'URL et partent d'« Aujourd'hui » : une seule résolution des périodes
- * rapides dans l'application.
+ * lisent un autre paramètre d'URL et partent d'« Aujourd'hui », et par l'activité de l'espace client
+ * (ActiviteMineRequest) : une seule résolution des périodes rapides dans l'application.
  */
 final class SituationPeriode
 {
@@ -112,7 +112,7 @@ final class SituationPeriode
         return new self(self::TOUT, null, null);
     }
 
-    private static function rapide(string $cle, CarbonImmutable $maintenant): ?self
+    public static function rapide(string $cle, CarbonImmutable $maintenant): ?self
     {
         $lundi = CarbonInterface::MONDAY;
         $dimanche = CarbonInterface::SUNDAY;
