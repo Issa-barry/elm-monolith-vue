@@ -72,6 +72,8 @@ final class PermissionCatalog
         'imports-vehicules-maj.read' => 'Import véhicules — consulter les imports',
         'imports-produits.create' => 'Import produits — lancer un import',
         'imports-produits.read' => 'Import produits — consulter les imports',
+        'parrains.read' => 'Parrains — consulter la liste et les fiches',
+        'rattachements-comptes.gerer' => 'Comptes — rattacher ou détacher un compte (parrain, consultant, interlocuteur) ; donne accès à ses commissions',
         'communications.read' => 'Communications — consulter le journal des messages (SMS/WhatsApp)',
         'communications.manage' => 'Communications — configurer les règles de notification (SMS/WhatsApp)',
         'pieces-identite.download' => "Pièces d'identité — télécharger",
@@ -185,7 +187,10 @@ final class PermissionCatalog
         'contacts' => [
             'label' => 'Clients & Contacts',
             'resources' => ['clients', 'prestataires', 'livreurs', 'proprietaires'],
-            'standalone' => [],
+            'standalone' => [
+                'Parrains' => ['parrains.read'],
+                'Comptes' => ['rattachements-comptes.gerer'],
+            ],
         ],
         'vehicules' => [
             'label' => 'Véhicules & Flotte',

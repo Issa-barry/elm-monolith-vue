@@ -112,7 +112,8 @@ class UserTest extends TestCase
      * (4 actions), `rh-affectations-remuneration.valider` et les 4 droits `rh-transmissions-paie.*`
      * (29/10/2026, primes des salariés et transmission de paie — ADR 0039, ADR 0040) = 244, puis
      * `ventes.regulariser_apres_encaissement` (30/10/2026, régularisation d'une vente déjà
-     * encaissée — cf. CommandeVentePolicy::regulariserApresEncaissement(), ADR 0043) = 245.
+     * encaissée — cf. CommandeVentePolicy::regulariserApresEncaissement(), ADR 0043) + 2 (parrains.read,
+     * rattachements-comptes.gerer — ADR 0050) = 247.
      */
     public function test_permissions_map_returns_211_keys(): void
     {
@@ -122,7 +123,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(245, $map);
+        $this->assertCount(247, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Auth\BackofficeLoginController;
 use App\Http\Controllers\Api\Auth\CheckPhoneController;
+use App\Http\Controllers\Api\Auth\ConfirmEmailProfilController;
 use App\Http\Controllers\Api\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\Auth\LoginController;
 use App\Http\Controllers\Api\Auth\LogoutAllController;
@@ -52,6 +53,10 @@ use App\Http\Controllers\Api\Mobile\ScanCommandeController;
 use App\Http\Controllers\Api\Mobile\WebPush\DestroyWebPushSubscriptionController;
 use App\Http\Controllers\Api\Mobile\WebPush\StoreWebPushSubscriptionController;
 use App\Http\Controllers\Api\Mobile\WebPush\VapidPublicKeyController;
+use App\Http\Controllers\Api\Parrain\CommissionsParrainController;
+use App\Http\Controllers\Api\Parrain\PaiementsParrainController;
+use App\Http\Controllers\Api\Parrain\SyntheseParrainController;
+use App\Http\Controllers\Api\Parrain\VehiculesParrainController;
 use App\Http\Controllers\Api\Produits\ProduitController;
 use App\Http\Controllers\Api\Produits\ProduitHistoriqueController;
 use App\Http\Controllers\Api\Public\ContactController as PublicContactController;
@@ -85,6 +90,11 @@ Route::prefix('auth')->name('api.auth.')->group(function () {
     // Vérification email (accessible sans authentification)
     Route::get('verify-email/{token}', EmailVerificationController::class)
         ->name('verify-email');
+
+    // Confirmation d'un changement d'e-mail demandé depuis le profil (lien signé, ADR 0051)
+    Route::get('confirm-email/{userId}', ConfirmEmailProfilController::class)
+        ->name('confirm-email')
+        ->middleware('throttle:20,1');
 
     // Inscription multi-étapes
     Route::prefix('register')->name('register.')->middleware('throttle:20,1')->group(function () {
@@ -244,6 +254,14 @@ Route::middleware('auth:sanctum')->group(function () {
                 ->name('client.profile.update');
             Route::patch('profile/notification-preferences', UpdateNotificationPreferencesController::class)
                 ->name('client.profile.notification-preferences');
+            // Espace parrain (ADR 0050) : le rôle ouvre l'espace client, le rattachement décide de
+            // l'accès à chaque requête (404 sans parrain relié au compte).
+            Route::prefix('parrain')->name('client.parrain.')->group(function () {
+                Route::get('synthese', SyntheseParrainController::class)->name('synthese');
+                Route::get('vehicules', VehiculesParrainController::class)->name('vehicules');
+                Route::get('commissions', CommissionsParrainController::class)->name('commissions');
+                Route::get('paiements', PaiementsParrainController::class)->name('paiements');
+            });
         });
         Route::post('push-token', PushTokenController::class)
             ->name('client.push-token');

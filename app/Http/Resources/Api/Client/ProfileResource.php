@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\Client;
 
+use App\Http\Requests\Api\Client\UpdateProfileRequest;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
@@ -40,6 +41,7 @@ class ProfileResource extends JsonResource
                 $this->resource instanceof Livreur => $this->fromLivreur($this->resource),
                 default => null,
             },
+            'pays_disponibles' => UpdateProfileRequest::paysDisponibles(),
         ];
     }
 

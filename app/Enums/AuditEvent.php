@@ -30,6 +30,9 @@ enum AuditEvent: string
     // RH : fin d'effet d'une affectation de prime, transmission mensuelle à la Comptabilité (ADR 0039, 0040).
     case ENDED = 'ended';
     case TRANSMITTED = 'transmitted';
+    // Rattachement d'un compte à une fiche parrain, consultant ou interlocuteur (ADR 0050).
+    case COMPTE_RATTACHE = 'compte_rattache';
+    case COMPTE_DETACHE = 'compte_detache';
 
     public function label(): string
     {
@@ -59,6 +62,8 @@ enum AuditEvent: string
             self::ANOMALIE_REAPPARUE => 'Écart réapparu',
             self::ENDED => "Fin d'effet",
             self::TRANSMITTED => 'Transmis',
+            self::COMPTE_RATTACHE => 'Compte rattaché',
+            self::COMPTE_DETACHE => 'Compte détaché',
         };
     }
 
@@ -90,6 +95,8 @@ enum AuditEvent: string
             self::ANOMALIE_REAPPARUE => 'orange',
             self::ENDED => 'slate',
             self::TRANSMITTED => 'green',
+            self::COMPTE_RATTACHE => 'emerald',
+            self::COMPTE_DETACHE => 'slate',
         };
     }
 }

@@ -34,6 +34,9 @@ test.describe('PWA — manifest et icônes', () => {
     }) => {
         const res = await request.get('/manifest.json');
         expect(res.ok()).toBeTruthy();
+        expect(res.headers()['content-type']).toContain(
+            'application/manifest+json',
+        );
 
         const manifest = await res.json();
         expect(manifest.name).toBe('ELM');
@@ -115,8 +118,9 @@ test.describe('PWA — service worker', () => {
         expect(cachedPaths.length).toBeGreaterThan(0);
 
         for (const p of cachedPaths) {
+            // Pas /manifest.json : un exemplaire en cache figerait le nom de
+            // l'application sur les téléphones (cf. docs/pwa.md).
             const isStaticAllowlisted =
-                p === '/manifest.json' ||
                 p.startsWith('/icons/') ||
                 p.startsWith('/build/assets/') ||
                 p.startsWith('/build-e2e/assets/');

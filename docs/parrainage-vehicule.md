@@ -46,6 +46,11 @@ commissions : voir la section « Part du parrain » plus bas.
   permission dédiée créée pour cette fonctionnalité. Exception depuis la phase 2 : changer ou
   retirer un parrain qui reçoit une part exige aussi `equipes-livraison.update` (PARRAIN-016).
 
+- **Compte du parrain** (ADR 0050) — Un parrain ne reçoit un compte relié que par un rattachement manuel au
+  back-office, jamais par l'inscription ou la connexion : voir [rattachement-comptes.md](rattachement-comptes.md).
+  La liste et la fiche Contacts → Parrains consultent le parrain ; sa création et la modification de son
+  identité restent dans l'onglet Parrain du véhicule.
+
 ## Modèles et migrations
 
 | Élément | Rôle |

@@ -28,7 +28,7 @@
         "/v1/mobile/activite": {
             "get": {
                 "operationId": "client.activite.mine",
-                "description": "M\u00e9lange deux mod\u00e8les \u00e0 vocabulaire de statut distinct (`StatutCommandeVente` pour `type=vente`, `StatutTransfert` pour `type=logistique`) \u2014 aucune correspondance n'est invent\u00e9e entre les deux. `statut` **exige `type`** (422 explicite sinon, message \"Le filtre statut n\u00e9cessite de pr\u00e9ciser type\"). `type` omis = les deux m\u00e9lang\u00e9s, tri\u00e9s par date d\u00e9croissante, mais alors sans filtre `statut` possible.",
+                "description": "M\u00e9lange deux mod\u00e8les \u00e0 vocabulaire de statut distinct (`StatutCommandeVente` pour `type=vente`, `StatutTransfert` pour `type=logistique`) \u2014 aucune correspondance n'est invent\u00e9e entre les deux. `statut` **exige `type`** (422 explicite sinon, message \"Le filtre statut n\u00e9cessite de pr\u00e9ciser type\"). `type` omis = les deux m\u00e9lang\u00e9s, tri\u00e9s par date d\u00e9croissante, mais alors sans filtre `statut` possible. `periode` (p\u00e9riode rapide r\u00e9solue par le serveur) exclut `date_debut`/`date_fin` (422 sinon).",
                 "tags": [
                     "Activity"
                 ],
@@ -69,6 +69,26 @@
                         }
                     },
                     {
+                        "name": "periode",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "aujourd_hui",
+                                "hier",
+                                "cette_semaine",
+                                "semaine_precedente",
+                                "ce_mois",
+                                "mois_precedent",
+                                "cette_annee",
+                                null
+                            ]
+                        }
+                    },
+                    {
                         "name": "date_debut",
                         "in": "query",
                         "schema": {
@@ -100,6 +120,17 @@
                             ],
                             "minimum": 1,
                             "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1
                         }
                     }
                 ],
@@ -177,13 +208,25 @@
                                                         "type": {},
                                                         "statut": {},
                                                         "vehicule_id": {},
-                                                        "date_debut": {},
-                                                        "date_fin": {}
+                                                        "periode": {},
+                                                        "date_debut": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "date_fin": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        }
                                                     },
                                                     "required": [
                                                         "type",
                                                         "statut",
                                                         "vehicule_id",
+                                                        "periode",
                                                         "date_debut",
                                                         "date_fin"
                                                     ]
@@ -262,13 +305,25 @@
                                                         "type": {},
                                                         "statut": {},
                                                         "vehicule_id": {},
-                                                        "date_debut": {},
-                                                        "date_fin": {}
+                                                        "periode": {},
+                                                        "date_debut": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "date_fin": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        }
                                                     },
                                                     "required": [
                                                         "type",
                                                         "statut",
                                                         "vehicule_id",
+                                                        "periode",
                                                         "date_debut",
                                                         "date_fin"
                                                     ]
@@ -1058,7 +1113,7 @@
         "/auth/me": {
             "get": {
                 "operationId": "auth.me",
-                "description": "`roles` liste **tous** les r\u00f4les du compte (un compte peut cumuler un r\u00f4le staff ET un r\u00f4le client/proprietaire/livreur, cf. d\u00e9cision multi-r\u00f4le du 26/08/2026) \u2014 **tableau non ordonn\u00e9**, ne jamais utiliser `roles[0]` comme \"r\u00f4le principal\" (bug de conception d\u00e9j\u00e0 rencontr\u00e9 c\u00f4t\u00e9 frontend). Un frontend doit v\u00e9rifier `roles.some(r => ['client','proprietaire','livreur'].includes(r))` pour l'acc\u00e8s espace client, jamais une \u00e9galit\u00e9 stricte. `context` est r\u00e9solu exclusivement via `ClientIdentityResolver` \u00e0 partir du compte authentifi\u00e9, jamais un param\u00e8tre client.",
+                "description": "`roles` liste **tous** les r\u00f4les du compte (un compte peut cumuler un r\u00f4le staff ET un r\u00f4le client/proprietaire/livreur, cf. d\u00e9cision multi-r\u00f4le du 26/08/2026) \u2014 **tableau non ordonn\u00e9**, ne jamais utiliser `roles[0]` comme \"r\u00f4le principal\" (bug de conception d\u00e9j\u00e0 rencontr\u00e9 c\u00f4t\u00e9 frontend). Un frontend doit v\u00e9rifier `roles.some(r => ['client','proprietaire','livreur'].includes(r))` pour l'acc\u00e8s espace client, jamais une \u00e9galit\u00e9 stricte. `context` est r\u00e9solu exclusivement via `ClientIdentityResolver` \u00e0 partir du compte authentifi\u00e9, jamais un param\u00e8tre client. `context.parrain_id` suit uniquement le rattachement pos\u00e9 au back-office (ADR 0050).",
                 "tags": [
                     "Authentication"
                 ],
@@ -1123,13 +1178,21 @@
                                                 },
                                                 "livreur_id": {
                                                     "type": "null"
+                                                },
+                                                "parrain_id": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "description": "Lu sur le rattachement pos\u00e9 au back-office (ADR 0050), jamais sur le t\u00e9l\u00e9phone."
                                                 }
                                             },
                                             "required": [
                                                 "organization_id",
                                                 "client_id",
                                                 "proprietaire_id",
-                                                "livreur_id"
+                                                "livreur_id",
+                                                "parrain_id"
                                             ]
                                         }
                                     },
@@ -1498,6 +1561,702 @@
                     }
                 },
                 "security": []
+            }
+        },
+        "/auth/confirm-email/{userId}": {
+            "get": {
+                "operationId": "auth.confirm-email",
+                "tags": [
+                    "Autres"
+                ],
+                "parameters": [
+                    {
+                        "name": "userId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/v1/mobile/parrain/synthese": {
+            "get": {
+                "operationId": "client.parrain.synthese",
+                "description": "Identit\u00e9 et totaux du parrain reli\u00e9 au compte par un responsable (ADR 0050). `404` si aucun parrain n'est rattach\u00e9. `total_genere` = `en_attente_periode` + `payable` + `deja_paye`. Le parrain vient du compte authentifi\u00e9, jamais d'un param\u00e8tre.",
+                "tags": [
+                    "Autres"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "parrain": {
+                                            "type": "object",
+                                            "properties": {
+                                                "id": {
+                                                    "type": "string"
+                                                },
+                                                "nom_complet": {
+                                                    "type": "string"
+                                                },
+                                                "telephone": {
+                                                    "type": "string"
+                                                },
+                                                "is_active": {
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": [
+                                                "id",
+                                                "nom_complet",
+                                                "telephone",
+                                                "is_active"
+                                            ]
+                                        },
+                                        "nb_vehicules": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                        },
+                                        "totaux": {
+                                            "type": "object",
+                                            "properties": {
+                                                "total_genere": {
+                                                    "type": "number"
+                                                },
+                                                "en_attente_periode": {
+                                                    "type": "number"
+                                                },
+                                                "payable": {
+                                                    "type": "number"
+                                                },
+                                                "deja_paye": {
+                                                    "type": "number"
+                                                },
+                                                "reste_a_payer": {
+                                                    "type": "number"
+                                                }
+                                            },
+                                            "required": [
+                                                "total_genere",
+                                                "en_attente_periode",
+                                                "payable",
+                                                "deja_paye",
+                                                "reste_a_payer"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "parrain",
+                                        "nb_vehicules",
+                                        "totaux"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    }
+                }
+            }
+        },
+        "/v1/mobile/parrain/vehicules": {
+            "get": {
+                "operationId": "client.parrain.vehicules",
+                "description": "V\u00e9hicules que le parrain parraine actuellement, avec ses propres parts en vigueur (GNF par pack). Jamais l'\u00e9quipe, le propri\u00e9taire ni la part des autres b\u00e9n\u00e9ficiaires. Un v\u00e9hicule retir\u00e9 ou remplac\u00e9 sort de cette liste, ses commissions restent dans `commissions`.",
+                "tags": [
+                    "Autres"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "nom_vehicule": {
+                                                        "type": "string"
+                                                    },
+                                                    "immatriculation": {
+                                                        "type": "string"
+                                                    },
+                                                    "type_label": {
+                                                        "type": "string"
+                                                    },
+                                                    "site_nom": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "is_active": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "parts": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "processus_label": {
+                                                                    "type": "string"
+                                                                },
+                                                                "categorie_nom": {
+                                                                    "type": "string"
+                                                                },
+                                                                "montant": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "a_definir": {
+                                                                    "type": "boolean"
+                                                                },
+                                                                "depuis": {
+                                                                    "type": [
+                                                                        "string",
+                                                                        "null"
+                                                                    ],
+                                                                    "description": "PARRAIN-023 : date de d\u00e9but de la part en vigueur."
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "processus_label",
+                                                                "categorie_nom",
+                                                                "montant",
+                                                                "a_definir",
+                                                                "depuis"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                "required": [
+                                                    "id",
+                                                    "nom_vehicule",
+                                                    "immatriculation",
+                                                    "type_label",
+                                                    "site_nom",
+                                                    "is_active",
+                                                    "parts"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    }
+                }
+            }
+        },
+        "/v1/mobile/parrain/commissions": {
+            "get": {
+                "operationId": "client.parrain.commissions",
+                "description": "Parts du parrain, une ligne par op\u00e9ration, de la plus r\u00e9cente \u00e0 la plus ancienne, sans les commissions annul\u00e9es. `resume` porte les totaux des filtres appliqu\u00e9s, sur toutes les pages. Un `vehicule_id` d'un v\u00e9hicule sans part de ce parrain renvoie une liste vide.",
+                "tags": [
+                    "Autres"
+                ],
+                "parameters": [
+                    {
+                        "name": "vehicule_id",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "statut",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "creee",
+                                "impaye",
+                                "partiel",
+                                "paye",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "date_debut",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "date_fin",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `CommissionParrainResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CommissionParrainResource"
+                                            }
+                                        },
+                                        "links": {
+                                            "type": "object",
+                                            "properties": {
+                                                "first": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "last": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "prev": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "next": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "first",
+                                                "last",
+                                                "prev",
+                                                "next"
+                                            ]
+                                        },
+                                        "meta": {
+                                            "type": "object",
+                                            "properties": {
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "from": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "minimum": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "links": {
+                                                    "type": "array",
+                                                    "description": "Generated paginator links.",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "url": {
+                                                                "type": [
+                                                                    "string",
+                                                                    "null"
+                                                                ]
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            },
+                                                            "active": {
+                                                                "type": "boolean"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "url",
+                                                            "label",
+                                                            "active"
+                                                        ]
+                                                    }
+                                                },
+                                                "path": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "description": "Base path for paginator generated URLs."
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "description": "Number of items shown per page.",
+                                                    "minimum": 0
+                                                },
+                                                "to": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "description": "Number of the last item in the slice.",
+                                                    "minimum": 1
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "description": "Total number of items being paginated.",
+                                                    "minimum": 0
+                                                }
+                                            },
+                                            "required": [
+                                                "current_page",
+                                                "from",
+                                                "last_page",
+                                                "links",
+                                                "path",
+                                                "per_page",
+                                                "to",
+                                                "total"
+                                            ]
+                                        },
+                                        "resume": {
+                                            "type": "object",
+                                            "properties": {
+                                                "total_genere": {
+                                                    "type": "number"
+                                                },
+                                                "en_attente_periode": {
+                                                    "type": "number"
+                                                },
+                                                "payable": {
+                                                    "type": "number"
+                                                },
+                                                "deja_paye": {
+                                                    "type": "number"
+                                                },
+                                                "reste_a_payer": {
+                                                    "type": "number"
+                                                }
+                                            },
+                                            "required": [
+                                                "total_genere",
+                                                "en_attente_periode",
+                                                "payable",
+                                                "deja_paye",
+                                                "reste_a_payer"
+                                            ]
+                                        },
+                                        "filters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "vehicule_id": {},
+                                                "statut": {},
+                                                "date_debut": {},
+                                                "date_fin": {}
+                                            },
+                                            "required": [
+                                                "vehicule_id",
+                                                "statut",
+                                                "date_debut",
+                                                "date_fin"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "links",
+                                        "meta",
+                                        "resume",
+                                        "filters"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    }
+                }
+            }
+        },
+        "/v1/mobile/parrain/paiements": {
+            "get": {
+                "operationId": "client.parrain.paiements",
+                "description": "Versements re\u00e7us par le parrain, du plus r\u00e9cent au plus ancien. Jamais le compte de tr\u00e9sorerie ni la personne qui a pay\u00e9.",
+                "tags": [
+                    "Autres"
+                ],
+                "parameters": [
+                    {
+                        "name": "date_debut",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "date_fin",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `PaiementParrainResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/PaiementParrainResource"
+                                            }
+                                        },
+                                        "links": {
+                                            "type": "object",
+                                            "properties": {
+                                                "first": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "last": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "prev": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "next": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "first",
+                                                "last",
+                                                "prev",
+                                                "next"
+                                            ]
+                                        },
+                                        "meta": {
+                                            "type": "object",
+                                            "properties": {
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "from": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "minimum": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "links": {
+                                                    "type": "array",
+                                                    "description": "Generated paginator links.",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "url": {
+                                                                "type": [
+                                                                    "string",
+                                                                    "null"
+                                                                ]
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            },
+                                                            "active": {
+                                                                "type": "boolean"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "url",
+                                                            "label",
+                                                            "active"
+                                                        ]
+                                                    }
+                                                },
+                                                "path": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "description": "Base path for paginator generated URLs."
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "description": "Number of items shown per page.",
+                                                    "minimum": 0
+                                                },
+                                                "to": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "description": "Number of the last item in the slice.",
+                                                    "minimum": 1
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "description": "Total number of items being paginated.",
+                                                    "minimum": 0
+                                                }
+                                            },
+                                            "required": [
+                                                "current_page",
+                                                "from",
+                                                "last_page",
+                                                "links",
+                                                "path",
+                                                "per_page",
+                                                "to",
+                                                "total"
+                                            ]
+                                        },
+                                        "filters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "date_debut": {},
+                                                "date_fin": {}
+                                            },
+                                            "required": [
+                                                "date_debut",
+                                                "date_fin"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "links",
+                                        "meta",
+                                        "filters"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    }
+                }
             }
         },
         "/v1/mobile/web-push/vapid-public-key": {
@@ -3650,7 +4409,7 @@
         "/v1/mobile/profile": {
             "get": {
                 "operationId": "client.profile.mine",
-                "description": "Aucun champ `siret`/identifiant l\u00e9gal (absent du mod\u00e8le ELM, ne jamais l'inventer c\u00f4t\u00e9 frontend). Aucun champ \"quartier\" s\u00e9par\u00e9 \u2014 seuls `pays`, `ville`, `adresse` existent, un quartier doit \u00eatre saisi dans `adresse` en texte libre. `profile` vaut `null` si le r\u00f4le est pr\u00e9sent mais qu'aucune fiche m\u00e9tier n'est r\u00e9ellement rattach\u00e9e (cas limite). Seuls `pays`/`code_pays`/`ville`/`adresse` sont modifiables via `PATCH` \u2014 voir cet endpoint pour le d\u00e9tail exact.",
+                "description": "Aucun champ `siret`/identifiant l\u00e9gal (absent du mod\u00e8le ELM, ne jamais l'inventer c\u00f4t\u00e9 frontend). Aucun champ \"quartier\" s\u00e9par\u00e9 \u2014 seuls `pays`, `ville`, `adresse` existent, un quartier doit \u00eatre saisi dans `adresse` en texte libre. `profile` vaut `null` si le r\u00f4le est pr\u00e9sent mais qu'aucune fiche m\u00e9tier n'est r\u00e9ellement rattach\u00e9e (cas limite). `pays_disponibles` liste les pays s\u00e9lectionnables. Les champs modifiables sont d\u00e9taill\u00e9s sur le `PATCH` de cette route.",
                 "tags": [
                     "Profile"
                 ],
@@ -3676,7 +4435,7 @@
             },
             "patch": {
                 "operationId": "client.profile.update",
-                "description": "Seuls `pays`, `code_pays`, `ville`, `adresse` sont modifiables ici (tous optionnels, seuls les champs envoy\u00e9s sont modifi\u00e9s). **Volontairement non modifiables par ce endpoint** (silencieusement ignor\u00e9s si envoy\u00e9s) : `nom`/`prenom`/`surnom` (identit\u00e9 civile), `telephone`/`email` (identifiants de connexion, unicit\u00e9 par organisation \u00e0 revalider), `raison_sociale`/`type` (identit\u00e9 l\u00e9gale), `actif` (jamais en self-service) \u2014 r\u00e9serv\u00e9s au backoffice. `404` si aucun profil n'est rattach\u00e9 au compte.",
+                "description": "Tous les champs sont optionnels, seuls les champs envoy\u00e9s sont modifi\u00e9s. `prenom`/`nom` : appliqu\u00e9s imm\u00e9diatement, ne peuvent pas \u00eatre vid\u00e9s. `email` : appliqu\u00e9 seulement \u00e0 l'ouverture du lien envoy\u00e9 \u00e0 la nouvelle adresse (valable 24 h) ; `email_confirmation` indique l'adresse concern\u00e9e et si l'envoi a r\u00e9ussi, `null` sans demande. `pays` : un libell\u00e9 de `pays_disponibles`. **Non modifiables** (silencieusement ignor\u00e9s si envoy\u00e9s) : `telephone`, `code_pays`, `code_phone_pays`, `surnom`, `raison_sociale`, `type`, `actif`. `404` si la localisation est envoy\u00e9e sans fiche m\u00e9tier rattach\u00e9e.",
                 "tags": [
                     "Profile"
                 ],
@@ -3720,11 +4479,11 @@
                             }
                         }
                     },
-                    "401": {
-                        "$ref": "#/components/responses/AuthenticationException"
-                    },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
                     },
                     "403": {
                         "$ref": "#/components/responses/AuthorizationException"
@@ -4394,6 +5153,90 @@
                 ],
                 "title": "CommandeVenteMineResource"
             },
+            "CommissionParrainResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "date": {
+                        "type": "string"
+                    },
+                    "reference": {
+                        "type": "string"
+                    },
+                    "processus_label": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "vehicule": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "nom_vehicule": {
+                                "type": "string"
+                            },
+                            "immatriculation": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "nom_vehicule",
+                            "immatriculation"
+                        ]
+                    },
+                    "montant_unitaire": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "montant_a_payer": {
+                        "type": "number"
+                    },
+                    "montant_verse": {
+                        "type": "number"
+                    },
+                    "montant_restant": {
+                        "type": "number"
+                    },
+                    "statut": {
+                        "type": "string"
+                    },
+                    "statut_label": {
+                        "type": "string",
+                        "enum": [
+                            "Cr\u00e9\u00e9e",
+                            "Impay\u00e9e",
+                            "Partiellement pay\u00e9e",
+                            "Pay\u00e9e",
+                            "Annul\u00e9e"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "date",
+                    "reference",
+                    "processus_label",
+                    "vehicule",
+                    "montant_unitaire",
+                    "montant_a_payer",
+                    "montant_verse",
+                    "montant_restant",
+                    "statut",
+                    "statut_label"
+                ],
+                "title": "CommissionParrainResource"
+            },
             "CommissionPartResource": {
                 "type": "object",
                 "properties": {
@@ -4852,6 +5695,49 @@
                     "created_at"
                 ],
                 "title": "NotificationResource"
+            },
+            "PaiementParrainResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "date": {
+                        "type": "string"
+                    },
+                    "montant": {
+                        "type": "number"
+                    },
+                    "mode_paiement": {
+                        "type": "string"
+                    },
+                    "mode_paiement_label": {
+                        "type": "string"
+                    },
+                    "reference_paiement": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "fiche_reference": {
+                        "type": "string"
+                    },
+                    "periode_reference": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "date",
+                    "montant",
+                    "mode_paiement",
+                    "mode_paiement_label",
+                    "reference_paiement",
+                    "fiche_reference",
+                    "periode_reference"
+                ],
+                "title": "PaiementParrainResource"
             },
             "PropositionVehiculeResource": {
                 "type": "object",
@@ -5505,21 +6391,71 @@
             },
             "UpdateProfileRequest": {
                 "type": "object",
-                "description": "Champs modifiables par le titulaire du compte lui-m\u00eame \u2014 uniquement la\nlocalisation. Volontairement exclus (d\u00e9cision du 26/08/2026, cf. rapport) :\nnom/prenom (identit\u00e9 civile), telephone/email (identifiants de connexion,\nunicit\u00e9 par organisation \u00e0 revalider), raison_sociale/type (identit\u00e9 l\u00e9gale)\net is_active (jamais en self-service) \u2014 ces champs restent r\u00e9serv\u00e9s au\nbackoffice, coh\u00e9rent avec la s\u00e9paration d\u00e9j\u00e0 en place partout ailleurs dans\nl'application entre \u00e9dition \"propri\u00e9taire\" (self-service) et \u00e9dition \"staff\"\n(ProprietaireController, UpdateClientController...).",
+                "description": "Champs modifiables par le titulaire du compte lui-m\u00eame (ADR 0051) : pr\u00e9nom, nom,\ne-mail (appliqu\u00e9 apr\u00e8s confirmation par lien) et localisation. Le pays est un\nlibell\u00e9 choisi dans une liste ferm\u00e9e. Volontairement exclus : telephone (identifiant\nde connexion), code_pays/code_phone_pays (recomposent le t\u00e9l\u00e9phone dans les\nformulaires du back-office), raison_sociale/type (identit\u00e9 l\u00e9gale) et is_active.",
                 "properties": {
+                    "prenom": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 100
+                    },
+                    "nom": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 100
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 255
+                    },
                     "pays": {
                         "type": [
                             "string",
                             "null"
                         ],
-                        "maxLength": 100
-                    },
-                    "code_pays": {
-                        "type": [
-                            "string",
-                            "null"
-                        ],
-                        "maxLength": 10
+                        "enum": [
+                            "Guin\u00e9e",
+                            "Guin\u00e9e-Bissau",
+                            "S\u00e9n\u00e9gal",
+                            "Mali",
+                            "C\u00f4te d'Ivoire",
+                            "Liberia",
+                            "Sierra Leone",
+                            "France",
+                            "Chine",
+                            "\u00c9mirats arabes unis",
+                            "Inde",
+                            "Canada",
+                            "Autriche",
+                            "Belgique",
+                            "Bulgarie",
+                            "Croatie",
+                            "Tch\u00e9quie",
+                            "Danemark",
+                            "Estonie",
+                            "Finlande",
+                            "Allemagne",
+                            "Gr\u00e8ce",
+                            "Hongrie",
+                            "Islande",
+                            "Italie",
+                            "Lettonie",
+                            "Liechtenstein",
+                            "Lituanie",
+                            "Luxembourg",
+                            "Malte",
+                            "Pays-Bas",
+                            "Norv\u00e8ge",
+                            "Pologne",
+                            "Portugal",
+                            "Roumanie",
+                            "Slovaquie",
+                            "Slov\u00e9nie",
+                            "Espagne",
+                            "Su\u00e8de",
+                            "Suisse",
+                            null
+                        ]
                     },
                     "ville": {
                         "type": [

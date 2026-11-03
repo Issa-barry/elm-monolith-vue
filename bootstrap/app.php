@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Pwa\ShowManifestPwaController;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureApiAccountIsActive;
 use App\Http\Middleware\EnsureIsStaffAccount;
@@ -19,6 +20,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Symfony\Component\HttpFoundation\Response;
@@ -55,6 +57,10 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // Hors du groupe web : le manifest est public, sans session ni cookie (cf. docs/pwa.md).
+        then: function (): void {
+            Route::get('/manifest.json', ShowManifestPwaController::class)->name('pwa.manifest');
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(

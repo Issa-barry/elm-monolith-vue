@@ -92,7 +92,7 @@
             </div>
             <h1>Lien expiré</h1>
             <p class="desc">Ce lien de validation n'est plus valide.</p>
-            <p class="desc">Il a expiré après 24 heures. Veuillez vous réinscrire.</p>
+            <p class="desc">{{ $conseilExpire ?? 'Il a expiré après 24 heures. Veuillez vous réinscrire.' }}</p>
         @else
             <div class="icon-wrap">
                 <svg fill="none" stroke="#dc2626" stroke-width="2.5" viewBox="0 0 24 24">
@@ -102,7 +102,7 @@
             </div>
             <h1>Lien invalide</h1>
             <p class="desc">Ce lien de validation est invalide ou a déjà été utilisé.</p>
-            <p class="desc">Si votre compte est déjà actif, vous pouvez vous connecter.</p>
+            <p class="desc">{{ $conseilInvalide ?? 'Si votre compte est déjà actif, vous pouvez vous connecter.' }}</p>
         @endif
 
         <div class="divider"></div>

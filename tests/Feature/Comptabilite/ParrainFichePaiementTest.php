@@ -35,12 +35,14 @@ use App\Models\PieceComptable;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\PartageLivraisonVersionService;
 use App\Services\Commission\PartageParrainService;
+use App\Services\CommissionEnveloppePartAllocationService;
 use App\Services\Comptabilite\PlanComptableBootstrapService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
@@ -50,6 +52,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\Sanctum;
+use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -408,6 +412,47 @@ class ParrainFichePaiementTest extends TestCase
                 $piece->lignes()->pluck('site_id')->unique()->values()->all(),
             );
         }
+    }
+
+    public function test_l_espace_parrain_affiche_les_memes_montants_que_la_fiche_du_back_office(): void
+    {
+        $this->vendre(100);
+        $periode = $this->periode(TypePeriodePaiement::PARRAIN);
+        app(PeriodeValidationService::class)->validerSiComplete($periode);
+        $fiche = $this->fichesParrain($periode)->sole();
+
+        // Même enchaînement que PaiementFichePaiementController::store().
+        $paiement = PaiementFichePaiement::create([
+            'fiche_id' => $fiche->id,
+            'organization_id' => $this->org->id,
+            'montant' => 5000,
+            'mode_paiement' => 'especes',
+            'date_paiement' => '2026-10-16',
+        ]);
+        CommissionEnveloppePartAllocationService::allouer($fiche, $paiement);
+
+        Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        $compte = User::factory()->create(['organization_id' => $this->org->id]);
+        $compte->assignRole('client');
+        $this->parrain->forceFill(['user_id' => $compte->id])->save();
+
+        Sanctum::actingAs($compte, ['*']);
+        $synthese = $this->getJson(route('client.parrain.synthese'))->assertOk();
+        $fiche->refresh();
+
+        $this->assertEquals(20000.0, $synthese->json('totaux.total_genere'));
+        $this->assertEquals((float) $fiche->montant_net, $synthese->json('totaux.total_genere'));
+        $this->assertEquals((float) $fiche->montant_paye, $synthese->json('totaux.deja_paye'));
+        $this->assertEquals($fiche->montant_restant, $synthese->json('totaux.reste_a_payer'));
+        $this->assertEquals(0.0, $synthese->json('totaux.en_attente_periode'));
+
+        $this->getJson(route('client.parrain.commissions'))
+            ->assertOk()
+            ->assertJsonPath('data.0.montant_unitaire', 200)
+            ->assertJsonPath('data.0.reference', $fiche->lignes()->first()->source->enveloppe->source->reference)
+            ->assertJsonPath('data.0.vehicule.id', $this->vehicule->id);
+
+        $this->getJson(route('client.parrain.paiements'))->assertOk()->assertJsonCount(1, 'data');
     }
 
     public function test_la_page_fiches_parrains_liste_la_fiche(): void

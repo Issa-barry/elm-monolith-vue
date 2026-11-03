@@ -68,7 +68,7 @@ const approvisionnementsAConfirmer = computed(
 const canSee = (permission: PermissionKey, module: string): boolean =>
     can(permission) && moduleActive(module);
 
-/** Tiers regroupés sous Contacts : Clients, Fournisseurs, Prestataires et Propriétaires. */
+/** Tiers regroupés sous Contacts : Clients, Fournisseurs, Prestataires, Propriétaires et Parrains. */
 const contactsItems = computed((): NavItem[] => {
     const sub: NavItem[] = [];
     if (can('clients.read'))
@@ -81,6 +81,8 @@ const contactsItems = computed((): NavItem[] => {
         sub.push({ title: 'Prestataires', href: '/backoffice/prestataires' });
     if (canSee('proprietaires.read', 'vehicules'))
         sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
+    if (canSee('parrains.read', 'vehicules'))
+        sub.push({ title: 'Parrains', href: '/backoffice/parrains' });
     return sub;
 });
 

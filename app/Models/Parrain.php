@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -112,8 +113,42 @@ class Parrain extends Model
         return $this->belongsTo(Personne::class);
     }
 
+    /** Compte rattaché (ADR 0050) : non mass-assignable, seul RattachementCompteService le pose. */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function vehicules(): HasMany
     {
         return $this->hasMany(Vehicule::class, 'parrain_id');
+    }
+
+    // ── Scopes ────────────────────────────────────────────────────────────────
+
+    /**
+     * Parrains présents dans ces agences : un véhicule parrainé actuellement, ou une fiche de
+     * paiement, qui reste même après le remplacement du parrain.
+     *
+     * @param  list<string>  $siteIds
+     */
+    public function scopeDansAgences(Builder $query, array $siteIds): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->whereHas('vehicules', fn (Builder $v) => $v->whereIn('site_id', $siteIds))
+            ->orWhereIn('parrains.id', PaiementFiche::query()
+                ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)
+                ->whereIn('site_id', $siteIds)
+                ->select('beneficiaire_id')));
+    }
+
+    /** Parrains que cet utilisateur peut consulter : toute l'organisation, ou ses agences seulement. */
+    public function scopeVisiblesPar(Builder $query, User $user): Builder
+    {
+        $query->where('parrains.organization_id', $user->organization_id);
+
+        return $user->voitToutesLesAgences()
+            ? $query
+            : $query->dansAgences($user->sites()->pluck('sites.id')->all());
     }
 }

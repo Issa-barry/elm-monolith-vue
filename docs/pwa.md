@@ -13,10 +13,11 @@ cache uniquement une liste blanche explicite de fichiers statiques publics.
 
 | Fichier | Rôle |
 |---|---|
-| [public/manifest.json](../public/manifest.json) | Manifest web (nom, icônes, `display: standalone`, `start_url`/`scope`) |
+| [ShowManifestPwaController.php](../app/Http/Controllers/Pwa/ShowManifestPwaController.php) | Manifest web `/manifest.json`, généré à la requête (nom, icônes, `display: standalone`, `start_url`/`scope`) |
+| [config/pwa.php](../config/pwa.php) | Noms de l'application installée, lus depuis `PWA_NAME` et `PWA_SHORT_NAME` — cf. §3ter |
 | [public/sw.js](../public/sw.js) | Service worker minimal — install/activate/fetch, liste blanche stricte |
 | [public/icons/](../public/icons/) | Icônes PNG 192×192, 512×512 (`any`) et 512×512 (`maskable`), dérivées du logo existant (`resources/js/components/AppLogoIcon.vue` / `public/favicon-dark.svg`) |
-| [resources/views/app.blade.php](../resources/views/app.blade.php) | `<link rel="manifest">` + `<meta name="theme-color">` |
+| [resources/views/app.blade.php](../resources/views/app.blade.php) | `<link rel="manifest">` + `<meta name="apple-mobile-web-app-title">` + `<meta name="theme-color">` |
 | [resources/js/app.ts](../resources/js/app.ts) | Enregistrement conditionnel du service worker (jamais en dev/HMR) |
 | [vite.config.ts](../vite.config.ts) | Constantes `__PWA_ENABLED__` / `__PWA_BUILD_DIR__` injectées à la compilation |
 | [public/.htaccess](../public/.htaccess) | Force `Cache-Control: no-cache` sur `sw.js` (le CDN de production applique sinon un cache de 7 jours par défaut) |
@@ -38,8 +39,9 @@ Règle de conception, non négociable pour cette V1 :
   métier (commandes, stocks, ventes, paiements, livraisons) n'est mise en cache.
 - Aucune stratégie `NetworkFirst` / `StaleWhileRevalidate` sur une route
   applicative — soit une requête est dans la liste blanche stricte (assets Vite
-  hashés du build courant + icônes + manifest), soit elle continue vers le
-  réseau exactement comme en l'absence de service worker.
+  hashés du build courant + icônes), soit elle continue vers le réseau
+  exactement comme en l'absence de service worker. `/manifest.json` n'y figure
+  plus : un exemplaire en cache figerait le nom de l'application (cf. §3ter).
 - Aucune écriture en cache en dehors de l'étape `install` : pas de mise en cache
   « à la volée » d'une réponse rencontrée en cours de route.
 - Aucun fallback HTML pour une route privée en cas de coupure réseau : une
@@ -53,7 +55,7 @@ Règle de conception, non négociable pour cette V1 :
 1. Récupère le manifest **réel** du build courant (`/build/manifest.json` ou
    `/build-e2e/manifest.json` — jamais de noms de fichiers hashés maintenus à la
    main), lit l'entrée `resources/js/app.ts` et en extrait `file` + `css`.
-2. Ajoute les 3 icônes PWA et `/manifest.json` (chemins fixes, sans hash).
+2. Ajoute les 3 icônes PWA (chemins fixes, sans hash).
 3. Ne précache **pas** les chunks de page (`Dashboard.vue`, `Ventes/Index.vue`,
    etc., listés dans `dynamicImports` du manifest Vite) : ils restent de
    simples requêtes réseau à la demande, exactement comme aujourd'hui.
@@ -134,6 +136,56 @@ n'est pas automatisable (critères d'installabilité réels — HTTPS/manifest/
 service worker — absents en `npm run dev`) : à vérifier manuellement contre
 un build réel.
 
+## 3ter. Nom de l'application installée
+
+Le nom vient uniquement de la configuration de chaque environnement :
+
+| Environnement | `PWA_NAME` | `PWA_SHORT_NAME` | Où le renseigner |
+|---|---|---|---|
+| Local | `ELM Admin Dev` | `ELM Dev` | fichier `.env` |
+| Préproduction (`formation`) | `ELM Admin Test` | `ELM Admin T` | fichier `.env` du serveur |
+| Production (`fello`) | `ELM Admin` | `ELM Admin` | fichier `.env` du serveur |
+
+| Variable | Utilisée pour | Si absente ou vide |
+|---|---|---|
+| `PWA_NAME` | `name` du manifest, carte et dialogue « Installer … » | `ELM` |
+| `PWA_SHORT_NAME` | `short_name` du manifest (Android, ordinateur), `apple-mobile-web-app-title` (iPhone) | `PWA_NAME` |
+
+`APP_NAME` reste indépendant : il sert au titre des pages et aux e-mails, et le
+modifier ne change pas le nom de l'application installée.
+
+`/manifest.json` est généré à la requête par Laravel. La route est déclarée
+hors du groupe `web` ([bootstrap/app.php](../bootstrap/app.php)) : elle est
+publique, sans session ni cookie, et répond avec `Cache-Control: no-cache`. **Ne
+pas recréer de fichier `public/manifest.json`** : Apache servirait ce fichier à
+la place de la route ([public/.htaccess](../public/.htaccess)), et le nom ne
+suivrait plus la configuration.
+
+Pour changer le nom :
+
+1. Modifier les variables dans le `.env` de l'environnement.
+2. Sur un serveur, relancer `php artisan config:cache` : le déploiement met la
+   configuration en cache (`artisan optimize`), donc le `.env` seul n'est pas
+   relu. Aucune recompilation n'est nécessaire, y compris pour la carte
+   « Installer … », qui reçoit le nom du serveur.
+3. Vérifier `/manifest.json` et la balise `apple-mobile-web-app-title` de la
+   page de connexion.
+
+Applications déjà installées :
+
+- **iPhone/iPad** : le nom est figé à l'installation (et modifiable par
+  l'utilisateur à ce moment-là). Supprimer l'icône et réinstaller.
+- **Android** : Chrome relit le manifest de lui-même, la mise à jour peut prendre
+  plusieurs jours. Réinstaller pour l'obtenir immédiatement.
+- **Ordinateur** : Chrome/Edge relisent aussi le manifest et peuvent demander
+  une confirmation du changement de nom.
+
+Premier déploiement de ce manifest dynamique : un appareil encore sur le service
+worker `v1` garde son ancien manifest en cache jusqu'à la fermeture de tous ses
+onglets (cf. §4). À la réouverture, le `v2` s'active et supprime le cache `v1`.
+
+Tests : [tests/Feature/Pwa/ManifestPwaTest.php](../tests/Feature/Pwa/ManifestPwaTest.php).
+
 ## 4. Stratégie de mise à jour
 
 Le service worker **n'appelle ni `self.skipWaiting()` ni `clients.claim()`** :
@@ -209,6 +261,10 @@ du fichier côté serveur** — ne jamais se contenter de supprimer `public/sw.j
   par construction plutôt que par un contrôle explicite au runtime.
 
 ## 7. Tests
+
+[tests/Feature/Pwa/ManifestPwaTest.php](../tests/Feature/Pwa/ManifestPwaTest.php)
+vérifie les noms issus de la configuration, l'absence de session et de fichier
+statique concurrent.
 
 [tests/e2e-pwa/pwa.spec.ts](../tests/e2e-pwa/pwa.spec.ts) vérifie : validité du
 manifest et accessibilité des icônes, enregistrement effectif du service
