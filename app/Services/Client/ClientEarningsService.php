@@ -69,6 +69,12 @@ use Illuminate\Validation\Rule;
  */
 class ClientEarningsService
 {
+    /** Date historique du filtre des parts logistiques (period, date_debut/date_fin). */
+    public const DATE_LOGISTIQUE_CREATION = 'created_at';
+
+    /** Date de gain, celle des périodes de paiement (PeriodeCalculatorService) : filtre période comptable. */
+    public const DATE_LOGISTIQUE_GAIN = 'earned_at';
+
     /**
      * @param  Collection<int, Vehicule>  $vehicules  Véhicules déjà résolus (et déjà vérifiés
      *                                                comme accessibles) par l'appelant.
@@ -84,9 +90,10 @@ class ClientEarningsService
         ?string $dateFin = null,
         ?string $statut = null,
         ?array $vehiculeIds = null,
+        string $colonneDateLogistique = self::DATE_LOGISTIQUE_CREATION,
     ): array {
         $partsVentes = $this->partsVentes($organizationId, $proprietaire, $livreur, $dateDebut, $dateFin, $statut, $vehiculeIds);
-        $partsLogistiques = $this->partsLogistiques($organizationId, $proprietaire, $livreur, $dateDebut, $dateFin, $statut, $vehiculeIds);
+        $partsLogistiques = $this->partsLogistiques($organizationId, $proprietaire, $livreur, $dateDebut, $dateFin, $statut, $vehiculeIds, $colonneDateLogistique);
         $fraisParVehicule = $this->fraisDepensesParVehicule($organizationId, $proprietaire, $dateDebut, $dateFin, $vehiculeIds);
         $fraisTotal = (float) array_sum($fraisParVehicule);
 
@@ -165,7 +172,8 @@ class ClientEarningsService
         ?string $dateDebut = null,
         ?string $dateFin = null,
         ?string $statut = null,
-        ?array $vehiculeIds = null
+        ?array $vehiculeIds = null,
+        string $colonneDate = self::DATE_LOGISTIQUE_CREATION
     ): Collection {
         if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
             return collect();
@@ -178,8 +186,8 @@ class ClientEarningsService
             ])
             ->whereHas('commission', fn ($query) => $query->where('organization_id', $organizationId))
             // tous les statuts sont actifs (impaye/partiel/paye)
-            ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
-            ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
+            ->when($dateDebut, fn ($q) => $q->whereDate($colonneDate, '>=', $dateDebut))
+            ->when($dateFin, fn ($q) => $q->whereDate($colonneDate, '<=', $dateFin))
             ->when($statut, fn ($q) => $q->where('statut', $statut))
             ->when($vehiculeIds !== null, function ($q) use ($vehiculeIds) {
                 if ($vehiculeIds === []) {
@@ -295,11 +303,12 @@ class ClientEarningsService
         string $dateFin,
         ?string $statut = null,
         ?array $vehiculeIds = null,
+        string $colonneDateLogistique = self::DATE_LOGISTIQUE_CREATION,
     ): SummaryEvolution {
         [$previousDateDebut, $previousDateFin] = $this->previousPeriodBounds($dateDebut, $dateFin);
 
         $partsVentesPrecedentes = $this->partsVentes($organizationId, $proprietaire, $livreur, $previousDateDebut, $previousDateFin, $statut, $vehiculeIds);
-        $partsLogistiquesPrecedentes = $this->partsLogistiques($organizationId, $proprietaire, $livreur, $previousDateDebut, $previousDateFin, $statut, $vehiculeIds);
+        $partsLogistiquesPrecedentes = $this->partsLogistiques($organizationId, $proprietaire, $livreur, $previousDateDebut, $previousDateFin, $statut, $vehiculeIds, $colonneDateLogistique);
         $fraisParVehiculePrecedent = $this->fraisDepensesParVehicule($organizationId, $proprietaire, $previousDateDebut, $previousDateFin, $vehiculeIds);
         $fraisTotalPrecedent = (float) array_sum($fraisParVehiculePrecedent);
 

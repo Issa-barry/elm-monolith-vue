@@ -13,7 +13,8 @@ les RH, reprise sans recalcul.
 
 - **RH** : salariés, contrats (salaire de base), référentiel des types de primes et avantages,
   affectations aux salariés, transmission du mois. Écrans *RH → Employés*, *RH → Contrats*,
-  *RH → Primes des salariés*, *RH → Transmission de paie* et *Paramètres → RH → Primes et avantages*.
+  *RH → Transmission de paie* et *Paramètres → RH → Primes et avantages* ; les primes d'un salarié se
+  gèrent sur sa fiche (ADR 0052).
 - **Comptabilité** : reprise de la transmission, retenues (dépenses), validation de la période,
   paiement, écriture comptable. Écran
   *Comptabilité → Paiement salaire* (`/backoffice/comptabilite/salaires`). Une période validée ici

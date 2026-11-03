@@ -9,6 +9,8 @@ use App\Models\Vehicule;
 use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
 use App\Services\Client\Data\ComparisonPeriod;
+use App\Support\Periodes\PeriodeComptableFiltre;
+use Carbon\CarbonImmutable;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 
@@ -60,6 +62,13 @@ class DashboardController extends Controller
             pris tels quels, sinon calculés serveur — jamais un défaut inventé côté
             frontend).
 
+            Filtre de période de l'accueil, exclusif de `period`/`date_debut`/`date_fin` (422 sinon) :
+            soit `periode` (période rapide, `tout` = toutes les périodes), soit `annee` + `mois` +
+            `quinzaine` (`P1` du 1er au 15, `P2` du 16 à la fin du mois, `TOUT` ou omise = le mois ;
+            `mois` omis = l'année). Bornes calculées par le serveur et renvoyées dans `filters`
+            (`period` vaut alors `custom`). Ventes et logistique y sont datées par leur date de gain,
+            comme les fiches de paiement ; aucune formule ne change.
+
             `summary_evolution` (champ additif, cf. rapport du 27/08/2026) : évolution
             de chacun des 5 champs de `summary` entre la période sélectionnée et la
             période **immédiatement précédente de même durée** (ex : 01/08→31/08 est
@@ -87,7 +96,11 @@ class DashboardController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $filters = $this->earningsService->resolveFilters($request);
+        $bornes = $request->bornesPeriode();
+        $filters = $this->filtres($request, $bornes);
+        $colonneDateLogistique = $bornes !== null
+            ? ClientEarningsService::DATE_LOGISTIQUE_GAIN
+            : ClientEarningsService::DATE_LOGISTIQUE_CREATION;
 
         $identity = $this->identityResolver->resolve($user);
         $organizationId = $identity->organizationId;
@@ -110,7 +123,8 @@ class DashboardController extends Controller
             $filters['date_debut'],
             $filters['date_fin'],
             $filters['statut'],
-            $vehiculeIdsContrainte
+            $vehiculeIdsContrainte,
+            $colonneDateLogistique
         );
 
         // `period=custom` sans date_debut/date_fin (cf. filterValidationRules() : les
@@ -140,7 +154,8 @@ class DashboardController extends Controller
                 $filters['date_debut'],
                 $filters['date_fin'],
                 $filters['statut'],
-                $vehiculeIdsContrainte
+                $vehiculeIdsContrainte,
+                $colonneDateLogistique
             )
             : null;
 
@@ -161,5 +176,27 @@ class DashboardController extends Controller
                 'immatriculation' => $v->immatriculation,
             ])->values(),
         ]);
+    }
+
+    /**
+     * Filtres du moteur partagé, complétés par le filtre de période de l'accueil (propre à cette API).
+     *
+     * @param  array{0: ?CarbonImmutable, 1: ?CarbonImmutable}|null  $bornes
+     */
+    private function filtres(DashboardMineRequest $request, ?array $bornes): array
+    {
+        $filters = $this->earningsService->resolveFilters($request);
+        $periodeComptable = PeriodeComptableFiltre::depuisRequete($request);
+
+        return [
+            ...$filters,
+            'period' => $bornes !== null ? 'custom' : $filters['period'],
+            'date_debut' => $bornes !== null ? $bornes[0]?->toDateString() : $filters['date_debut'],
+            'date_fin' => $bornes !== null ? $bornes[1]?->toDateString() : $filters['date_fin'],
+            'periode' => $request->input('periode'),
+            'annee' => $periodeComptable?->annee,
+            'mois' => $periodeComptable?->mois,
+            'quinzaine' => $periodeComptable?->quinzaine,
+        ];
     }
 }

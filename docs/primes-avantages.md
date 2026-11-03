@@ -1,14 +1,21 @@
 # Primes et avantages — référentiel et affectations aux salariés
 
 Décisions : [ADR 0038](adr/0038-referentiel-primes-et-avantages.md) (référentiel, lot 2, 28/10/2026)
-et [ADR 0039](adr/0039-affectations-primes-salaries.md) (affectations datées, lot 3, 29/10/2026).
+et [ADR 0039](adr/0039-affectations-primes-salaries.md) (affectations datées, lot 3, 29/10/2026) ;
+gestion depuis la fiche salarié : [ADR 0052](adr/0052-primes-gerees-depuis-la-fiche-salarie.md)
+(03/11/2026).
 Conception RH ↔ Comptabilité : [paie.md](paie.md). La transmission mensuelle qui reprend ces
 affectations : [transmission-paie.md](transmission-paie.md).
 
 Écrans :
 - *Paramètres → RH → Primes et avantages* (`/backoffice/types-remuneration`) : le référentiel des types ;
-- *RH → Primes des salariés* (`/backoffice/affectations-remuneration`) : les affectations ;
-- fiche salarié, carte *Primes et avantages* (lien *Gérer* vers la liste filtrée sur le salarié).
+- **fiche salarié** (*RH → Employés → un salarié*), carte *Primes et avantages* : **seul écran de
+  gestion des primes d'un salarié**. Les primes en cours, à venir ou à valider sont affichées ; les
+  terminées et annulées sont repliées sous « Voir les anciennes primes » ;
+- *RH → Employés* : bandeau « N primes attendent une validation » et filtre *Primes : À valider*,
+  pour retrouver les fiches concernées (AFF-015).
+
+La page « Primes des salariés » est supprimée depuis le 03/11/2026 (ADR 0052).
 
 Le **salaire de base reste porté par le contrat** : il n'est jamais une affectation de prime.
 
@@ -36,8 +43,7 @@ défaut et une description facultative. Code, nature du montant, période d'appl
 cumul sont regroupés dans **Options avancées** (repliées, ouvertes d'office si l'une est en
 erreur). Aucune catégorie n'est demandée ni acceptée par le serveur. Un type enregistré avant la
 simplification affiche sa catégorie d'origine à la modification ; un avantage en nature porte le
-repère « Avantage en nature · non versé » dans les listes. Le filtre par catégorie est retiré des
-écrans Primes et avantages et Primes des salariés.
+repère « Avantage en nature · non versé » dans les listes. Le filtre par catégorie est retiré.
 
 ## Règles du référentiel
 
@@ -116,17 +122,13 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
   refusé, propositions à valider comprises, **sauf si le type autorise le cumul**. Contrôle en
   transaction, sous verrou du salarié, par une lecture verrouillante : deux attributions
   simultanées ne passent pas toutes les deux (vérifié sous MySQL).
-- **AFF-004 bis (01/11/2026)** — Fenêtre « Attribuer » : dès qu'un salarié est choisi, une ligne
-  discrète affiche ses primes **déjà attribuées** (en cours ou à venir, validées ou « à valider »,
-  une fois chacune) ou « Aucune prime attribuée ». La liste « Prime ou avantage » **ne propose plus
-  les types qu'il a déjà sur la période visée** (même règle qu'AFF-004 : mois choisi pour une
-  prime ponctuelle, dates saisies — sinon aujourd'hui — pour une prime mensuelle) ; un type à
-  cumul autorisé reste toujours proposé, et une prime terminée n'empêche pas d'en attribuer une
-  nouvelle après sa fin. Changer de salarié désélectionne un type qu'il a déjà ; « Ce salarié
-  possède déjà toutes les primes disponibles sur cette période » si plus rien n'est proposé.
-  Simple aide à la saisie : le refus serveur d'AFF-004 reste l'autorité. Données : `primes` de
-  chaque salarié dans les options de la page (même périmètre que la liste, organisation de
-  l'utilisateur).
+- **AFF-004 bis (01/11/2026)** — Fenêtre « Ajouter une prime » de la fiche : la liste « Prime ou
+  avantage » **ne propose plus les types que le salarié a déjà sur la période visée** (même règle
+  qu'AFF-004 : mois choisi pour une prime ponctuelle, dates saisies — sinon aujourd'hui — pour une
+  prime mensuelle) ; un type à cumul autorisé reste toujours proposé, et une prime terminée
+  n'empêche pas d'en attribuer une nouvelle après sa fin. « Ce salarié possède déjà toutes les
+  primes disponibles sur cette période » si plus rien n'est proposé. Simple aide à la saisie : le
+  refus serveur d'AFF-004 reste l'autorité. Données : `primes_options.primes_occupees` de la fiche.
 - **AFF-004 ter (01/11/2026)** — Liste **RH → Contrats**, colonne **« Primes »** (« 0 prime »,
   « 1 prime », « 3 primes ») : les primes **reprises dans le contrat PDF** — affectations du
   salarié, de l'organisation, **validées**, **en cours ou à venir** (scope commun
@@ -136,14 +138,21 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
   annulées et terminées exclues. Une seule requête pour toute la liste
   (`ContratController::nombrePrimesParEmploye`). Colonne affichée seulement avec
   `rh-affectations-remuneration.read` (sinon `primes_count` = null).
-  - **Écarts voulus** : le récapitulatif de la fenêtre « Attribuer » (AFF-004 bis) inclut aussi
-    les propositions à valider, car il sert à éviter un chevauchement (AFF-004) ; le PDF du
+  - **Écarts voulus** : les primes occupées de la fenêtre « Ajouter une prime » (AFF-004 bis)
+    incluent aussi les propositions à valider, car elles servent à éviter un chevauchement (AFF-004) ; le PDF du
     contrat liste une ligne par affectation (un changement de montant à venir, ou un type à cumul
     autorisé, y figure deux fois) alors que la colonne compte des types de prime.
 - **AFF-004 quater (01/11/2026)** — **Nouveau contrat** : des primes peuvent être ajoutées à la
   création du contrat, avec les droits d'attribuer **et** de valider. Elles sont toujours validées
   d'emblée et passent par `affecter()`, donc par les mêmes règles ; contrat et primes sont
   enregistrés ensemble ou pas du tout. Détail : [rh-contrat-pdf.md](rh-contrat-pdf.md).
+- **AFF-004 quinquies (03/11/2026, ADR 0052)** — **La prime appartient au salarié, pas au contrat** :
+  elle continue quel que soit le type de contrat, y compris après la fin d'un CDD et lors d'un
+  passage en CDI, sans nouvelle attribution. Seuls l'arrêtent sa date de fin, la fin d'application
+  de son type, une fin d'effet validée (AFF-008) ou le départ du salarié (la paie ne la reprend plus
+  au-delà de la date de sortie). Si un CDD se termine sans contrat suivant ni départ, la paie du mois
+  suivant est **bloquée** (`contrat_absent`) tant que les RH n'ont pas créé un contrat ou enregistré
+  le départ. Les primes déjà créées gardent leur date de fin.
 - **AFF-005** — Montants : la valeur par défaut du type est **proposée** dans le formulaire, jamais
   reprise d'office ; le montant attribué est toujours celui saisi. Un élément **saisi chaque mois**
   n'a pas de montant permanent : son montant vient des montants mensuels (AFF-010).
@@ -188,9 +197,10 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
   changement de montant, fin demandée, fin validée (« Fin d'effet »), validation, annulation,
   montants mensuels saisis, corrigés, validés, supprimés, arrêts dus à une désactivation. Menu ⋮ →
   *Historique* de la ligne.
-- **AFF-015** — Liste filtrable par agence, statut (à valider, à venir, en cours, terminée,
-  annulée), salarié, type et période d'effet (affectations en vigueur au moins un jour
-  sur la période).
+- **AFF-015 (révisé le 03/11/2026, ADR 0052)** — Plus de liste globale. *RH → Employés* signale les
+  propositions à valider des salariés consultables (bandeau) et filtre les salariés concernés
+  (`primes=a_valider`), avec `rh-affectations-remuneration.read` ; le filtre est ignoré sans ce droit.
+  Les anomalies de la transmission mènent à la fiche du salarié (avec `rh-employes.read`).
 
 ## Permissions
 
@@ -205,7 +215,8 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
 | Annuler une proposition | `rh-affectations-remuneration.delete` | super_admin, admin_entreprise |
 | Valider une affectation, un changement de montant, une fin d'effet, un montant mensuel ; annuler une affectation validée ; corriger un montant validé | **`rh-affectations-remuneration.valider`** | **super_admin seul** |
 
-Rattrapage des rôles existants (ADR 0011), migrations additives et idempotentes :
+Ouvrir la fiche exige aussi `rh-employes.read` (ADR 0052). Rattrapage des rôles existants
+(ADR 0011), migrations additives et idempotentes :
 `2026_10_28_100100_backfill_permissions_types_remuneration` et
 `2026_10_29_110100_backfill_permissions_affectations_transmissions_paie`. Les boutons de l'écran
 suivent ces permissions et l'agence du salarié (règle 3 des standards UI) ; le serveur revérifie
@@ -232,7 +243,7 @@ tout.
   `app/Http/Controllers/Rh/AffectationRemunerationController.php`,
   `app/Http/Controllers/Rh/SaisieRemunerationController.php`,
   `app/Support/Rh/AffectationRemunerationPresenter.php`,
-  `resources/js/pages/AffectationsRemuneration/Index.vue`.
+  `resources/js/pages/Employes/partials/PrimesSalarie.vue`.
 - Énumérations : `StatutTypeRemuneration`, `CategorieTypeRemuneration`, `ModeCalculRemuneration`,
   `PeriodiciteRemuneration`, `NatureMontantRemuneration`, `StatutAffectationRemuneration`,
   `StatutSaisieRemuneration`.

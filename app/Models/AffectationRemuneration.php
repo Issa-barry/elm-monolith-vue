@@ -123,6 +123,13 @@ class AffectationRemuneration extends Model
             ->where(fn (Builder $q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', today()->toDateString()));
     }
 
+    /** Propositions en attente : affectation ou changement de montant à valider, fin d'effet demandée. */
+    public function scopeAttendantValidation(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $q) => $q->where('statut', StatutAffectationRemuneration::A_VALIDER->value)
+            ->orWhereNotNull('date_fin_demandee'));
+    }
+
     /** Une proposition (affectation, changement de montant, fin d'effet) attend-elle une validation ? */
     public function attendValidation(): bool
     {

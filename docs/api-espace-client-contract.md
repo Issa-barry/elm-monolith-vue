@@ -243,12 +243,15 @@ l'écran "Mon profil".
     "actif": true,
     "notifications": { "activite": true }
   },
-  "pays_disponibles": ["Guinée", "Guinée-Bissau", "Sénégal", "..."]
+  "pays_disponibles": ["Guinée", "Guinée-Bissau", "Sénégal", "..."],
+  "pays_options": [{ "label": "Guinée", "code": "GN" }, { "label": "Guinée-Bissau", "code": "GW" }, "..."]
 }
 ```
 
 - `pays_disponibles` : seules valeurs acceptées pour `pays` par le `PATCH`. À
   utiliser pour alimenter le sélecteur, sans recopier la liste côté frontend.
+- `pays_options` : mêmes pays, dans le même ordre, avec leur code ISO pour
+  afficher le drapeau. Le `PATCH` reçoit toujours le `label`.
 - `profile.type` vaut `"proprietaire"`, `"client"` ou `"livreur"` selon le
   profil réel (priorité proprietaire > client > livreur si cumul).
 - Propriétaire entreprise : `entreprise: { "raison_sociale": "..." }` (jamais
@@ -429,12 +432,19 @@ Query params (tous optionnels) :
   ],
   "links": { "first": "...", "last": "...", "prev": null, "next": null },
   "meta": { "current_page": 1, "last_page": 3, "per_page": 20, "total": 42 },
-  "filters": { "vehicule_id": null, "depense_type_id": null, "statut": null, "date_debut": null, "date_fin": null }
+  "filters": { "vehicule_id": null, "depense_type_id": null, "statut": null, "date_debut": null, "date_fin": null },
+  "total_valide": 81100
 }
 ```
 
 Pagination Laravel standard (`links`/`meta`) — `filters` reflète les filtres
 réellement appliqués (utile pour resynchroniser l'UI après un rechargement).
+
+`total_valide` (ajouté le 03/11/2026, affichage seul) : somme des dépenses au
+statut `valide` correspondant aux filtres, **toutes pages confondues**, sur le
+même périmètre que la liste. Sans filtre de date, c'est le total toutes périodes.
+C'est le montant de la carte « Dépenses » de l'accueil mobile, sur la période
+choisie dans le filtre de l'accueil. Il n'est jamais déduit de `balance`.
 
 ### `GET /v1/mobile/propositions-vehicules` et `POST /v1/mobile/propositions-vehicules`
 
@@ -525,7 +535,9 @@ Query params (tous optionnels) :
 - `depenses_total` (ajouté le 02/11/2026, hors `summary`, affichage seul) :
   `frais_depenses_total` + dépenses validées rattachées directement au livreur
   sur la période (ex. avance sur salaire), sauf filtre `vehicule_id`. C'est le
-  montant de la carte « Dépenses ». **Jamais déduit de `balance`** :
+  montant de la carte KPI « Dépenses » sur desktop, comparée à `mois_passe` ; sur
+  mobile, la carte reprend `total_valide` de `GET /v1/mobile/depenses/mine` (§4).
+  **Jamais déduit de `balance`** :
   `frais_depenses_total` reste réservé aux frais de véhicule d'un propriétaire,
   et l'espace client Inertia n'expose pas ce champ.
 - `summary_evolution` (ajouté le 27/08/2026, champ **additif** — `summary`

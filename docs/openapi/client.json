@@ -28,7 +28,7 @@
         "/v1/mobile/activite": {
             "get": {
                 "operationId": "client.activite.mine",
-                "description": "M\u00e9lange deux mod\u00e8les \u00e0 vocabulaire de statut distinct (`StatutCommandeVente` pour `type=vente`, `StatutTransfert` pour `type=logistique`) \u2014 aucune correspondance n'est invent\u00e9e entre les deux. `statut` **exige `type`** (422 explicite sinon, message \"Le filtre statut n\u00e9cessite de pr\u00e9ciser type\"). `type` omis = les deux m\u00e9lang\u00e9s, tri\u00e9s par date d\u00e9croissante, mais alors sans filtre `statut` possible. `periode` (p\u00e9riode rapide r\u00e9solue par le serveur) exclut `date_debut`/`date_fin` (422 sinon).",
+                "description": "M\u00e9lange deux mod\u00e8les \u00e0 vocabulaire de statut distinct (`StatutCommandeVente` pour `type=vente`, `StatutTransfert` pour `type=logistique`) \u2014 aucune correspondance n'est invent\u00e9e entre les deux. `statut` **exige `type`** (422 explicite sinon, message \"Le filtre statut n\u00e9cessite de pr\u00e9ciser type\"). `type` omis = les deux m\u00e9lang\u00e9s, tri\u00e9s par date d\u00e9croissante, mais alors sans filtre `statut` possible. `periode` (p\u00e9riode rapide r\u00e9solue par le serveur) exclut `date_debut`/`date_fin` (422 sinon). P\u00e9riode comptable : `annee` + `mois` + `quinzaine` (`P1` du 1er au 15, `P2` du 16 \u00e0 la fin du mois, `TOUT` ou omise = le mois), bornes calcul\u00e9es par le serveur, exclut `periode` et `date_debut`/`date_fin`.",
                 "tags": [
                     "Activity"
                 ],
@@ -84,6 +84,45 @@
                                 "ce_mois",
                                 "mois_precedent",
                                 "cette_annee",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "annee",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 2000
+                        }
+                    },
+                    {
+                        "name": "mois",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 12
+                        }
+                    },
+                    {
+                        "name": "quinzaine",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "P1",
+                                "P2",
+                                "TOUT",
                                 null
                             ]
                         }
@@ -209,6 +248,24 @@
                                                         "statut": {},
                                                         "vehicule_id": {},
                                                         "periode": {},
+                                                        "annee": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "mois": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "quinzaine": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
                                                         "date_debut": {
                                                             "type": [
                                                                 "string",
@@ -227,6 +284,9 @@
                                                         "statut",
                                                         "vehicule_id",
                                                         "periode",
+                                                        "annee",
+                                                        "mois",
+                                                        "quinzaine",
                                                         "date_debut",
                                                         "date_fin"
                                                     ]
@@ -306,6 +366,24 @@
                                                         "statut": {},
                                                         "vehicule_id": {},
                                                         "periode": {},
+                                                        "annee": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "mois": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "quinzaine": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
                                                         "date_debut": {
                                                             "type": [
                                                                 "string",
@@ -324,6 +402,9 @@
                                                         "statut",
                                                         "vehicule_id",
                                                         "periode",
+                                                        "annee",
+                                                        "mois",
+                                                        "quinzaine",
                                                         "date_debut",
                                                         "date_fin"
                                                     ]
@@ -2387,7 +2468,7 @@
         "/v1/mobile/dashboard": {
             "get": {
                 "operationId": "client.dashboard.mine",
-                "description": "Montants en **GNF** (franc guin\u00e9en), sans d\u00e9cimales dans la pratique mais\ntyp\u00e9s nombre (jamais des centimes, jamais un float \u00e0 diviser par 100).\n\nD\u00e9finitions exactes des champs de `summary` (m\u00eames noms, m\u00eames valeurs que\nle dashboard Inertia \u2014 `App\\Services\\Client\\ClientEarningsService`) :\n- `total_earned` : commissions de vente + logistique gagn\u00e9es sur la p\u00e9riode (brut d\u00fb).\n- `total_paid` : d\u00e9j\u00e0 vers\u00e9 sur ces m\u00eames commissions.\n- `frais_depenses_total` : d\u00e9penses v\u00e9hicule valid\u00e9es sur la p\u00e9riode (proprietaire uniquement \u2014 jamais imput\u00e9es \u00e0 un livreur dans ce moteur).\n- `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais n\u00e9gatif** (plancher \u00e0 0 \u2014 un solde n\u00e9gatif n'est jamais affich\u00e9 comme dette du propri\u00e9taire).\n- `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.\n\n`depenses_total` (hors `summary`, affichage seul) : `frais_depenses_total` + d\u00e9penses valid\u00e9es\nrattach\u00e9es directement au livreur sur la p\u00e9riode (ex. avance sur salaire), sauf filtre\n`vehicule_id`. **Jamais d\u00e9duit de `balance`.**\n\n`par_vehicule` : m\u00eame d\u00e9tail que `summary` mais par v\u00e9hicule (sch\u00e9ma\n`VehiculeEarningsRow`), **toujours la liste compl\u00e8te du parc accessible**\nm\u00eame si `vehicule_id` filtre le calcul (les v\u00e9hicules hors filtre\napparaissent avec des montants \u00e0 0) \u2014 ce n'est pas un bug.\n\n`filters.period` : raccourci appliqu\u00e9 (`custom` = `date_debut`/`date_fin`\npris tels quels, sinon calcul\u00e9s serveur \u2014 jamais un d\u00e9faut invent\u00e9 c\u00f4t\u00e9\nfrontend).\n\n`summary_evolution` (champ additif, cf. rapport du 27/08/2026) : \u00e9volution\nde chacun des 5 champs de `summary` entre la p\u00e9riode s\u00e9lectionn\u00e9e et la\np\u00e9riode **imm\u00e9diatement pr\u00e9c\u00e9dente de m\u00eame dur\u00e9e** (ex : 01/08\u219231/08 est\ncompar\u00e9 \u00e0 01/07\u219231/07 ; 10/08\u219216/08 [7 jours] est compar\u00e9 \u00e0 03/08\u219209/08\n[7 jours] \u2014 jamais \"le mois pr\u00e9c\u00e9dent\" arbitraire). `direction` est\n**factuelle** (`up`/`down`/`stable`), jamais un jugement m\u00e9tier : une\nhausse de `frais_depenses_total` vaut `up` exactement comme une hausse de\n`total_earned` \u2014 c'est au frontend de d\u00e9cider, KPI par KPI, si une hausse\ndonn\u00e9e est une bonne ou une mauvaise nouvelle. Quand la p\u00e9riode pr\u00e9c\u00e9dente\nvalait 0 et que la p\u00e9riode actuelle est non nulle, le pourcentage n'est pas\nd\u00e9fini math\u00e9matiquement : `percent` vaut alors `null` et `comparable` vaut\n`false` (jamais `Infinity`/`999999`/`100` en substitut) \u2014 `direction` reste\nrenseign\u00e9e pour permettre d'afficher une fl\u00e8che, typiquement \u00e0 c\u00f4t\u00e9 d'un\ntexte comme \"Nouveau\" plut\u00f4t que d'un pourcentage. `summary_evolution` et\n`comparison_period` sont tous les deux `null` uniquement dans le cas\nd\u00e9g\u00e9n\u00e9r\u00e9 `period=custom` sans `date_debut`/`date_fin` (aucune p\u00e9riode\nr\u00e9solue, donc aucune p\u00e9riode pr\u00e9c\u00e9dente calculable).\n\n`comparison_period` : bornes exactes de la p\u00e9riode pr\u00e9c\u00e9dente utilis\u00e9e par\n`summary_evolution`, pour affichage (ex. \"vs 01/07 - 31/07\").",
+                "description": "Montants en **GNF** (franc guin\u00e9en), sans d\u00e9cimales dans la pratique mais\ntyp\u00e9s nombre (jamais des centimes, jamais un float \u00e0 diviser par 100).\n\nD\u00e9finitions exactes des champs de `summary` (m\u00eames noms, m\u00eames valeurs que\nle dashboard Inertia \u2014 `App\\Services\\Client\\ClientEarningsService`) :\n- `total_earned` : commissions de vente + logistique gagn\u00e9es sur la p\u00e9riode (brut d\u00fb).\n- `total_paid` : d\u00e9j\u00e0 vers\u00e9 sur ces m\u00eames commissions.\n- `frais_depenses_total` : d\u00e9penses v\u00e9hicule valid\u00e9es sur la p\u00e9riode (proprietaire uniquement \u2014 jamais imput\u00e9es \u00e0 un livreur dans ce moteur).\n- `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais n\u00e9gatif** (plancher \u00e0 0 \u2014 un solde n\u00e9gatif n'est jamais affich\u00e9 comme dette du propri\u00e9taire).\n- `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.\n\n`depenses_total` (hors `summary`, affichage seul) : `frais_depenses_total` + d\u00e9penses valid\u00e9es\nrattach\u00e9es directement au livreur sur la p\u00e9riode (ex. avance sur salaire), sauf filtre\n`vehicule_id`. **Jamais d\u00e9duit de `balance`.**\n\n`par_vehicule` : m\u00eame d\u00e9tail que `summary` mais par v\u00e9hicule (sch\u00e9ma\n`VehiculeEarningsRow`), **toujours la liste compl\u00e8te du parc accessible**\nm\u00eame si `vehicule_id` filtre le calcul (les v\u00e9hicules hors filtre\napparaissent avec des montants \u00e0 0) \u2014 ce n'est pas un bug.\n\n`filters.period` : raccourci appliqu\u00e9 (`custom` = `date_debut`/`date_fin`\npris tels quels, sinon calcul\u00e9s serveur \u2014 jamais un d\u00e9faut invent\u00e9 c\u00f4t\u00e9\nfrontend).\n\nFiltre de p\u00e9riode de l'accueil, exclusif de `period`/`date_debut`/`date_fin` (422 sinon) :\nsoit `periode` (p\u00e9riode rapide, `tout` = toutes les p\u00e9riodes), soit `annee` + `mois` +\n`quinzaine` (`P1` du 1er au 15, `P2` du 16 \u00e0 la fin du mois, `TOUT` ou omise = le mois ;\n`mois` omis = l'ann\u00e9e). Bornes calcul\u00e9es par le serveur et renvoy\u00e9es dans `filters`\n(`period` vaut alors `custom`). Ventes et logistique y sont dat\u00e9es par leur date de gain,\ncomme les fiches de paiement ; aucune formule ne change.\n\n`summary_evolution` (champ additif, cf. rapport du 27/08/2026) : \u00e9volution\nde chacun des 5 champs de `summary` entre la p\u00e9riode s\u00e9lectionn\u00e9e et la\np\u00e9riode **imm\u00e9diatement pr\u00e9c\u00e9dente de m\u00eame dur\u00e9e** (ex : 01/08\u219231/08 est\ncompar\u00e9 \u00e0 01/07\u219231/07 ; 10/08\u219216/08 [7 jours] est compar\u00e9 \u00e0 03/08\u219209/08\n[7 jours] \u2014 jamais \"le mois pr\u00e9c\u00e9dent\" arbitraire). `direction` est\n**factuelle** (`up`/`down`/`stable`), jamais un jugement m\u00e9tier : une\nhausse de `frais_depenses_total` vaut `up` exactement comme une hausse de\n`total_earned` \u2014 c'est au frontend de d\u00e9cider, KPI par KPI, si une hausse\ndonn\u00e9e est une bonne ou une mauvaise nouvelle. Quand la p\u00e9riode pr\u00e9c\u00e9dente\nvalait 0 et que la p\u00e9riode actuelle est non nulle, le pourcentage n'est pas\nd\u00e9fini math\u00e9matiquement : `percent` vaut alors `null` et `comparable` vaut\n`false` (jamais `Infinity`/`999999`/`100` en substitut) \u2014 `direction` reste\nrenseign\u00e9e pour permettre d'afficher une fl\u00e8che, typiquement \u00e0 c\u00f4t\u00e9 d'un\ntexte comme \"Nouveau\" plut\u00f4t que d'un pourcentage. `summary_evolution` et\n`comparison_period` sont tous les deux `null` uniquement dans le cas\nd\u00e9g\u00e9n\u00e9r\u00e9 `period=custom` sans `date_debut`/`date_fin` (aucune p\u00e9riode\nr\u00e9solue, donc aucune p\u00e9riode pr\u00e9c\u00e9dente calculable).\n\n`comparison_period` : bornes exactes de la p\u00e9riode pr\u00e9c\u00e9dente utilis\u00e9e par\n`summary_evolution`, pour affichage (ex. \"vs 01/07 - 31/07\").",
                 "summary": "Dashboard financier (r\u00e9sum\u00e9 + d\u00e9tail par v\u00e9hicule)",
                 "tags": [
                     "Dashboard"
@@ -2460,6 +2541,67 @@
                                 null
                             ]
                         }
+                    },
+                    {
+                        "name": "periode",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "aujourd_hui",
+                                "hier",
+                                "cette_semaine",
+                                "semaine_precedente",
+                                "ce_mois",
+                                "mois_precedent",
+                                "cette_annee",
+                                "annee_precedente",
+                                "tout",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "annee",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 2000
+                        }
+                    },
+                    {
+                        "name": "mois",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 12
+                        }
+                    },
+                    {
+                        "name": "quinzaine",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "P1",
+                                "P2",
+                                "TOUT",
+                                null
+                            ]
+                        }
                     }
                 ],
                 "responses": {
@@ -2481,6 +2623,7 @@
                                                         {
                                                             "type": "string",
                                                             "enum": [
+                                                                "custom",
                                                                 "ce_mois"
                                                             ]
                                                         }
@@ -2503,6 +2646,25 @@
                                                         "string",
                                                         "null"
                                                     ]
+                                                },
+                                                "periode": {},
+                                                "annee": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "mois": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "quinzaine": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
                                                 }
                                             },
                                             "required": [
@@ -2510,7 +2672,11 @@
                                                 "date_debut",
                                                 "date_fin",
                                                 "vehicule_id",
-                                                "statut"
+                                                "statut",
+                                                "periode",
+                                                "annee",
+                                                "mois",
+                                                "quinzaine"
                                             ]
                                         },
                                         "summary": {
@@ -2918,6 +3084,45 @@
                         }
                     },
                     {
+                        "name": "annee",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 2000
+                        }
+                    },
+                    {
+                        "name": "mois",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 12
+                        }
+                    },
+                    {
+                        "name": "quinzaine",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "P1",
+                                "P2",
+                                "TOUT",
+                                null
+                            ]
+                        }
+                    },
+                    {
                         "name": "date_debut",
                         "in": "query",
                         "schema": {
@@ -3088,6 +3293,24 @@
                                                 "vehicule_id": {},
                                                 "depense_type_id": {},
                                                 "statut": {},
+                                                "annee": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "mois": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "quinzaine": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
                                                 "date_debut": {},
                                                 "date_fin": {}
                                             },
@@ -3095,16 +3318,23 @@
                                                 "vehicule_id",
                                                 "depense_type_id",
                                                 "statut",
+                                                "annee",
+                                                "mois",
+                                                "quinzaine",
                                                 "date_debut",
                                                 "date_fin"
                                             ]
+                                        },
+                                        "total_valide": {
+                                            "type": "number"
                                         }
                                     },
                                     "required": [
                                         "data",
                                         "links",
                                         "meta",
-                                        "filters"
+                                        "filters",
+                                        "total_valide"
                                     ]
                                 }
                             }

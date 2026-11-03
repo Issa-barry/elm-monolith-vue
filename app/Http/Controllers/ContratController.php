@@ -221,7 +221,7 @@ class ContratController extends Controller
             'type_contrat_options' => TypeContrat::options(),
             'statut_contrat_options' => StatutContrat::options(),
             'unites_periode_essai' => $this->unitesPeriodeEssai(),
-            // Lecture seule ici : un montant se change dans « Primes des salariés », qui garde
+            // Lecture seule ici : un montant se change sur la fiche du salarié, qui garde
             // l'historique (AFF-006, AFF-007). null sans le droit de voir les primes.
             'primes' => auth()->user()->can('rh-affectations-remuneration.read')
                 ? app(DocumentContratService::class)->avantagesDisponibles($contrat)
@@ -369,7 +369,7 @@ class ContratController extends Controller
                 : ['nullable', 'date', 'after_or_equal:date_debut'],
             'salaire_base' => 'nullable|numeric|min:0',
             'statut_contrat' => ['nullable', Rule::in(StatutContrat::values())],
-            // Primes ajoutées à la création seulement : ensuite, « Primes des salariés » (AFF-006).
+            // Primes ajoutées à la création seulement : ensuite, la fiche du salarié (AFF-006).
             ...($creation ? [
                 'primes' => ['nullable', 'array', 'max:20'],
                 'primes.*.type_remuneration_id' => ['required', 'string'],

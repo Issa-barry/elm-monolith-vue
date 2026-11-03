@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Client;
 
+use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Client\DepensesMineRequest;
 use App\Http\Resources\Api\Client\DepenseResource;
@@ -23,6 +24,9 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  * est proprietaire-only car il nourrit un calcul de solde à payer, pas une
  * simple consultation). Un livreur voit aussi les dépenses rattachées directement
  * à lui (ex. avance sur salaire, `vehicule` vaut alors null), sauf filtre véhicule.
+ *
+ * `total_valide` : somme des dépenses validées correspondant aux filtres, toutes
+ * pages confondues. C'est le montant de la carte « Dépenses » de l'accueil mobile.
  */
 class DepensesController extends Controller
 {
@@ -45,7 +49,7 @@ class DepensesController extends Controller
             ->pluck('id')
             ->all();
 
-        $depenses = Depense::query()
+        $query = Depense::query()
             ->with([
                 'depenseType:id,libelle,code',
                 'vehiculeBeneficiaire:id,nom_vehicule,immatriculation',
@@ -66,11 +70,18 @@ class DepensesController extends Controller
             ->when($filters['depense_type_id'], fn ($q) => $q->where('depense_type_id', $filters['depense_type_id']))
             ->when($filters['statut'], fn ($q) => $q->where('statut', $filters['statut']))
             ->when($filters['date_debut'], fn ($q) => $q->whereDate('date_depense', '>=', $filters['date_debut']))
-            ->when($filters['date_fin'], fn ($q) => $q->whereDate('date_depense', '<=', $filters['date_fin']))
+            ->when($filters['date_fin'], fn ($q) => $q->whereDate('date_depense', '<=', $filters['date_fin']));
+
+        $totalValide = round((float) (clone $query)->where('statut', StatutDepense::VALIDE->value)->sum('montant'), 2);
+
+        $depenses = $query
             ->orderByDesc('date_depense')
             ->paginate($request->perPage())
             ->withQueryString();
 
-        return DepenseResource::collection($depenses)->additional(['filters' => $filters]);
+        return DepenseResource::collection($depenses)->additional([
+            'filters' => $filters,
+            'total_valide' => $totalValide,
+        ]);
     }
 }

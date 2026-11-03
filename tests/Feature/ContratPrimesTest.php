@@ -177,7 +177,8 @@ class ContratPrimesTest extends TestCase
         $this->assertCount(4, DocumentContrat::sole()->donnees['avantages']);
     }
 
-    public function test_une_prime_mensuelle_s_arrete_avec_le_cdd_ou_avec_son_type(): void
+    /** Règle du 03/11/2026 (ADR 0052) : la prime appartient au salarié, seul son type lui impose une fin. */
+    public function test_une_prime_mensuelle_survit_au_cdd_et_s_arrete_seulement_avec_son_type(): void
     {
         app(ModeleContratService::class)->activer($this->org->id, TypeContrat::CDD, User::factory()->create(['organization_id' => $this->org->id]));
         $this->creer($this->employe(), [
@@ -185,7 +186,7 @@ class ContratPrimesTest extends TestCase
             $this->ligne($court = $this->type('Chantier', ['date_fin_application' => '2026-12-31'])),
         ], ['type_contrat' => 'cdd', 'date_fin' => '2027-06-30'])->assertSessionHasNoErrors();
 
-        $this->assertSame('2027-06-30', AffectationRemuneration::where('type_remuneration_id', $sans->id)->sole()->date_fin->toDateString());
+        $this->assertNull(AffectationRemuneration::where('type_remuneration_id', $sans->id)->sole()->date_fin);
         $this->assertSame('2026-12-31', AffectationRemuneration::where('type_remuneration_id', $court->id)->sole()->date_fin->toDateString());
     }
 
@@ -385,7 +386,7 @@ class ContratPrimesTest extends TestCase
         $v1 = DocumentContrat::sole();
         $this->actingAs($this->user)->post(route('contrats.documents.signature', [$contrat, $v1]), ['signe_le' => today()->toDateString()])->assertSessionHasNoErrors();
 
-        // Nouvelle prime attribuée après signature, dans « Primes des salariés ».
+        // Nouvelle prime attribuée après signature, sur la fiche du salarié.
         app(AffectationRemunerationService::class)->affecter([
             'employe_id' => $employe->id, 'type_remuneration_id' => $this->type('Logement')->id, 'date_debut' => '2026-12-01', 'montant' => 300000,
         ], $this->user, valider: true);

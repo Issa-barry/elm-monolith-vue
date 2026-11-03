@@ -312,6 +312,37 @@ class TransmissionPaieTest extends TestCase
         $this->assertSame('hors_emploi', $decembre['anomalies'][0]['code']);
     }
 
+    /** ADR 0052 : le contrat change, la prime continue, sans nouvelle attribution ni doublon. */
+    public function test_une_prime_continue_sans_interruption_du_cdd_au_cdi(): void
+    {
+        $e = $this->salarie(3000000, ['type_contrat' => 'cdd', 'date_debut' => '2026-05-01', 'date_fin' => '2026-11-15', 'statut_contrat' => 'termine']);
+        Contrat::create([
+            'organization_id' => $this->org->id, 'employe_id' => $e->id, 'type_contrat' => 'cdi',
+            'date_debut' => '2026-11-16', 'salaire_base' => 3000000, 'statut_contrat' => 'actif',
+        ]);
+        $this->affectation($e, $this->type(), ['date_debut' => '2026-05-01', 'montant' => 300000]);
+
+        $calcul = $this->calcul(11);
+        $lignes = collect($this->lignesDe($calcul, $e));
+        $primes = $lignes->where('origine', 'affectation');
+
+        $this->assertSame([], collect($calcul['anomalies'])->where('niveau', 'bloquante')->values()->all());
+        $this->assertCount(2, $lignes->where('origine', 'contrat'));
+        $this->assertCount(1, $primes);
+        $this->assertSame(300000.0, $primes->first()['montant']);
+    }
+
+    /** ADR 0052 : la prime ne s'arrête plus avec le CDD ; sans suite au contrat, la paie reste bloquée. */
+    public function test_une_prime_sans_contrat_apres_la_fin_du_cdd_bloque_le_mois(): void
+    {
+        $e = $this->salarie(3000000, ['type_contrat' => 'cdd', 'date_debut' => '2026-05-01', 'date_fin' => '2026-10-31', 'statut_contrat' => 'termine']);
+        $this->affectation($e, $this->type(), ['date_debut' => '2026-05-01', 'montant' => 300000]);
+
+        $anomalies = collect($this->calcul(11)['anomalies'])->where('employe_id', $e->id);
+
+        $this->assertSame(['contrat_absent'], $anomalies->where('niveau', 'bloquante')->pluck('code')->values()->all());
+    }
+
     public function test_un_type_desactive_ne_produit_plus_rien_apres_sa_date(): void
     {
         $e = $this->salarie();

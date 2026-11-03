@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import InfoTooltip from '@/components/InfoTooltip.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { FileStack, Loader2, Plus } from 'lucide-vue-next';
@@ -66,10 +68,9 @@ const filterFields = computed((): FilterField[] => [
     },
 ]);
 
-const formatGnf = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
-
+// null : montant masqué aux utilisateurs limités à leurs agences, à ne pas confondre avec 0 GNF.
 function gnf(valeur: number | null): string {
-    return valeur === null ? '—' : `${formatGnf.format(valeur)} GNF`;
+    return valeur === null ? '—' : formatGNF(valeur);
 }
 
 // Préparer : la transmission couvre toutes les agences (le serveur le revérifie).
@@ -122,16 +123,16 @@ function ouvrir(t: Transmission) {
 
         <div class="w-full space-y-5 p-4 sm:p-6">
             <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
+                <div class="flex items-center gap-2">
                     <h1 class="text-xl font-semibold">Transmission de paie</h1>
-                    <p class="mt-1 max-w-3xl text-sm text-muted-foreground">
+                    <InfoTooltip label="À propos de la transmission de paie">
                         Chaque mois, RH prépare les éléments de rémunération
                         (salaire de base des contrats, primes et avantages
                         validés), les contrôle, les valide — la version est
                         alors figée — puis les transmet à la Comptabilité. Une
                         correction ouvre une nouvelle version ; les précédentes
                         restent consultables.
-                    </p>
+                    </InfoTooltip>
                 </div>
                 <Button
                     v-if="peutPreparer"
@@ -165,7 +166,11 @@ function ouvrir(t: Transmission) {
                     }"
                     @row-click="(e) => ouvrir(e.data)"
                 >
-                    <Column header="Mois" style="min-width: 160px">
+                    <Column
+                        header="Mois"
+                        style="min-width: 130px"
+                        body-class="whitespace-nowrap"
+                    >
                         <template #body="{ data }">
                             <p class="font-medium">{{ data.libelle_mois }}</p>
                             <p class="text-xs text-muted-foreground">
@@ -187,29 +192,40 @@ function ouvrir(t: Transmission) {
                             </p>
                         </template>
                     </Column>
-                    <Column header="Salariés" style="width: 90px">
+                    <Column
+                        header="Salariés"
+                        style="width: 90px"
+                        body-class="tabular-nums"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
+                    >
                         <template #body="{ data }">{{
                             data.nb_salaries
                         }}</template>
                     </Column>
-                    <Column header="Total versé" style="min-width: 140px">
-                        <template #body="{ data }">
-                            <span class="tabular-nums">{{
-                                gnf(data.total_verse)
-                            }}</span>
-                        </template>
+                    <Column
+                        header="Total versé"
+                        style="min-width: 150px"
+                        body-class="font-medium whitespace-nowrap tabular-nums"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
+                    >
+                        <template #body="{ data }">{{
+                            gnf(data.total_verse)
+                        }}</template>
                     </Column>
                     <Column
                         header="Avantages valorisés"
-                        style="min-width: 140px"
+                        style="min-width: 170px"
+                        body-class="whitespace-nowrap text-muted-foreground tabular-nums"
+                        body-style="text-align: right"
+                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
                     >
-                        <template #body="{ data }">
-                            <span class="text-muted-foreground tabular-nums">{{
-                                gnf(data.total_valorise)
-                            }}</span>
-                        </template>
+                        <template #body="{ data }">{{
+                            gnf(data.total_valorise)
+                        }}</template>
                     </Column>
-                    <Column header="Anomalies" style="min-width: 130px">
+                    <Column header="Anomalies" style="min-width: 110px">
                         <template #body="{ data }">
                             <p
                                 v-if="data.nb_bloquantes > 0"
@@ -235,7 +251,7 @@ function ouvrir(t: Transmission) {
                             </p>
                         </template>
                     </Column>
-                    <Column header="Suivi" style="min-width: 200px">
+                    <Column header="Suivi" body-class="whitespace-nowrap">
                         <template #body="{ data }">
                             <p class="text-xs text-muted-foreground">
                                 Préparée {{ data.preparee_le }}

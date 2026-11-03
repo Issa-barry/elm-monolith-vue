@@ -72,6 +72,7 @@ type Filters = {
     service_rh_id?: string;
     site_ids?: string[];
     search?: string;
+    primes?: string;
 };
 
 const props = defineProps<{
@@ -83,6 +84,8 @@ const props = defineProps<{
     type_employe_options: Option[];
     type_contrat_options: Option[];
     service_options: Option[];
+    // null sans le droit de voir les primes : ni bandeau ni filtre.
+    nb_primes_a_valider: number | null;
 }>();
 
 const { can } = usePermissions();
@@ -120,6 +123,16 @@ const filterFields: FilterField[] = [
         type: 'select',
         options: props.type_contrat_options,
     },
+    ...(props.nb_primes_a_valider !== null
+        ? [
+              {
+                  key: 'primes',
+                  label: 'Primes',
+                  type: 'select' as const,
+                  options: [{ value: 'a_valider', label: 'À valider' }],
+              },
+          ]
+        : []),
 ];
 
 // ── Couleurs ──────────────────────────────────────────────────────────────────
@@ -231,6 +244,30 @@ function confirmDelete(e: Employe) {
                         >
                     </Link>
                 </div>
+            </div>
+
+            <!-- Primes à valider : les valideurs retrouvent ici les fiches concernées (ADR 0052) -->
+            <div
+                v-if="nb_primes_a_valider"
+                class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                data-testid="primes-a-valider"
+            >
+                <span>
+                    {{ nb_primes_a_valider }}
+                    {{
+                        nb_primes_a_valider > 1
+                            ? 'primes attendent une validation'
+                            : 'prime attend une validation'
+                    }}
+                    : tant que ce n’est pas fait, le montant ne s’applique pas
+                    et la transmission du mois concerné reste bloquée.
+                </span>
+                <Link
+                    href="/backoffice/employes?primes=a_valider"
+                    class="font-medium underline underline-offset-2"
+                >
+                    Voir les salariés concernés
+                </Link>
             </div>
 
             <!-- Filtres -->

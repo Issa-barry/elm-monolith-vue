@@ -54,7 +54,9 @@ class ActiviteController extends Controller
             .'n\'est inventée entre les deux. `statut` **exige `type`** (422 explicite sinon, message '
             .'"Le filtre statut nécessite de préciser type"). `type` omis = les deux mélangés, triés '
             .'par date décroissante, mais alors sans filtre `statut` possible. `periode` (période rapide '
-            .'résolue par le serveur) exclut `date_debut`/`date_fin` (422 sinon).',
+            .'résolue par le serveur) exclut `date_debut`/`date_fin` (422 sinon). Période comptable : '
+            .'`annee` + `mois` + `quinzaine` (`P1` du 1er au 15, `P2` du 16 à la fin du mois, `TOUT` ou '
+            .'omise = le mois), bornes calculées par le serveur, exclut `periode` et `date_debut`/`date_fin`.',
     )]
     public function __invoke(ActiviteMineRequest $request): JsonResponse
     {

@@ -862,7 +862,7 @@ function ouvrirHistorique(t: TypeRemuneration) {
                 >
                     {{
                         form.nature_montant === 'variable'
-                            ? 'Un montant est saisi et validé pour chaque mois dans « Primes des salariés ».'
+                            ? 'Un montant est saisi et validé pour chaque mois sur la fiche du salarié.'
                             : 'Le montant fixé à l’attribution est repris automatiquement chaque mois : aucune saisie mensuelle.'
                     }}
                 </p>
