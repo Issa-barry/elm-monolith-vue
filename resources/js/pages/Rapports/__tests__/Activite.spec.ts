@@ -130,8 +130,8 @@ const monter = (
             export_url: '/backoffice/ma-situation/export',
             filters: {
                 periode: 'aujourd_hui',
-                date_from: null,
-                date_to: null,
+                date_debut: null,
+                date_fin: null,
                 site_ids: [],
                 agent_id: null,
             },
@@ -190,8 +190,8 @@ describe('Rapports/Activite', () => {
         await wrapper.setProps({
             filters: {
                 periode: 'personnalisee',
-                date_from: '2026-09-01',
-                date_to: '2026-09-25',
+                date_debut: '2026-09-01',
+                date_fin: '2026-09-25',
                 site_ids: ['s1'],
                 agent_id: 'u1',
             },
@@ -237,7 +237,7 @@ describe('Rapports/Activite', () => {
         await wrapper.get('form').trigger('submit');
         expect(router.get).toHaveBeenCalledWith(
             '/backoffice/ma-situation',
-            { tab: 'caisse', date_from: '2026-09-01', date_to: '2026-09-20' },
+            { tab: 'caisse', date_debut: '2026-09-01', date_fin: '2026-09-20' },
             expect.any(Object),
         );
     });
@@ -247,8 +247,8 @@ describe('Rapports/Activite', () => {
         await wrapper.setProps({
             filters: {
                 periode: 'personnalisee',
-                date_from: '2026-09-01',
-                date_to: '2026-09-20',
+                date_debut: '2026-09-01',
+                date_fin: '2026-09-20',
                 site_ids: [],
                 agent_id: null,
             },
@@ -264,8 +264,8 @@ describe('Rapports/Activite', () => {
             .setValue('2026-09-02');
         expect(wrapper.findComponent(DataFilters).props('baseParams')).toEqual({
             tab: 'caisse',
-            date_from: '2026-09-01',
-            date_to: '2026-09-20',
+            date_debut: '2026-09-01',
+            date_fin: '2026-09-20',
         });
     });
 

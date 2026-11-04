@@ -5,8 +5,8 @@ namespace App\Services\Rapports;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\SiteScopeService;
+use App\Support\Periodes\Periode;
 use App\Support\Rapports\RapportPerimetre;
-use App\Support\Vehicules\SituationPeriode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +24,10 @@ use Illuminate\Support\Facades\DB;
 class RapportPerimetreResolver
 {
     /** Périodes proposées par le rapport (décision du 26/09/2026). */
-    public const PERIODES = ['aujourd_hui', 'hier', 'cette_semaine', 'ce_mois', SituationPeriode::PERSONNALISEE];
+    public const PERIODES = ['aujourd_hui', 'hier', 'cette_semaine', 'ce_mois', Periode::PERSONNALISEE];
+
+    /** Périodes acceptées dans l'URL (liens existants) : toutes les périodes bornées. */
+    private const PERIODES_ACCEPTEES = [...Periode::RAPIDES, Periode::PERSONNALISEE];
 
     public const PARAMETRE_PERIODE = 'periode';
 
@@ -80,7 +83,7 @@ class RapportPerimetreResolver
      *
      * `users.read` seul ne donne jamais accès au chiffre d'affaires ou aux encaissements d'un agent.
      */
-    public function pourFicheAgent(User $consulteur, User $agent, SituationPeriode $periode): ?RapportPerimetre
+    public function pourFicheAgent(User $consulteur, User $agent, Periode $periode): ?RapportPerimetre
     {
         if ($agent->organization_id === null) {
             return null;
@@ -180,9 +183,9 @@ class RapportPerimetreResolver
             ->values();
     }
 
-    private function periode(Request $request): SituationPeriode
+    private function periode(Request $request): Periode
     {
-        return SituationPeriode::depuisRequete($request, null, self::PARAMETRE_PERIODE, 'aujourd_hui');
+        return Periode::depuisRequeteValidee($request, 'aujourd_hui', self::PERIODES_ACCEPTEES, self::PARAMETRE_PERIODE);
     }
 
     /**

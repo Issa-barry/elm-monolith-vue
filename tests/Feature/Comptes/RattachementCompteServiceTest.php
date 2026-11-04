@@ -207,9 +207,17 @@ class RattachementCompteServiceTest extends TestCase
         );
     }
 
-    public function test_refuse_un_compte_sans_acces_a_l_espace_client(): void
+    // ADR 0055 : remplace l'ancien refus du compte staff (ADR 0050, règle 7) — un compte unique.
+    public function test_rattache_le_compte_d_un_agent_du_back_office_sans_toucher_a_ses_roles(): void
     {
-        $this->assertRefuse($this->parrain(), $this->compte([], ['manager']), "Ce compte n'a pas accès à l'espace client.");
+        $parrain = $this->parrain();
+        $agent = $this->compte(['organization_id' => $this->org->id], ['comptable']);
+
+        $this->service->rattacher($parrain, $agent, $this->acteur);
+
+        $this->assertSame($agent->id, $parrain->fresh()->user_id);
+        $this->assertSame(['comptable'], $agent->fresh()->getRoleNames()->all());
+        $this->assertNull($this->service->motifRefus($this->consultantPhysique(['is_active' => true]), $agent->fresh()));
     }
 
     public function test_refuse_une_fiche_desactivee(): void

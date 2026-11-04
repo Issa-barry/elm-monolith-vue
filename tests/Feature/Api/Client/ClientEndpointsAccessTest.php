@@ -23,8 +23,9 @@ class ClientEndpointsAccessTest extends TestCase
 {
     use MakesClientProfiles, RefreshDatabase;
 
-    public function test_role_gate_blocks_a_user_without_client_proprietaire_or_livreur_role(): void
+    public function test_staff_account_without_activity_gets_no_vehicle_and_no_gains(): void
     {
+        // ADR 0055 : l'espace client est ouvert à tout compte actif ; sans activité, aucune donnée.
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $staff = User::factory()->create(['organization_id' => $org->id]);
@@ -32,8 +33,8 @@ class ClientEndpointsAccessTest extends TestCase
 
         Sanctum::actingAs($staff, ['*']);
 
-        $this->getJson(route('client.vehicules.mine'))->assertStatus(403);
-        $this->getJson(route('client.gains.mine'))->assertStatus(403);
+        $this->getJson(route('client.vehicules.mine'))->assertOk()->assertExactJson([]);
+        $this->getJson(route('client.gains.mine'))->assertOk();
     }
 
     public function test_proprietaire_sees_only_vehicules_from_their_own_organization(): void

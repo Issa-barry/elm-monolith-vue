@@ -32,12 +32,14 @@ import {
     type CompteRattache,
     type EvenementCompte,
     type ParrainIdentite,
+    type RattachementAutomatique,
     type VehiculeParraine,
 } from './partials/types';
 
 const props = defineProps<{
     parrain: ParrainIdentite;
     compte: CompteRattache | null;
+    rattachement_automatique: RattachementAutomatique | null;
     historique_compte: EvenementCompte[];
     vehicules: VehiculeParraine[];
     commissions: CommissionsParrain | null;
@@ -185,11 +187,13 @@ const LIBELLES_PART: Record<string, string> = {
                                 <Button
                                     v-else-if="parrain.is_active"
                                     size="sm"
+                                    variant="outline"
+                                    title="Correction exceptionnelle : le rattachement est normalement automatique"
                                     data-testid="parrain-rattacher"
                                     @click="showRattachement = true"
                                 >
                                     <Link2 class="mr-1.5 h-4 w-4" />
-                                    Rattacher un compte
+                                    Rattacher manuellement
                                 </Button>
                             </template>
                         </div>
@@ -266,14 +270,41 @@ const LIBELLES_PART: Record<string, string> = {
                             </div>
                         </div>
 
-                        <p
+                        <div
                             v-else
                             class="mt-5 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
                             data-testid="parrain-sans-compte"
                         >
-                            Aucun compte rattaché. Ce parrain ne peut pas encore
-                            consulter ses commissions.
-                        </p>
+                            <template
+                                v-if="
+                                    rattachement_automatique?.statut ===
+                                    'ambigue'
+                                "
+                            >
+                                <p class="font-medium text-foreground">
+                                    Rattachement automatique impossible
+                                </p>
+                                <p
+                                    class="mt-1"
+                                    data-testid="parrain-motif-rattachement"
+                                >
+                                    {{ rattachement_automatique.motif }}
+                                </p>
+                                <p class="mt-1">
+                                    Un administrateur habilité peut le rattacher
+                                    manuellement après vérification.
+                                </p>
+                            </template>
+                            <template v-else>
+                                <p class="font-medium text-foreground">
+                                    Aucun compte pour cette personne
+                                </p>
+                                <p class="mt-1">
+                                    Sa fiche sera reliée automatiquement dès que
+                                    son compte sera connu du système.
+                                </p>
+                            </template>
+                        </div>
 
                         <p
                             v-if="!compte && !parrain.is_active"

@@ -542,14 +542,15 @@ class UpdateProfileControllerTest extends TestCase
             ->assertStatus(404);
     }
 
-    public function test_requires_a_client_role(): void
+    public function test_account_without_fiche_cannot_change_a_location(): void
     {
+        // ADR 0055 : l'espace client est ouvert à tout compte actif ; sans activité, aucune donnée.
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
 
         Sanctum::actingAs($user, ['*']);
 
         $this->patchJson(route('client.profile.update'), ['ville' => 'Kankan'])
-            ->assertStatus(403);
+            ->assertNotFound();
     }
 }

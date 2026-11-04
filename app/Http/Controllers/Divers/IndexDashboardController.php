@@ -14,8 +14,9 @@ use App\Models\Site;
 use App\Services\Client\QrPayloadResolver;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SiteScopeService;
+use App\Support\Periodes\Periode;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,34 +28,14 @@ class IndexDashboardController extends Controller
         private readonly SiteScopeService $siteScope,
     ) {}
 
-    private function dateRangeForPeriode(string $periode): array
-    {
-        $now = Carbon::now();
-
-        return match ($periode) {
-            'aujourd_hui' => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
-            'hier' => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
-            'cette_semaine' => [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()],
-            'semaine_derniere' => [$now->copy()->subWeek()->startOfWeek(), $now->copy()->subWeek()->endOfWeek()],
-            'ce_mois' => [$now->copy()->startOfMonth(), $now->copy()->endOfMonth()],
-            'mois_dernier' => [$now->copy()->subMonth()->startOfMonth(), $now->copy()->subMonth()->endOfMonth()],
-            't1' => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 3, 31)->endOfDay()],
-            't2' => [Carbon::create($now->year, 4, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
-            't3' => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 9, 30)->endOfDay()],
-            't4' => [Carbon::create($now->year, 10, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
-            's1' => [Carbon::create($now->year, 1, 1)->startOfDay(), Carbon::create($now->year, 6, 30)->endOfDay()],
-            's2' => [Carbon::create($now->year, 7, 1)->startOfDay(), Carbon::create($now->year, 12, 31)->endOfDay()],
-            'cette_annee' => [$now->copy()->startOfYear(), $now->copy()->endOfYear()],
-            default => [null, null],
-        };
-    }
+    /** Périodes du tableau de bord : le standard sans dates libres, plus trimestres et semestres (ADR 0057). */
+    private const PERIODES = [...Periode::RAPIDES, ...Periode::TRIMESTRES_SEMESTRES, Periode::TOUT];
 
     public function __invoke(Request $request): Response
     {
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $periode = $request->get('periode', 'ce_mois');
-        [$start, $end] = $this->dateRangeForPeriode($periode);
+        $periode = Periode::depuisRequeteValidee($request, 'ce_mois', self::PERIODES);
 
         // Périmètre d'agence : même mécanisme que la trésorerie et les rapports (SiteScopeService) —
         // toute l'organisation pour un administrateur, ses agences (user_sites) sinon. Une facture sans
@@ -66,8 +47,8 @@ class IndexDashboardController extends Controller
 
         // ── Agrégats des factures de vente ─────────────────────────────────────
         $statsQuery = $perimetre(FactureVente::where('organization_id', $orgId), 'site_id');
-        if ($start && $end) {
-            $statsQuery->whereBetween('created_at', [$start, $end]);
+        if ($periode->estBornee()) {
+            $periode->appliquer($statsQuery, 'created_at');
         }
 
         $row = $statsQuery->selectRaw("
@@ -91,8 +72,8 @@ class IndexDashboardController extends Controller
                 StatutFactureVente::IMPAYEE->value,
                 StatutFactureVente::PARTIEL->value,
             ]);
-        if ($start && $end) {
-            $encaisseQuery->whereBetween('fv.created_at', [$start, $end]);
+        if ($periode->estBornee()) {
+            $periode->appliquer($encaisseQuery, 'fv.created_at');
         }
         $encaisseActif = $encaisseQuery->sum('ev.montant');
 
@@ -100,16 +81,15 @@ class IndexDashboardController extends Controller
 
         // ── Évolution mensuelle (année courante) ───────────────────────────────
         // MONTH() n'existe pas sous SQLite (tests CI) → strftime('%m', ...) à la place
-        $year = now()->year;
         $monthExpr = DB::connection()->getDriverName() === 'sqlite'
             ? "CAST(strftime('%m', created_at) AS INTEGER)"
             : 'MONTH(created_at)';
 
         $monthlyQuery = $perimetre(FactureVente::where('organization_id', $orgId), 'site_id');
-        if ($start && $end) {
-            $monthlyQuery->whereBetween('created_at', [$start, $end]);
+        if ($periode->estBornee()) {
+            $periode->appliquer($monthlyQuery, 'created_at');
         } else {
-            $monthlyQuery->whereYear('created_at', $year);
+            Periode::rapide('cette_annee', CarbonImmutable::now())->appliquer($monthlyQuery, 'created_at');
         }
 
         $monthly = $monthlyQuery
@@ -132,8 +112,8 @@ class IndexDashboardController extends Controller
         // ── Évolution journalière (60 derniers jours) ─────────────────────────
         // Couvre aujourd'hui, hier, cette semaine, semaine préc., ce mois, mois préc.
         $dailyQuery = $perimetre(FactureVente::where('organization_id', $orgId), 'site_id');
-        if ($start && $end) {
-            $dailyQuery->whereBetween('created_at', [$start, $end]);
+        if ($periode->estBornee()) {
+            $periode->appliquer($dailyQuery, 'created_at');
         } else {
             $dailyQuery->where('created_at', '>=', now()->subDays(59)->startOfDay());
         }
@@ -170,8 +150,8 @@ class IndexDashboardController extends Controller
                 $join->on('sites.id', '=', 'factures_ventes.site_id')
                     ->whereNull('sites.deleted_at');
             });
-        if ($start && $end) {
-            $caParSite->whereBetween('factures_ventes.created_at', [$start, $end]);
+        if ($periode->estBornee()) {
+            $periode->appliquer($caParSite, 'factures_ventes.created_at');
         }
         $caParSite = $caParSite
             ->selectRaw('sites.nom, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
@@ -194,8 +174,8 @@ class IndexDashboardController extends Controller
                 $join->on('type_vehicules.id', '=', 'vehicules.type_vehicule_id')
                     ->whereNull('type_vehicules.deleted_at');
             });
-        if ($start && $end) {
-            $caParTypeVehicule->whereBetween('factures_ventes.created_at', [$start, $end]);
+        if ($periode->estBornee()) {
+            $periode->appliquer($caParTypeVehicule, 'factures_ventes.created_at');
         }
         $caParTypeVehicule = $caParTypeVehicule
             ->selectRaw('type_vehicules.nom as type_nom, COALESCE(SUM(factures_ventes.montant_net), 0) as montant')
@@ -220,8 +200,8 @@ class IndexDashboardController extends Controller
             ->whereNull('pv.deleted_at')
             ->whereNull('p.deleted_at')
             ->whereNotIn('cv.statut', [StatutCommandeVente::ANNULEE->value, StatutCommandeVente::ANNULEE_ERREUR_SAISIE->value]);
-        if ($start && $end) {
-            $caParProduit->whereBetween('cv.created_at', [$start, $end]);
+        if ($periode->estBornee()) {
+            $periode->appliquer($caParProduit, 'cv.created_at');
         }
         $caParProduit = $caParProduit
             ->selectRaw('p.nom as nom, COALESCE(SUM(cvl.total_ligne), 0) as total')
@@ -245,8 +225,8 @@ class IndexDashboardController extends Controller
             ->whereNull('cv.deleted_at')
             ->when($siteIds !== null, fn ($q) => $q->whereIn('fv.site_id', $siteIds))
             ->where('fv.statut_facture', '!=', StatutFactureVente::ANNULEE->value);
-        if ($start && $end) {
-            $caParProcessusQuery->whereBetween('fv.created_at', [$start, $end]);
+        if ($periode->estBornee()) {
+            $periode->appliquer($caParProcessusQuery, 'fv.created_at');
         }
 
         $caParProcessus = collect([
@@ -280,7 +260,9 @@ class IndexDashboardController extends Controller
             ->toArray();
 
         return Inertia::render('Dashboard', [
-            'periode' => $periode,
+            'periode' => $periode->cle,
+            // Bornes de chaque choix, résolues ici : le graphique ne recalcule aucune date.
+            'periodes' => Periode::optionsAvecBornes(self::PERIODES),
             // null = toute l'organisation ; sinon les agences auxquelles les chiffres sont limités.
             'agences' => $siteIds === null
                 ? null

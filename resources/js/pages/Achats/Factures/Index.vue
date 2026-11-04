@@ -76,6 +76,7 @@ const filterFields = computed<FilterField[]>(() => [
         inline: true,
         placeholder: 'FAC-… ou n° fournisseur',
     },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
 ]);
 
 function formatGNF(val: number): string {

@@ -263,11 +263,16 @@ class RapportActiviteTest extends TestCase
             $this->assertSame([$cle, $debut, $fin], [$periode['cle'], $periode['date_debut'], $periode['date_fin']], $cle);
         }
 
-        $perso = $this->props($this->agentA, 'ma-situation', ['date_from' => '2026-09-10', 'date_to' => '2026-09-12'])['periode'];
+        $perso = $this->props($this->agentA, 'ma-situation', ['date_debut' => '2026-09-10', 'date_fin' => '2026-09-12'])['periode'];
         $this->assertSame(['personnalisee', '2026-09-10', '2026-09-12'], [$perso['cle'], $perso['date_debut'], $perso['date_fin']]);
 
-        $invalide = $this->props($this->agentA, 'ma-situation', ['date_from' => '2026-09-12', 'date_to' => '2026-09-10'])['periode'];
-        $this->assertSame('aujourd_hui', $invalide['cle']);
+        $ancienLien = $this->props($this->agentA, 'ma-situation', ['date_from' => '2026-09-10', 'date_to' => '2026-09-12'])['periode'];
+        $this->assertSame(['personnalisee', '2026-09-10'], [$ancienLien['cle'], $ancienLien['date_debut']]);
+
+        // ADR 0057 : une période invalide est refusée avec un message, jamais remplacée en silence.
+        $this->actingAs($this->agentA)
+            ->get(route('ma-situation', ['date_debut' => '2026-09-12', 'date_fin' => '2026-09-10']))
+            ->assertSessionHasErrors('date_fin');
 
         $this->assertSame(['aujourd_hui', 'hier', 'cette_semaine', 'ce_mois', 'personnalisee'], array_column($perso['options'], 'value'));
     }
@@ -323,7 +328,7 @@ class RapportActiviteTest extends TestCase
         $this->assertSame(1, $encaisseur['encaissements']['resume']['nombre']);
         $this->assertEquals(120_000, $encaisseur['encaissements']['resume']['montant']);
 
-        $aout = ['periode' => 'personnalisee', 'date_from' => '2026-08-01', 'date_to' => '2026-08-31'];
+        $aout = ['periode' => 'personnalisee', 'date_debut' => '2026-08-01', 'date_fin' => '2026-08-31'];
         $encaisseurAout = $this->props($this->agentB, 'ma-situation', $aout)['rapport'];
         $vendeurAout = $this->props($this->agentA, 'ma-situation', $aout)['rapport'];
         $this->assertSame(0, $encaisseurAout['creances']['resume']['nombre'], 'La créance reste celle du vendeur.');

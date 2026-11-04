@@ -7,6 +7,7 @@ use App\Enums\MessageDirection;
 use App\Enums\MessageLogStatus;
 use App\Http\Controllers\Controller;
 use App\Models\MessageLog;
+use App\Support\Periodes\Periode;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -43,8 +44,7 @@ class IndexCommunicationController extends Controller
         $direction = $request->input('direction', '');
         $status = $request->input('status', '');
         $search = trim((string) $request->input('search', ''));
-        $dateDebut = $request->input('date_debut', '');
-        $dateFin = $request->input('date_fin', '');
+        $periode = Periode::depuisRequeteValidee($request);
 
         $query = MessageLog::where('organization_id', $orgId)
             ->orderByDesc('created_at');
@@ -61,18 +61,13 @@ class IndexCommunicationController extends Controller
         if ($search !== '') {
             $query->where('masked_recipient', 'LIKE', "%{$search}%");
         }
-        if ($dateDebut !== '') {
-            $query->where('created_at', '>=', $dateDebut.' 00:00:00');
-        }
-        if ($dateFin !== '') {
-            $query->where('created_at', '<=', $dateFin.' 23:59:59');
-        }
+        $periode->appliquer($query, 'created_at');
 
         $logs = $query->paginate(30)->withQueryString();
 
         return Inertia::render('Communications/Index', [
             'logs' => $logs->through(fn (MessageLog $log) => self::transform($log)),
-            'filters' => compact('channel', 'direction', 'status', 'search', 'dateDebut', 'dateFin'),
+            'filters' => [...compact('channel', 'direction', 'status', 'search'), ...$periode->valeursFiltre()],
             'channels' => collect(MessageChannel::cases())
                 ->map(fn (MessageChannel $c) => ['value' => $c->value, 'label' => $c->label()])
                 ->values(),

@@ -102,6 +102,8 @@ const props = defineProps<{
     factures: FactureItem[];
     totaux: Totaux;
     periode: string;
+    date_debut?: string | null;
+    date_fin?: string | null;
     statut: string;
     site_ids?: string[];
     sites: SiteOption[];
@@ -123,18 +125,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Factures', href: '/backoffice/factures' },
 ];
 
-// "Tout" ne doit JAMAIS valoir 'all' (ni 'tous'/'') : DataFilters.vue traite ces valeurs comme
-// des sentinelles génériques "aucune sélection" et les retire silencieusement de la requête
-// (cf. DataFilters::SENTINELS) — un choix qui, pour ce champ, ferait retomber le backend sur son
-// défaut 'month' au lieu de lever le filtre de date (régression corrigée le 01/09/2026 : "Tout"
-// n'affichait jamais rien au-delà du mois courant).
-const periodes = [
-    { value: 'today', label: "Aujourd'hui" },
-    { value: 'week', label: 'Cette semaine' },
-    { value: 'month', label: 'Ce mois' },
-    { value: 'tout', label: 'Tout' },
-];
-
 const filtres = [
     { value: 'tous', label: 'Toutes' },
     { value: 'impayee', label: 'Impayées' },
@@ -153,6 +143,8 @@ const filterBaseParams = computed(() => {
 
 const filterValues = computed(() => ({
     periode: props.periode,
+    date_debut: props.date_debut ?? '',
+    date_fin: props.date_fin ?? '',
     statut: props.statut,
     site_ids: props.site_ids ?? [],
     vehicule: props.vehicule ?? '',
@@ -185,7 +177,13 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'VTE-…, DST-…',
         inline: true,
     },
-    { key: 'periode', label: 'Période', type: 'select', options: periodes },
+    // Défaut « Ce mois » : sans choix, le serveur ne liste que le mois en cours.
+    {
+        key: 'periode',
+        label: 'Période',
+        type: 'period',
+        defaultValue: 'ce_mois',
+    },
     {
         key: 'chauffeur',
         label: 'Chauffeur',

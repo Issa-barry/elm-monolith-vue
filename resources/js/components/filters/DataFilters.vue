@@ -68,8 +68,9 @@ export interface FilterField {
     suggestionsField?: string;
     /**
      * Pour type: 'period' — raccourci appliqué quand rien n'est choisi (le serveur retombe dessus) :
-     * ne compte pas comme un filtre actif. Les raccourcis (`options`) sont résolus côté serveur ;
-     * `personnalisee` envoie `startKey`/`endKey` (défaut `date_from`/`date_to`).
+     * ne compte pas comme un filtre actif. Les raccourcis sont résolus côté serveur (Periode, ADR
+     * 0057) ; sans `options`, le champ reprend les choix standard partagés (`page.props.periodes`).
+     * `personnalisee` envoie `startKey`/`endKey` (défaut `date_debut`/`date_fin`).
      */
     defaultValue?: string;
 }
@@ -217,7 +218,7 @@ const appliedSiteIds = ref<string[]>([]);
 const appliedValues = ref<Record<string, unknown>>({});
 
 function periodKeys(field: FilterField): [string, string] {
-    return [field.startKey ?? 'date_from', field.endKey ?? 'date_to'];
+    return [field.startKey ?? 'date_debut', field.endKey ?? 'date_fin'];
 }
 
 function toArray(val: unknown): string[] {
@@ -263,11 +264,52 @@ function initLocal() {
 initLocal();
 watch(() => props.values, initLocal, { deep: true });
 
+const periodesStandard = computed<FilterOption[]>(() => {
+    const periodes = (page.props as Record<string, unknown>).periodes;
+    return Array.isArray(periodes) ? (periodes as FilterOption[]) : [];
+});
+
 function fieldOptions(field: FilterField): FilterOption[] {
-    return field.optionsFrom
-        ? field.optionsFrom(localValues.value)
-        : (field.options ?? []);
+    if (field.optionsFrom) return field.optionsFrom(localValues.value);
+    if (field.type === 'period' && !field.options)
+        return periodesStandard.value;
+    return field.options ?? [];
 }
+
+// ── Période personnalisée : les deux dates, dans l'ordre ──────────────────────
+// Même règle que le serveur (Periode::regles) : rien n'est envoyé tant qu'elle n'est pas
+// respectée, et une erreur renvoyée par le serveur reste affichée sous le champ.
+
+function erreurLocalePeriode(field: FilterField): string | null {
+    if (localValues.value[field.key] !== PERIODE_PERSONNALISEE) return null;
+    const [sk, ek] = periodKeys(field);
+    const debut = (localValues.value[sk] as string) || '';
+    const fin = (localValues.value[ek] as string) || '';
+    if (!debut && !fin) return 'Renseignez la date de début et la date de fin.';
+    if (!debut) return 'Renseignez aussi la date de début.';
+    if (!fin) return 'Renseignez aussi la date de fin.';
+    return debut > fin
+        ? 'La date de fin doit être postérieure ou égale à la date de début.'
+        : null;
+}
+
+function erreurPeriode(field: FilterField): string | null {
+    const locale = erreurLocalePeriode(field);
+    if (locale) return locale;
+    const errors = ((page.props as Record<string, unknown>).errors ??
+        {}) as Record<string, string>;
+    const [sk, ek] = periodKeys(field);
+    return errors[field.key] ?? errors[sk] ?? errors[ek] ?? null;
+}
+
+const periodeInvalide = computed(() =>
+    props.fields.some(
+        (f) =>
+            f.type === 'period' &&
+            !f.disabled &&
+            erreurLocalePeriode(f) !== null,
+    ),
+);
 
 // Un choix qui n'existe plus dans des options dépendantes (ex. véhicule d'un autre propriétaire)
 // ne doit jamais partir silencieusement au serveur.
@@ -378,6 +420,7 @@ function buildParams(): Record<string, string | string[]> {
 }
 
 function applyFilters() {
+    if (periodeInvalide.value) return;
     const values = buildParams();
     if (props.url) {
         router.get(
@@ -615,6 +658,14 @@ const hasActiveFilters = computed(
                         />
                     </div>
                 </template>
+                <p
+                    v-if="erreurPeriode(field)"
+                    role="alert"
+                    :data-testid="`filter-${field.key}-erreur`"
+                    class="basis-full text-xs text-destructive"
+                >
+                    {{ erreurPeriode(field) }}
+                </p>
             </div>
 
             <!-- text -->
@@ -702,7 +753,7 @@ const hasActiveFilters = computed(
                     :active-count="
                         triggerOnly ? activeFilterCount : drawerFilterCount
                     "
-                    :apply-disabled="!pendingChange"
+                    :apply-disabled="!pendingChange || periodeInvalide"
                     @apply="applyFilters"
                     @reset="resetFilters()"
                 >
@@ -849,27 +900,49 @@ const hasActiveFilters = computed(
                                     "
                                     class="grid grid-cols-2 gap-2"
                                 >
-                                    <Input
-                                        v-model="
-                                            localValues[
-                                                periodKeys(field)[0]
-                                            ] as string | number | undefined
-                                        "
-                                        type="date"
-                                        aria-label="Date de début"
-                                        class="h-9"
-                                    />
-                                    <Input
-                                        v-model="
-                                            localValues[
-                                                periodKeys(field)[1]
-                                            ] as string | number | undefined
-                                        "
-                                        type="date"
-                                        aria-label="Date de fin"
-                                        class="h-9"
-                                    />
+                                    <div class="space-y-1">
+                                        <span
+                                            class="text-xs text-muted-foreground"
+                                            >Du</span
+                                        >
+                                        <Input
+                                            v-model="
+                                                localValues[
+                                                    periodKeys(field)[0]
+                                                ] as string | number | undefined
+                                            "
+                                            type="date"
+                                            aria-label="Date de début"
+                                            :data-testid="`filter-field-${field.key}-debut`"
+                                            class="h-9"
+                                        />
+                                    </div>
+                                    <div class="space-y-1">
+                                        <span
+                                            class="text-xs text-muted-foreground"
+                                            >Au</span
+                                        >
+                                        <Input
+                                            v-model="
+                                                localValues[
+                                                    periodKeys(field)[1]
+                                                ] as string | number | undefined
+                                            "
+                                            type="date"
+                                            aria-label="Date de fin"
+                                            :data-testid="`filter-field-${field.key}-fin`"
+                                            class="h-9"
+                                        />
+                                    </div>
                                 </div>
+                                <p
+                                    v-if="erreurPeriode(field)"
+                                    role="alert"
+                                    :data-testid="`filter-${field.key}-erreur`"
+                                    class="text-xs text-destructive"
+                                >
+                                    {{ erreurPeriode(field) }}
+                                </p>
                             </div>
 
                             <!-- date -->
@@ -999,10 +1072,10 @@ const hasActiveFilters = computed(
             <button
                 type="button"
                 data-testid="filters-search"
-                :disabled="!pendingChange"
+                :disabled="!pendingChange || periodeInvalide"
                 class="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition-colors"
                 :class="
-                    pendingChange
+                    pendingChange && !periodeInvalide
                         ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                         : 'cursor-not-allowed bg-muted text-muted-foreground'
                 "

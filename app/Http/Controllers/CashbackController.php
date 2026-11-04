@@ -9,6 +9,7 @@ use App\Models\Client;
 use App\Models\Depense;
 use App\Services\CashbackService;
 use App\Services\SavedFilterService;
+use App\Support\Periodes\Periode;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -32,8 +33,7 @@ class CashbackController extends Controller
         $orgId = auth()->user()->organization_id;
         $statut = $this->scalarInput($request, 'statut');
         $clientId = $this->scalarInput($request, 'client_id');
-        $dateDebut = trim((string) $request->input('date_debut', ''));
-        $dateFin = trim((string) $request->input('date_fin', ''));
+        $periode = Periode::depuisRequeteValidee($request);
 
         $query = CashbackTransaction::with(['client', 'versements'])
             ->where('cashback_transactions.organization_id', $orgId)
@@ -48,16 +48,11 @@ class CashbackController extends Controller
         if ($clientId !== '') {
             $query->where('client_id', $clientId);
         }
-        if ($dateDebut !== '') {
-            $query->whereDate('created_at', '>=', $dateDebut);
-        }
-        if ($dateFin !== '') {
-            $query->whereDate('created_at', '<=', $dateFin);
-        }
+        $periode->appliquer($query, 'cashback_transactions.created_at');
 
         $transactions = $query->orderByDesc('created_at')->get();
         $clientIds = $transactions->pluck('client_id')->unique()->values();
-        $depensesParClient = $this->depensesValidees($orgId, $clientIds, $dateDebut, $dateFin)
+        $depensesParClient = $this->depensesValidees($orgId, $clientIds, $periode)
             ->groupBy('beneficiaire_id');
 
         $clients = $transactions
@@ -92,8 +87,7 @@ class CashbackController extends Controller
             'filters' => [
                 'client_id' => $clientId,
                 'statut' => $statut,
-                'date_debut' => $dateDebut,
-                'date_fin' => $dateFin,
+                ...$periode->valeursFiltre(),
             ],
         ]);
     }
@@ -220,7 +214,7 @@ class CashbackController extends Controller
         return trim(is_array($value) ? (string) reset($value) : (string) $value);
     }
 
-    private function depensesValidees(string $orgId, Collection $clientIds, string $dateDebut, string $dateFin): Collection
+    private function depensesValidees(string $orgId, Collection $clientIds, Periode $periode): Collection
     {
         if ($clientIds->isEmpty()) {
             return collect();
@@ -231,12 +225,7 @@ class CashbackController extends Controller
             ->whereIn('beneficiaire_id', $clientIds)
             ->where('statut', StatutDepense::VALIDE->value);
 
-        if ($dateDebut !== '') {
-            $query->whereDate('date_depense', '>=', $dateDebut);
-        }
-        if ($dateFin !== '') {
-            $query->whereDate('date_depense', '<=', $dateFin);
-        }
+        $periode->appliquer($query, 'date_depense', colonneDate: true);
 
         return $query->get(['beneficiaire_id', 'montant']);
     }

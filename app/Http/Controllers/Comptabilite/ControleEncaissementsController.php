@@ -21,6 +21,7 @@ use App\Notifications\AnomalieEncaissementNotification;
 use App\Services\AuditLogService;
 use App\Services\Ventes\ControleEncaissements\AlertesAnomaliesEncaissement;
 use App\Services\Ventes\ControleEncaissements\SurveillanceEncaissements;
+use App\Support\Periodes\Periode;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -69,13 +70,13 @@ class ControleEncaissementsController extends Controller
             'type' => $this->texte($request, 'type'),
             'gravite' => $this->texte($request, 'gravite'),
             'agent' => $this->texte($request, 'agent'),
-            'detection_debut' => $this->texte($request, 'detection_debut'),
-            'detection_fin' => $this->texte($request, 'detection_fin'),
         ];
 
         $anomalies = $this->anomaliesVisibles($user)->with('site:id,nom')->get();
         $agents = User::whereIn('id', $anomalies->pluck('agent_ids')->flatten()->filter()->unique())->get()->keyBy('id');
-        $lignes = $this->filtrer($anomalies->map(fn (AnomalieEncaissement $a) => $this->ligne($a, $agents)), $filtres);
+        $periode = Periode::depuisRequeteValidee($request);
+        $lignes = $this->filtrer($anomalies->map(fn (AnomalieEncaissement $a) => $this->ligne($a, $agents)), $filtres, $periode);
+        $filtres = [...$filtres, ...$periode->valeursFiltre()];
 
         $kpis = [
             'nouvelles' => $lignes->where('statut', StatutAnomalieEncaissement::NOUVELLE->value)->count(),
@@ -494,13 +495,11 @@ class ControleEncaissementsController extends Controller
      * @param  array<string, mixed>  $f
      * @return Collection<int, array<string, mixed>>
      */
-    private function filtrer(Collection $lignes, array $f): Collection
+    private function filtrer(Collection $lignes, array $f, Periode $periode): Collection
     {
-        $debut = $this->date($f['detection_debut'])?->startOfDay();
-        $fin = $this->date($f['detection_fin'])?->endOfDay();
         $recherche = mb_strtolower($f['reference']);
 
-        return $lignes->filter(function (array $l) use ($f, $debut, $fin, $recherche) {
+        return $lignes->filter(function (array $l) use ($f, $periode, $recherche) {
             if ($f['site_ids'] !== [] && ! in_array($l['site_id'], $f['site_ids'], true)) {
                 return false;
             }
@@ -517,11 +516,9 @@ class ControleEncaissementsController extends Controller
             if ($f['agent'] !== '' && ! in_array($f['agent'], $l['agent_ids'], true)) {
                 return false;
             }
-            if (($debut || $fin) && $l['detectee_le_iso']) {
-                $date = Carbon::parse($l['detectee_le_iso']);
-                if (($debut && $date->lt($debut)) || ($fin && $date->gt($fin))) {
-                    return false;
-                }
+            // Une anomalie sans date de détection reste visible, quelle que soit la période.
+            if ($l['detectee_le_iso'] && ! $periode->contient(Carbon::parse($l['detectee_le_iso']))) {
+                return false;
             }
 
             return true;
@@ -533,18 +530,5 @@ class ControleEncaissementsController extends Controller
         $valeur = $request->input($cle, '');
 
         return trim(is_array($valeur) ? (string) reset($valeur) : (string) $valeur);
-    }
-
-    private function date(string $valeur): ?Carbon
-    {
-        if ($valeur === '') {
-            return null;
-        }
-
-        try {
-            return Carbon::parse($valeur);
-        } catch (\Throwable) {
-            return null;
-        }
     }
 }

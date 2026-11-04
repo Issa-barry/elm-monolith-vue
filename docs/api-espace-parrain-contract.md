@@ -9,11 +9,12 @@ Pour la session Nuxt et tout client de l'espace client. Le schéma exact est dan
 | Cas | Réponse |
 |---|---|
 | Sans jeton | `401` |
-| Compte sans rôle `client`, `proprietaire` ou `livreur` (staff) | `403` |
+| Compte actif sans parrain rattaché (client, agent du back-office...) | `404` |
 | Compte sans parrain rattaché, ou détaché | `404` `{ "message": "Aucun parrain n'est rattaché à ce compte." }` |
 | Filtre invalide | `422` |
 
-- Toutes les routes exigent `auth:sanctum` et `role:client|proprietaire|livreur`.
+- Toutes les routes exigent `auth:sanctum` seulement (front ouvert à tout compte actif, ADR 0055). Le parrain
+  rattaché au compte décide de l'accès : sans lui, `404`. Un agent du back-office rattaché à un parrain y accède.
 - **Aucune route ne reçoit d'identifiant de parrain** : il vient du compte authentifié, recalculé à chaque
   requête. Un paramètre `parrain_id` envoyé est ignoré.
 - Un numéro identique ne donne aucun accès : seul un rattachement posé au back-office compte.

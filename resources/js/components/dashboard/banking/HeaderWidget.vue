@@ -3,6 +3,7 @@ import IdentityQrBadge from '@/components/identity/IdentityQrBadge.vue';
 import ScannerModal from '@/components/scanner/ScannerModal.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { formatPhoneDisplay } from '@/lib/utils';
+import type { PeriodeOption } from '@/types/periode';
 import { router, usePage } from '@inertiajs/vue3';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
@@ -11,35 +12,25 @@ import { computed, ref, watch } from 'vue';
 
 const vTooltip = Tooltip;
 const page = usePage();
-const props = defineProps<{ periode?: string; qrPayload?: string | null }>();
+const props = defineProps<{
+    periode?: string;
+    periodes?: PeriodeOption[];
+    qrPayload?: string | null;
+}>();
 
 const scannerVisible = ref(false);
 
-const periodOptions = [
-    { label: "Aujourd'hui", value: 'aujourd_hui' },
-    { label: 'Hier', value: 'hier' },
-    { label: 'Cette semaine', value: 'cette_semaine' },
-    { label: 'Semaine dernière', value: 'semaine_derniere' },
-    { label: 'Ce mois', value: 'ce_mois' },
-    { label: 'Mois dernier', value: 'mois_dernier' },
-    { label: 'T1', value: 't1' },
-    { label: 'T2', value: 't2' },
-    { label: 'T3', value: 't3' },
-    { label: 'T4', value: 't4' },
-    { label: 'S1', value: 's1' },
-    { label: 'S2', value: 's2' },
-    { label: 'Cette année', value: 'cette_annee' },
-    { label: 'Tout', value: 'tout' },
-];
+// Choix et bornes résolus par le serveur (Periode, ADR 0057).
+const periodOptions = computed(() => props.periodes ?? []);
 
-const selectedPeriod = ref(
-    periodOptions.find((p) => p.value === props.periode) ?? periodOptions[4],
+const selectedPeriod = ref<PeriodeOption | undefined>(
+    periodOptions.value.find((p) => p.value === props.periode),
 );
 
 function changePeriod() {
     router.get(
         '/backoffice/dashboard',
-        { periode: selectedPeriod.value.value },
+        { periode: selectedPeriod.value?.value },
         { preserveState: true, preserveScroll: true },
     );
 }
@@ -47,7 +38,7 @@ function changePeriod() {
 watch(
     () => props.periode,
     (val) => {
-        const found = periodOptions.find((p) => p.value === val);
+        const found = periodOptions.value.find((p) => p.value === val);
         if (found) selectedPeriod.value = found;
     },
 );

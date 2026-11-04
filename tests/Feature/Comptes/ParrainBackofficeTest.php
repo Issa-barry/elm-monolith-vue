@@ -103,6 +103,38 @@ class ParrainBackofficeTest extends TestCase
         ]);
     }
 
+    // ── Rattachement automatique (ADR 0056) ─────────────────────────────────
+
+    public function test_la_fiche_sans_compte_explique_pourquoi_le_rattachement_automatique_n_a_pas_eu_lieu(): void
+    {
+        $sansCompte = $this->parrain();
+        $this->compte('+224620000777');
+        $memeNumero = $this->parrain(['telephone' => '+224620000777']);
+
+        $this->actingAs($this->user)->get(route('parrains.show', $sansCompte))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('compte', null)
+                ->where('rattachement_automatique.statut', 'aucune'));
+
+        $this->actingAs($this->user)->get(route('parrains.show', $memeNumero))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('compte', null)
+                ->where('rattachement_automatique.statut', 'ambigue')
+                ->where('rattachement_automatique.motif', "Seul le numéro de téléphone correspond, il n'est pas vérifié."));
+    }
+
+    public function test_un_rattachement_automatique_apparait_dans_l_historique_sans_auteur_humain(): void
+    {
+        $compte = $this->compte();
+        $parrain = Parrain::create(['organization_id' => $this->org->id, 'personne_id' => $compte->personne_id, 'is_active' => true]);
+
+        $this->actingAs($this->user)->get(route('parrains.show', $parrain))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('compte.id', $compte->id)
+                ->where('rattachement_automatique', null)
+                ->where('historique_compte.0.auteur', 'Rattachement automatique'));
+    }
+
     // ── Accès ───────────────────────────────────────────────────────────────
 
     public function test_la_liste_exige_le_droit_de_lecture(): void

@@ -89,6 +89,9 @@ const monter = (
                 caisse_role: '',
                 montant_min: '',
                 montant_max: '',
+                periode: 'tout',
+                date_debut: null,
+                date_fin: null,
             },
             statut_options: [],
             nature_options: [],
@@ -432,6 +435,8 @@ describe('Mouvements de fonds — vues et tiroir de filtres', () => {
             'site_destination_id',
             'montant_min',
             'montant_max',
+            // Filtre de période standard (ADR 0057).
+            'periode',
         ]);
     });
 

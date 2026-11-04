@@ -49,6 +49,8 @@ const userRoleLabel = computed(() => {
     return roleLabel(firstRole);
 });
 
+// periode-standard-ignore: param `period` historique de ClientEarningsService, partagé avec
+// GET /v1/mobile/dashboard ; migré avec le lot API (ADR 0057, docs/periodes.md « Dérogations »).
 const periodOptions: Array<{
     value: DashboardFiltersPayload['period'];
     label: string;

@@ -2,7 +2,7 @@
 
 namespace App\Support\Rapports;
 
-use App\Support\Vehicules\SituationPeriode;
+use App\Support\Periodes\Periode;
 use Carbon\CarbonImmutable;
 
 /**
@@ -21,12 +21,12 @@ final class RapportPerimetre
         public readonly string $organizationId,
         public readonly ?array $siteIds,
         public readonly ?string $agentId,
-        public readonly SituationPeriode $periode,
+        public readonly Periode $periode,
         public readonly bool $maSituation,
     ) {}
 
     /**
-     * « Toute la période » (fiche agent seulement : le rapport et « Ma situation » ne la proposent
+     * « Toutes les périodes » (fiche agent seulement : le rapport et « Ma situation » ne la proposent
      * pas) n'a pas de bornes : on couvre tout l'historique, y compris une date d'encaissement
      * saisie dans le futur. Toute autre période sans bornes retombe sur aujourd'hui.
      */
@@ -50,7 +50,7 @@ final class RapportPerimetre
 
     private function toutePeriode(): bool
     {
-        return $this->periode->cle === SituationPeriode::TOUT && $this->periode->debut === null;
+        return $this->periode->cle === Periode::TOUT && $this->periode->debut === null;
     }
 
     public function aucuneAgence(): bool

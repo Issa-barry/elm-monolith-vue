@@ -212,62 +212,57 @@ Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice
 // ── Routes mobile ─────────────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('v1/mobile')->group(function () {
-        // Autorisation explicite en plus de auth:sanctum : ces 3 routes exposent des
-        // données financières/véhicule scopées par profil métier (proprietaire/livreur)
-        // — un token valide seul ne doit pas suffire (ex: un compte staff n'a ni
-        // proprietaire ni livreur associé et recevrait une réponse vide, mais la
-        // sécurité ne doit pas reposer sur cet effet de bord). Cf. audit backend du
-        // 26/08/2026, section 13.
-        Route::middleware('role:client|proprietaire|livreur')->group(function () {
-            // Nom volontairement distinct de 'client.dashboard' (page Inertia,
-            // routes/web.php) : même nom sur deux routes différentes rend
-            // route('client.dashboard') ambigu pour l'helper de nommage Laravel.
-            Route::get('dashboard', DashboardController::class)
-                ->name('client.dashboard.mine');
-            Route::get('commissions', CommissionsCompteController::class)
-                ->name('client.commissions.mine');
-            Route::get('depenses/mine', DepensesController::class)
-                ->name('client.depenses.mine');
-            Route::get('activite', ActiviteController::class)
-                ->name('client.activite.mine');
-            Route::get('commandes/mine', IndexCommandeController::class)
-                ->name('client.commandes.mine');
-            Route::get('commandes/{commandeId}', ShowCommandeController::class)
-                ->name('client.commandes.show');
-            // Noms 'propositions-vehicules.*' (pas 'propositions.*') : routes/web.php a déjà
-            // 'client.propositions.index'/'client.propositions.store' pour les pages Inertia —
-            // même piège de collision que 'client.dashboard'/'client.profile' plus haut.
-            Route::get('propositions-vehicules', IndexPropositionVehiculeController::class)
-                ->name('client.propositions-vehicules.index');
-            Route::post('propositions-vehicules', StorePropositionVehiculeController::class)
-                ->name('client.propositions-vehicules.store');
-            Route::get('vehicules/mine', VehiculesController::class)
-                ->name('client.vehicules.mine');
-            Route::get('vehicules/rattaches', VehiculesRattachesController::class)
-                ->name('client.vehicules.rattaches');
-            Route::get('vehicules/{vehiculeId}/commissions', VehiculeCommissionsController::class)
-                ->name('client.vehicules.commissions');
-            Route::get('vehicules/{vehiculeId}/frais', VehiculeFraisController::class)
-                ->name('client.vehicules.frais');
-            // Nom volontairement distinct de 'client.profile' (page Inertia,
-            // routes/web.php) : même collision que 'client.dashboard' plus haut —
-            // route('client.profile') résolvait vers cette route API (dernière
-            // enregistrée), jamais vers la page Inertia, un piège pour tout futur
-            // lien Ziggy côté frontend.
-            Route::get('profile', ProfileController::class)
-                ->name('client.profile.mine');
-            Route::patch('profile', UpdateProfileController::class)
-                ->name('client.profile.update');
-            Route::patch('profile/notification-preferences', UpdateNotificationPreferencesController::class)
-                ->name('client.profile.notification-preferences');
-            // Espace parrain (ADR 0050) : le rôle ouvre l'espace client, le rattachement décide de
-            // l'accès à chaque requête (404 sans parrain relié au compte).
-            Route::prefix('parrain')->name('client.parrain.')->group(function () {
-                Route::get('synthese', SyntheseParrainController::class)->name('synthese');
-                Route::get('vehicules', VehiculesParrainController::class)->name('vehicules');
-                Route::get('commissions', CommissionsParrainController::class)->name('commissions');
-                Route::get('paiements', PaiementsParrainController::class)->name('paiements');
-            });
+        // Espace client ouvert à tout compte actif (ADR 0055) : aucune garde globale par rôle ou
+        // par activité. Chaque contrôleur lit ses données depuis les activités du compte
+        // (ClientIdentityResolver, ActivitesCompteResolver) : sans activité, réponse vide ou 404.
+        // Nom volontairement distinct de 'client.dashboard' (page Inertia,
+        // routes/web.php) : même nom sur deux routes différentes rend
+        // route('client.dashboard') ambigu pour l'helper de nommage Laravel.
+        Route::get('dashboard', DashboardController::class)
+            ->name('client.dashboard.mine');
+        Route::get('commissions', CommissionsCompteController::class)
+            ->name('client.commissions.mine');
+        Route::get('depenses/mine', DepensesController::class)
+            ->name('client.depenses.mine');
+        Route::get('activite', ActiviteController::class)
+            ->name('client.activite.mine');
+        Route::get('commandes/mine', IndexCommandeController::class)
+            ->name('client.commandes.mine');
+        Route::get('commandes/{commandeId}', ShowCommandeController::class)
+            ->name('client.commandes.show');
+        // Noms 'propositions-vehicules.*' (pas 'propositions.*') : routes/web.php a déjà
+        // 'client.propositions.index'/'client.propositions.store' pour les pages Inertia —
+        // même piège de collision que 'client.dashboard'/'client.profile' plus haut.
+        Route::get('propositions-vehicules', IndexPropositionVehiculeController::class)
+            ->name('client.propositions-vehicules.index');
+        Route::post('propositions-vehicules', StorePropositionVehiculeController::class)
+            ->name('client.propositions-vehicules.store');
+        Route::get('vehicules/mine', VehiculesController::class)
+            ->name('client.vehicules.mine');
+        Route::get('vehicules/rattaches', VehiculesRattachesController::class)
+            ->name('client.vehicules.rattaches');
+        Route::get('vehicules/{vehiculeId}/commissions', VehiculeCommissionsController::class)
+            ->name('client.vehicules.commissions');
+        Route::get('vehicules/{vehiculeId}/frais', VehiculeFraisController::class)
+            ->name('client.vehicules.frais');
+        // Nom volontairement distinct de 'client.profile' (page Inertia,
+        // routes/web.php) : même collision que 'client.dashboard' plus haut —
+        // route('client.profile') résolvait vers cette route API (dernière
+        // enregistrée), jamais vers la page Inertia, un piège pour tout futur
+        // lien Ziggy côté frontend.
+        Route::get('profile', ProfileController::class)
+            ->name('client.profile.mine');
+        Route::patch('profile', UpdateProfileController::class)
+            ->name('client.profile.update');
+        Route::patch('profile/notification-preferences', UpdateNotificationPreferencesController::class)
+            ->name('client.profile.notification-preferences');
+        // Espace parrain (ADR 0050) : le rattachement décide de l'accès à chaque requête (404 sans
+        // parrain relié au compte).
+        Route::prefix('parrain')->name('client.parrain.')->group(function () {
+            Route::get('synthese', SyntheseParrainController::class)->name('synthese');
+            Route::get('vehicules', VehiculesParrainController::class)->name('vehicules');
+            Route::get('commissions', CommissionsParrainController::class)->name('commissions');
+            Route::get('paiements', PaiementsParrainController::class)->name('paiements');
         });
         Route::post('push-token', PushTokenController::class)
             ->name('client.push-token');
@@ -302,12 +297,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('subscriptions', DestroyWebPushSubscriptionController::class)->name('subscriptions.destroy');
         });
     });
-    Route::middleware('role:client|proprietaire|livreur')->group(function () {
-        Route::get('gains/mine', GainsController::class)
-            ->name('client.gains.mine');
-        Route::get('livraisons/en-cours', LivraisonsEnCoursController::class)
-            ->name('client.livraisons.en-cours');
-    });
+    Route::get('gains/mine', GainsController::class)
+        ->name('client.gains.mine');
+    Route::get('livraisons/en-cours', LivraisonsEnCoursController::class)
+        ->name('client.livraisons.en-cours');
 });
 
 // ── Recherche globale (web + mobile, un seul endpoint pour tous les profils) ──

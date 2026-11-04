@@ -608,7 +608,7 @@ class PeriodeComptableFiltreTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors('annee');
     }
 
-    public function test_acces_refuse_sans_authentification_et_sans_role_client(): void
+    public function test_authentification_exigee_mais_aucun_role_client(): void
     {
         foreach (self::ROUTES as $route) {
             $this->getJson(route($route, ['annee' => 2026, 'mois' => 11]))->assertUnauthorized();
@@ -617,8 +617,9 @@ class PeriodeComptableFiltreTest extends TestCase
         $org = Organization::factory()->create();
         Sanctum::actingAs(User::factory()->create(['organization_id' => $org->id]), ['*']);
 
+        // ADR 0055 : tout compte actif entre, sans données sans activité.
         foreach (self::ROUTES as $route) {
-            $this->getJson(route($route, ['annee' => 2026, 'mois' => 11]))->assertForbidden();
+            $this->getJson(route($route, ['annee' => 2026, 'mois' => 11]))->assertOk();
         }
     }
 

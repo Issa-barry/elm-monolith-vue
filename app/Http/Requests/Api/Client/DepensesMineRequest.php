@@ -3,8 +3,8 @@
 namespace App\Http\Requests\Api\Client;
 
 use App\Enums\StatutDepense;
+use App\Support\Periodes\Periode;
 use App\Support\Periodes\PeriodeComptableFiltre;
-use App\Support\Vehicules\SituationPeriode;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -17,7 +17,7 @@ use Illuminate\Validation\Rule;
  * défaut implicite ferait disparaître des dépenses sans que l'appelant l'ait
  * demandé. Trois façons de borner `date_depense`, qui s'excluent : la période comptable
  * (annee/mois/quinzaine), une période rapide (`periode`, mêmes clés que l'accueil, résolue par
- * SituationPeriode, `tout` = sans borne) ou date_debut/date_fin.
+ * Periode, `tout` = sans borne) ou date_debut/date_fin.
  */
 class DepensesMineRequest extends FormRequest
 {
@@ -39,7 +39,7 @@ class DepensesMineRequest extends FormRequest
     {
         $periodeComptable = PeriodeComptableFiltre::depuisRequete($this);
         $cle = $this->input('periode');
-        $periodeRapide = $cle !== null ? SituationPeriode::rapide($cle, CarbonImmutable::now()) : null;
+        $periodeRapide = $cle !== null ? Periode::rapide($cle, CarbonImmutable::now()) : null;
 
         [$debut, $fin] = match (true) {
             $periodeComptable !== null => [$periodeComptable->debut->toDateString(), $periodeComptable->fin->toDateString()],

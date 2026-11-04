@@ -69,4 +69,28 @@ class BackofficeLoginTest extends TestCase
         $this->assertTrue($user->fresh()->hasRole('proprietaire'));
         $this->assertTrue($user->fresh()->hasRole('super_admin'));
     }
+
+    public function test_login_ne_relie_jamais_une_fiche_d_une_autre_organisation(): void
+    {
+        $org = Organization::factory()->create();
+        $autreOrganisation = Organization::factory()->create();
+        $user = User::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000100',
+            'password' => 'Password@123',
+        ]);
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $user->assignRole('super_admin');
+
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $autreOrganisation->id,
+            'user_id' => null,
+            'telephone' => '+224620000100',
+        ]);
+
+        $this->login()->assertOk();
+
+        $this->assertNull($proprietaire->fresh()->user_id);
+        $this->assertFalse($user->fresh()->hasRole('proprietaire'));
+    }
 }

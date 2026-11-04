@@ -69,8 +69,9 @@ const props = defineProps<{
         type: string;
         gravite: string;
         agent: string;
-        detection_debut: string;
-        detection_fin: string;
+        periode: string;
+        date_debut: string | null;
+        date_fin: string | null;
     };
     sites: { id: string; nom: string }[];
     statut_options: Option[];
@@ -139,9 +140,10 @@ const filterFields = computed((): FilterField[] => [
         options: props.agent_options,
     },
     {
-        key: 'detection',
-        label: 'Détectée entre',
-        type: 'date-range',
+        key: 'periode',
+        label: 'Détectée',
+        type: 'period',
+        defaultValue: 'tout',
     },
 ]);
 

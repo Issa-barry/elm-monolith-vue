@@ -10,6 +10,7 @@ use App\Models\DepenseType;
 use App\Models\Site;
 use App\Services\DroitCreationDepenseService;
 use App\Support\Depenses\DepenseListingService;
+use App\Support\Periodes\Periode;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,13 +28,14 @@ class IndexDepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
+        $periode = Periode::depuisRequeteValidee($request);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
         if (isset($filters['vehicule_ids'])) {
             $filters['vehicule_ids'] = array_values(array_filter((array) $filters['vehicule_ids']));
         }
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
-        $paginator = $this->listing->query($filters, $orgId, $siteIds)
+        $paginator = $this->listing->query($filters, $orgId, $siteIds, $periode)
             ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
             ->paginate(30)
             ->withQueryString();
@@ -50,7 +52,7 @@ class IndexDepenseController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom']);
 
-        $statsRow = $this->listing->query($filters, $orgId, $siteIds)
+        $statsRow = $this->listing->query($filters, $orgId, $siteIds, $periode)
             ->reorder()
             ->selectRaw(
                 'COUNT(*) as total,
@@ -69,7 +71,7 @@ class IndexDepenseController extends Controller
             'vehicules' => $this->listing->optionsVehicules($orgId),
             'categories' => CategorieDepense::options(),
             'statuts' => StatutDepense::options(),
-            'filters' => array_merge($filters, ['site_ids' => $siteIds]),
+            'filters' => array_merge($filters, ['site_ids' => $siteIds], $periode->valeursFiltre()),
             'stats' => [
                 'total' => (int) $statsRow->total,
                 'montant_total' => (float) $statsRow->montant_total,

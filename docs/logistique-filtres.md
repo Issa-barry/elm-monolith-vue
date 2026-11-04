@@ -10,9 +10,11 @@ Panneau **Filtres** : Statut, Période.
 
 ## LOGFIL-001 — Période
 
-- Bornes `date_debut` / `date_fin` (incluses), sur la **date de création du transfert** — celle
+- Filtre « Période » standard ([periodes.md](periodes.md)) : période rapide (`periode`) ou
+  `date_debut` / `date_fin` (incluses, ensemble), sur la **date de création du transfert** — celle
   de sa référence `TRF-JJMMAA-NNN`. Pas sur le départ prévu (facultatif, souvent vide).
-- Une date mal formée (autre que `AAAA-MM-JJ`) est ignorée.
+- Une date mal formée, une seule date ou une fin avant le début est refusée avec un message
+  (ADR 0057 ; auparavant ignorée).
 
 ## LOGFIL-002 — Véhicule
 

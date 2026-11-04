@@ -170,6 +170,8 @@ export type AppPageProps<
     mouvements_fonds_a_confirmer: number;
     approvisionnements_a_confirmer: number;
     module_flags: Partial<Record<ModuleFlagKey, boolean>>;
+    /** Choix standard du champ « Période » (Periode::options(), ADR 0057). */
+    periodes?: { value: string; label: string }[];
     seoDefaults: SeoDefaults;
     theme: ThemeSharedProps;
 };

@@ -10,6 +10,7 @@ import VentesParProcessusWidget from '@/components/dashboard/ventes/VentesParPro
 import AppLayout from '@/layouts/AppLayout.vue';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
+import type { PeriodeOption } from '@/types/periode';
 import { Head } from '@inertiajs/vue3';
 
 interface StatsFactures {
@@ -67,6 +68,7 @@ defineProps<{
     ca_par_produit: ProduitData[];
     ca_par_processus: ProcessusData[];
     periode: string;
+    periodes: PeriodeOption[];
     qr_payload: string | null;
     /** null = toute l'organisation ; sinon agences auxquelles les chiffres sont limités. */
     agences: string[] | null;
@@ -85,7 +87,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 p-4 sm:p-6">
-            <HeaderWidget :periode="periode" :qr-payload="qr_payload" />
+            <HeaderWidget
+                :periode="periode"
+                :periodes="periodes"
+                :qr-payload="qr_payload"
+            />
 
             <p
                 v-if="agences !== null"
@@ -106,6 +112,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                         :evolution-mensuelle="evolution_mensuelle"
                         :evolution-quotidienne="evolution_quotidienne"
                         :periode="periode"
+                        :periodes="periodes"
                     />
                 </div>
                 <div class="col-span-12 xl:col-span-4">

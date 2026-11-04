@@ -141,14 +141,15 @@ class EspaceParrainTest extends TestCase
         $this->getJson(route('api.auth.me'))->assertOk()->assertJsonPath('context.parrain_id', null);
     }
 
-    public function test_le_compte_d_un_membre_du_personnel_est_refuse(): void
+    // ADR 0055 : le compte d'un agent entre dans l'espace client, mais sans parrain rattaché : 404.
+    public function test_le_compte_d_un_membre_du_personnel_sans_parrain_rattache_ne_voit_rien(): void
     {
         Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
         $staff = User::factory()->create(['organization_id' => $this->org->id]);
         $staff->assignRole('manager');
         Sanctum::actingAs($staff, ['*']);
 
-        $this->getJson($this->url('synthese'))->assertForbidden();
+        $this->getJson($this->url('synthese'))->assertNotFound();
     }
 
     public function test_le_detachement_coupe_l_acces_des_la_requete_suivante(): void

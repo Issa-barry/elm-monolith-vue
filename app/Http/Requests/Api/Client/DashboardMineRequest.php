@@ -3,8 +3,8 @@
 namespace App\Http\Requests\Api\Client;
 
 use App\Services\Client\ClientEarningsService;
+use App\Support\Periodes\Periode;
 use App\Support\Periodes\PeriodeComptableFiltre;
-use App\Support\Vehicules\SituationPeriode;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -17,7 +17,7 @@ use Illuminate\Validation\Rule;
  * continue de (re)valider en interne, ce type-hint ne change aucun calcul.
  *
  * Seule exception, propre à l'API : le filtre de période de l'accueil, soit une
- * période rapide (`periode`, résolue par SituationPeriode), soit une période
+ * période rapide (`periode`, résolue par Periode), soit une période
  * comptable (annee/mois/quinzaine). Ils s'excluent, et excluent
  * period/date_debut/date_fin.
  */
@@ -32,7 +32,7 @@ class DashboardMineRequest extends FormRequest
         'mois_precedent',
         'cette_annee',
         'annee_precedente',
-        SituationPeriode::TOUT,
+        Periode::TOUT,
     ];
 
     public function rules(): array
@@ -64,7 +64,7 @@ class DashboardMineRequest extends FormRequest
             return null;
         }
 
-        $periode = SituationPeriode::rapide($cle, CarbonImmutable::now());
+        $periode = Periode::rapide($cle, CarbonImmutable::now());
 
         return [$periode?->debut, $periode?->fin];
     }

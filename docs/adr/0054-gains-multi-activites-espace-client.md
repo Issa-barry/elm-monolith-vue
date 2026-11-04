@@ -40,8 +40,9 @@ les parts `proprietaire` et `livreur` de `ClientEarningsService` :
    additionné. `en_attente_validation` expose la part encore « Créée ». Filtré sur un véhicule, seules
    les dépenses de ce véhicule se déduisent.
 5. **Répartition par activité.** `par_activite` (dashboard, résumé du détail) donne les mêmes champs que
-   `summary` pour chaque activité du compte ; leur somme est `summary`. L'écran ne l'affiche qu'à partir
-   de deux activités ; le badge d'origine reste toujours présent.
+   `summary` pour chaque activité du compte ; leur somme est `summary`. Seule la page Commissions
+   l'affiche, à partir de deux activités (retirée de l'accueil le 04/11/2026) ; le badge d'origine
+   reste toujours présent.
 6. **Détail des commissions** : `GET /v1/mobile/commissions`, paginé, mêmes périodes que l'accueil,
    filtres véhicule, activité, statut et recherche (référence, nom ou immatriculation du véhicule).
 7. **Véhicules rattachés** : propriétaire, livreur de l'équipe actuelle, parrain ; un véhicule par
