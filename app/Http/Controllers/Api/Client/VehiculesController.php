@@ -4,14 +4,13 @@ namespace App\Http\Controllers\Api\Client;
 
 use App\Enums\StatutTransfert;
 use App\Http\Controllers\Controller;
-use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
-use App\Models\VehiculeCapacite;
 use App\Services\Client\ClientIdentityResolver;
+use App\Support\Client\VehiculeClientPresenter;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,9 +29,10 @@ class VehiculesController extends Controller
             .'`role` = valeur réelle stockée en base : `chauffeur`/`convoyeur`, jamais traduite ; '
             .'`nom_complet` peut être une désignation provisoire comme `Chauffeur-1`, à remplacer '
             .'à l\'affichage par `prenom` + `nom` quand les deux sont renseignés). '
-            .'`proprietaire` est `null` si le véhicule n\'a aucun propriétaire renseigné.',
+            .'`proprietaire` est `null` si le véhicule n\'a aucun propriétaire renseigné. '
+            .'Les véhicules parrainés n\'y figurent pas : cf. `GET /v1/mobile/vehicules/rattaches`.',
     )]
-    public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
+    public function __invoke(Request $request, ClientIdentityResolver $identityResolver, VehiculeClientPresenter $presenter): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -43,118 +43,26 @@ class VehiculesController extends Controller
         $livreur = $identity->livreur;
 
         $vehicules = $this->vehiculesPartenaires($organizationId, $proprietaire, $livreur);
+        $enTransit = self::enTransit($user);
 
-        // IDs des véhicules actuellement en transit
-        $enTransit = TransfertLogistique::query()
+        return response()->json(
+            $vehicules->map(fn (Vehicule $v) => $presenter->complet($v, $enTransit, $proprietaire))->values()
+        );
+    }
+
+    /**
+     * IDs des véhicules actuellement en transit.
+     *
+     * @return Collection<string, int>
+     */
+    public static function enTransit(User $user): Collection
+    {
+        return TransfertLogistique::query()
             ->where('statut', StatutTransfert::TRANSIT->value)
             ->whereNotNull('vehicule_id')
             ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->pluck('vehicule_id')
             ->flip();
-
-        return response()->json(
-            $vehicules->map(fn (Vehicule $v) => [
-                'id' => $v->id,
-                'nom' => $v->nom_vehicule,
-                'immatriculation' => $v->immatriculation,
-                'type' => $v->type_label,
-                'statut' => $v->is_active ? 'actif' : 'inactif',
-                // Colonne héritée, jamais alimentée par les parcours actuels (capacité portée
-                // par vehicule_capacites désormais, cf. VehiculeCapaciteService) — contrat API
-                // mobile conservé tel quel (nombre unique), sans repli sur le type. Ne plus lire
-                // cette valeur côté client : cf. `capacites[]`.
-                'capacite' => $v->capacite_packs,
-                'is_active' => (bool) $v->is_active,
-                // Pas de notion de statut "entretien"/maintenance dans le modèle ELM — seul
-                // is_active existe. Un statut plus fin (ex: "En panne") nécessiterait une
-                // colonne dédiée, volontairement pas ajoutée ici sans besoin métier confirmé.
-                'photo_url' => $v->photo_path
-                                    ? request()->getSchemeAndHttpHost().'/api/vehicules/'.$v->id.'/photo'
-                                    : null,
-                'en_livraison' => isset($enTransit[$v->id]),
-                'role' => $proprietaire && $v->proprietaire_id === $proprietaire->id
-                                    ? 'proprietaire'
-                                    : 'livreur',
-                // Conservé pour compatibilité descendante uniquement — ne reflète que le
-                // chauffeur, jamais les autres membres. Source canonique : `equipe[]`.
-                'conducteur' => $this->conducteurNom($v),
-                'proprietaire' => $this->proprietaireData($v),
-                'equipe' => $this->equipeData($v),
-                'capacites' => $this->capacitesData($v),
-            ])->values()
-        );
-    }
-
-    /**
-     * Nom du chauffeur assigné à l'équipe du véhicule, si une équipe existe et
-     * qu'un membre y tient le rôle "chauffeur" — jamais un simple premier membre
-     * pris au hasard (une équipe peut n'avoir que des convoyeurs).
-     */
-    private function conducteurNom(Vehicule $v): ?string
-    {
-        $chauffeur = $v->equipe?->membres->firstWhere('role', 'chauffeur');
-
-        return $chauffeur?->livreur?->libelleAffichage();
-    }
-
-    /** Identité minimale du propriétaire — jamais l'objet Proprietaire brut (pas de champs internes). */
-    private function proprietaireData(Vehicule $v): ?array
-    {
-        if (! $v->proprietaire) {
-            return null;
-        }
-
-        return [
-            'id' => $v->proprietaire->id,
-            'nom_complet' => $v->proprietaire->nom_complet,
-            'telephone' => $v->proprietaire->telephone,
-        ];
-    }
-
-    /**
-     * Équipe complète (tous les membres actifs, pas seulement le chauffeur) — `role` est la
-     * valeur réelle stockée sur equipe_livreurs (`chauffeur`/`convoyeur`), jamais traduite ici :
-     * au frontend de choisir un libellé, pas au backend d'inventer une taxonomie parallèle.
-     * Filtré en mémoire sur la collection déjà eager-chargée (equipe.membres.livreur.personne) :
-     * aucune requête supplémentaire par véhicule.
-     */
-    private function equipeData(Vehicule $v): array
-    {
-        if (! $v->equipe) {
-            return [];
-        }
-
-        return $v->equipe->membres
-            ->filter(fn (EquipeLivreur $membre) => $membre->livreur?->is_active === true)
-            ->map(fn (EquipeLivreur $membre) => [
-                'id' => $membre->livreur->id,
-                'nom_complet' => $membre->livreur->nom_complet,
-                // nom_complet peut être une désignation provisoire ("Chauffeur-1") : le frontend
-                // préfère prénom + nom quand les deux sont connus.
-                'prenom' => $membre->livreur->prenom,
-                'nom' => $membre->livreur->nom,
-                'telephone' => $membre->livreur->telephone,
-                'role' => $membre->role,
-                'ordre' => $membre->ordre,
-            ])
-            ->values()
-            ->all();
-    }
-
-    /**
-     * Capacité par catégorie (seule source de vérité, cf. VehiculeCapacite) — jamais un repli
-     * sur `capacite_packs`/`capacite_bouteilles` (colonnes héritées, cf. `capacite` ci-dessus).
-     */
-    private function capacitesData(Vehicule $v): array
-    {
-        return $v->capacites
-            ->map(fn (VehiculeCapacite $c) => [
-                'categorie_id' => $c->categorie_id,
-                'categorie' => $c->categorie?->nom,
-                'capacite' => $c->capacite_max,
-            ])
-            ->values()
-            ->all();
     }
 
     /** @return Collection<int, Vehicule> */
@@ -168,12 +76,7 @@ class VehiculesController extends Controller
         }
 
         return Vehicule::query()
-            ->with([
-                'typeVehicule',
-                'equipe.membres.livreur.personne',
-                'proprietaire.personne',
-                'capacites.categorie',
-            ])
+            ->with(VehiculeClientPresenter::RELATIONS)
             ->where('organization_id', $organizationId)
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {

@@ -264,8 +264,7 @@ function submit() {
                                 <InfoTooltip label="Aide : salaire de base">
                                     Salaire de base mensuel prévu au contrat,
                                     distinct des primes et autres éléments de
-                                    rémunération (écran « Primes des salariés
-                                    »).
+                                    rémunération (fiche du salarié).
                                 </InfoTooltip>
                             </div>
                             <MontantInput
@@ -294,7 +293,6 @@ function submit() {
                         :primes-employe="primesEmploye"
                         :employe-choisi="!!form.employe_id"
                         :date-debut-contrat="form.date_debut"
-                        :date-fin-contrat="isCdd ? form.date_fin : ''"
                         :errors="erreursFormulaire"
                         @effacer-erreurs="form.clearErrors()"
                     />

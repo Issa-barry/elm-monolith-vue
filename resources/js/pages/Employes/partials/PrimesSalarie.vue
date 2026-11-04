@@ -1,8 +1,5 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import DataFilters, {
-    type FilterField,
-} from '@/components/filters/DataFilters.vue';
 import MontantInput from '@/components/MontantInput.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
@@ -18,20 +15,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
-import AppLayout from '@/layouts/AppLayout.vue';
 import {
-    libellesPrimesActuelles,
     periodeDuMois,
     primeDejaAttribuee,
     SANS_FIN,
     type PrimeOccupee,
 } from '@/lib/primesAttribuees';
-import { type BreadcrumbItem } from '@/types';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { router, useForm } from '@inertiajs/vue3';
 import {
     BadgeCheck,
     CalendarClock,
     CalendarX,
+    ChevronDown,
     Gift,
     History,
     ListOrdered,
@@ -42,29 +37,13 @@ import {
     Undo2,
     XCircle,
 } from 'lucide-vue-next';
-import Column from 'primevue/column';
-import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
-interface Option {
+interface TypeOption {
     value: string;
     label: string;
-}
-
-interface EmployeOption extends Option {
-    site: string | null;
-    date_embauche: string | null;
-    date_sortie: string | null;
-    attribuable: boolean;
-    primes: PrimeOccupee[];
-}
-
-interface TypeOption extends Option {
-    code: string;
-    categorie: string;
-    categorie_label: string;
     valorise: boolean;
     mode_calcul: string;
     periodicite: string;
@@ -72,10 +51,15 @@ interface TypeOption extends Option {
     cumul_autorise: boolean;
     montant_defaut: number | null;
     taux_defaut: number | null;
-    date_debut_application: string | null;
     date_fin_application: string | null;
-    statut: string;
     attribuable: boolean;
+}
+
+export interface PrimesOptions {
+    types: TypeOption[];
+    primes_occupees: PrimeOccupee[];
+    premier_jour_modifiable: string | null;
+    peut_attribuer: boolean;
 }
 
 interface Saisie {
@@ -89,7 +73,7 @@ interface Saisie {
     statut_label: string;
 }
 
-interface Affectation {
+export interface Affectation {
     id: string;
     employe: {
         id: string;
@@ -142,67 +126,21 @@ interface Affectation {
     created_at: string | null;
 }
 
+/**
+ * Primes et avantages d'un salarié, depuis sa fiche : seul écran de gestion individuelle (ADR 0052).
+ * Mêmes actions, mêmes règles : le serveur revérifie tout (AffectationRemunerationService).
+ */
 const props = defineProps<{
-    affectations: Affectation[];
-    filters: Record<string, unknown>;
-    nb_a_valider: number;
-    premier_jour_modifiable: string | null;
-    sites: { id: string; nom: string }[];
-    employes: EmployeOption[];
-    types: TypeOption[];
-    etats: Option[];
+    employeId: string;
+    primes: Affectation[];
+    options: PrimesOptions;
 }>();
 
 useFlashToast();
 const toast = useToast();
 const { can } = usePermissions();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    {
-        title: 'Primes des salariés',
-        href: '/backoffice/affectations-remuneration',
-    },
-];
-
 const BASE = '/backoffice/affectations-remuneration';
-
-// ── Filtres (serveur) ─────────────────────────────────────────────────────────
-
-const filterFields = computed((): FilterField[] => [
-    {
-        key: 'etat',
-        label: 'Statut',
-        type: 'select',
-        options: props.etats,
-        inline: true,
-    },
-    {
-        key: 'employe_id',
-        label: 'Salarié',
-        type: 'select',
-        options: props.employes.map((e) => ({
-            value: e.value,
-            label: e.label,
-        })),
-        searchable: true,
-        inline: true,
-    },
-    {
-        key: 'type_remuneration_id',
-        label: 'Type',
-        type: 'select',
-        options: props.types.map((t) => ({ value: t.value, label: t.label })),
-        searchable: true,
-    },
-    {
-        key: 'periode',
-        label: 'En vigueur sur la période',
-        type: 'date-range',
-        startKey: 'periode_du',
-        endKey: 'periode_au',
-    },
-]);
 
 // ── Droits (le serveur revérifie chaque action) ──────────────────────────────
 
@@ -283,7 +221,7 @@ function peutAnnuler(a: Affectation): boolean {
 function libelleValidation(a: Affectation): string {
     if (a.demande_fin) return 'Valider la fin d’effet';
     if (a.est_changement) return 'Valider le changement de montant';
-    return 'Valider l’affectation';
+    return 'Valider la prime';
 }
 
 // ── Affichage ────────────────────────────────────────────────────────────────
@@ -327,8 +265,8 @@ function libelleMois(annee: number, mois: number): string {
 
 /** Mois qui précède le premier jour modifiable (dernier mois figé). */
 const dernierMoisFige = computed(() => {
-    if (!props.premier_jour_modifiable) return '';
-    const [y, m] = props.premier_jour_modifiable.split('-').map(Number);
+    if (!props.options.premier_jour_modifiable) return '';
+    const [y, m] = props.options.premier_jour_modifiable.split('-').map(Number);
     return m === 1 ? libelleMois(y - 1, 12) : libelleMois(y, m - 1);
 });
 
@@ -356,13 +294,25 @@ function toastErreur(errors: Record<string, string>) {
     });
 }
 
-// ── Attribuer / modifier une proposition ─────────────────────────────────────
+// ── Primes actuelles / anciennes ──────────────────────────────────────────────
+
+function estActuelle(a: Affectation): boolean {
+    return a.attend_validation || !['terminee', 'annulee'].includes(a.etat);
+}
+
+const primesActuelles = computed(() => props.primes.filter(estActuelle));
+const primesAnciennes = computed(() =>
+    props.primes.filter((a) => !estActuelle(a)),
+);
+const anciennesVisibles = ref(false);
+
+// ── Ajouter une prime / modifier une proposition ─────────────────────────────
 
 const showForm = ref(false);
 const enEdition = ref<Affectation | null>(null);
 
 const form = useForm({
-    employe_id: '',
+    employe_id: props.employeId,
     type_remuneration_id: '',
     date_debut: '',
     date_fin: '',
@@ -374,31 +324,24 @@ const form = useForm({
 });
 
 const typesAttribuables = computed(() =>
-    props.types.filter((t) => t.attribuable),
-);
-const employesAttribuables = computed(() =>
-    props.employes.filter((e) => e.attribuable),
+    props.options.types.filter((t) => t.attribuable),
 );
 
 const typeChoisi = computed((): TypeOption | undefined => {
     const id = enEdition.value?.type.id ?? form.type_remuneration_id;
-    return props.types.find((t) => t.value === id);
+    return props.options.types.find((t) => t.value === id);
 });
 
 const typePonctuel = computed(
     () => typeChoisi.value?.periodicite === 'ponctuelle',
 );
 
-// ── Primes déjà attribuées au salarié choisi ────────────────────────────────────
 // Même règle que le serveur (assertSansChevauchement) : un type sans cumul autorisé ne peut pas
 // être attribué deux fois sur des périodes qui se chevauchent, propositions à valider comprises.
 // Le serveur reste l'autorité ; ici on évite seulement de proposer un doublon.
 const aujourdhuiIso = new Date().toLocaleDateString('en-CA');
-const employeChoisi = computed(() =>
-    props.employes.find((e) => e.value === form.employe_id),
-);
 
-/** Période que couvrirait la nouvelle attribution pour ce type (dates saisies, sinon aujourd'hui). */
+/** Période que couvrirait la nouvelle prime pour ce type (dates saisies, sinon aujourd'hui). */
 function periodeVisee(t: TypeOption): [string, string] {
     if (t.periodicite === 'ponctuelle') {
         return periodeDuMois(form.mois_versement || aujourdhuiIso.slice(0, 7));
@@ -409,7 +352,7 @@ function periodeVisee(t: TypeOption): [string, string] {
 function dejaAttribue(t: TypeOption): boolean {
     const [du, au] = periodeVisee(t);
     return primeDejaAttribuee(
-        employeChoisi.value?.primes ?? [],
+        props.options.primes_occupees,
         t.value,
         t.cumul_autorise,
         du,
@@ -417,34 +360,14 @@ function dejaAttribue(t: TypeOption): boolean {
     );
 }
 
-// Types proposés : ceux que le salarié n'a pas déjà sur la période (tous tant qu'aucun salarié).
+// Types proposés : ceux que le salarié n'a pas déjà sur la période.
 // Le type déjà choisi reste dans la liste pour que le champ ne se vide pas sous les yeux.
 const typesProposes = computed(() =>
-    employeChoisi.value
-        ? typesAttribuables.value.filter(
-              (t) => t.value === form.type_remuneration_id || !dejaAttribue(t),
-          )
-        : typesAttribuables.value,
+    typesAttribuables.value.filter(
+        (t) => t.value === form.type_remuneration_id || !dejaAttribue(t),
+    ),
 );
 
-const primesActuelles = computed(() =>
-    libellesPrimesActuelles(employeChoisi.value?.primes ?? [], aujourdhuiIso),
-);
-
-// Changement de salarié : un type qu'il a déjà est désélectionné. Pendant la saisie des dates, on
-// ne retire rien sous les yeux de l'utilisateur : le serveur explique un éventuel chevauchement.
-watch(
-    () => form.employe_id,
-    () => {
-        if (
-            !enEdition.value &&
-            typeChoisi.value &&
-            dejaAttribue(typeChoisi.value)
-        ) {
-            form.type_remuneration_id = '';
-        }
-    },
-);
 const typeVariable = computed(
     () => typeChoisi.value?.nature_montant === 'variable',
 );
@@ -454,7 +377,7 @@ const typePourcentage = computed(
 
 function choisirType(id: string) {
     form.type_remuneration_id = id;
-    const t = props.types.find((x) => x.value === id);
+    const t = props.options.types.find((x) => x.value === id);
     // Valeur par défaut du type : proposée, toujours modifiable, jamais imposée.
     form.montant = t?.montant_defaut ?? '';
     form.taux = t?.taux_defaut ?? '';
@@ -473,7 +396,6 @@ function ouvrirAttribution() {
 function ouvrirModification(a: Affectation) {
     enEdition.value = a;
     form.clearErrors();
-    form.employe_id = a.employe.id;
     form.type_remuneration_id = a.type.id;
     form.date_debut = a.date_debut;
     form.date_fin = a.date_fin ?? '';
@@ -627,7 +549,7 @@ const formSaisie = useForm({
 });
 
 const affectationSaisies = computed(
-    () => props.affectations.find((a) => a.id === saisiesDe.value?.id) ?? null,
+    () => props.primes.find((a) => a.id === saisiesDe.value?.id) ?? null,
 );
 
 /**
@@ -751,7 +673,7 @@ const titreConfirmation = computed(() => {
     const c = confirmation.value;
     if (!c) return '';
     if (c.action === 'valider') return libelleValidation(c.affectation);
-    if (c.action === 'annuler') return 'Annuler l’affectation';
+    if (c.action === 'annuler') return 'Annuler la prime';
     return 'Retirer la demande de fin d’effet';
 });
 
@@ -769,9 +691,9 @@ const texteConfirmation = computed(() => {
         return `« ${a.type.libelle} » (${a.valeur_label}) sera attribué à ${a.employe.nom_complet} : ${periode(a).toLowerCase()}.`;
     }
     if (c.action === 'annuler') {
-        return 'L’affectation restera visible dans l’historique, avec le statut « Annulée ». Elle ne produira aucun montant.';
+        return 'La prime restera visible dans l’historique, avec le statut « Annulée ». Elle ne produira aucun montant.';
     }
-    return 'L’affectation continue sans changement de date de fin.';
+    return 'La prime continue sans changement de date de fin.';
 });
 
 function confirmer() {
@@ -820,398 +742,301 @@ const champSelect =
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <Head title="Primes des salariés" />
-
-        <div class="w-full space-y-5 p-4 sm:p-6">
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <h1 class="text-xl font-semibold">Primes des salariés</h1>
-                    <p class="mt-1 max-w-3xl text-sm text-muted-foreground">
-                        Primes, indemnités, allocations et avantages en nature
-                        attribués à chaque salarié, avec leurs dates d’effet. Le
-                        salaire de base reste porté par le contrat.
-                    </p>
-                </div>
-                <Button
-                    v-if="can('rh-affectations-remuneration.create')"
-                    size="sm"
-                    data-testid="affectation-attribuer"
-                    @click="ouvrirAttribution"
-                >
-                    <Plus class="mr-1.5 h-3.5 w-3.5" />
-                    Attribuer
-                </Button>
-            </div>
-
-            <DataFilters
-                :url="BASE"
-                :values="filters"
-                :fields="filterFields"
-                :sites="sites"
-                :result-count="affectations.length"
-            />
-
-            <div
-                v-if="nb_a_valider > 0"
-                class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+    <div
+        class="overflow-hidden rounded-xl border bg-card"
+        data-testid="employe-primes"
+    >
+        <div
+            class="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4"
+        >
+            <h3
+                class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
             >
-                {{ nb_a_valider }}
-                {{
-                    nb_a_valider > 1
-                        ? 'éléments attendent une validation'
-                        : 'élément attend une validation'
-                }}
-                (affectation, changement de montant ou fin d’effet) : tant
-                qu’ils ne sont pas validés, ils ne produisent aucun montant et
-                bloquent la transmission du mois concerné.
-            </div>
+                <Gift class="h-4 w-4" />
+                Primes et avantages
+            </h3>
+            <Button
+                v-if="
+                    can('rh-affectations-remuneration.create') &&
+                    options.peut_attribuer
+                "
+                size="sm"
+                data-testid="prime-ajouter"
+                @click="ouvrirAttribution"
+            >
+                <Plus class="mr-1.5 h-3.5 w-3.5" />
+                Ajouter une prime
+            </Button>
+        </div>
+
+        <p
+            v-if="
+                options.premier_jour_modifiable &&
+                can('rh-affectations-remuneration.create')
+            "
+            class="border-b bg-muted/50 px-5 py-2 text-xs text-muted-foreground"
+        >
+            La paie est figée jusqu’à fin {{ dernierMoisFige }} : toute nouvelle
+            date d’effet commence au plus tôt le
+            {{ formatDate(options.premier_jour_modifiable) }}.
+        </p>
+
+        <div
+            v-if="primes.length === 0"
+            class="p-6 text-center text-sm text-muted-foreground"
+        >
+            Aucune prime ni aucun avantage attribué.
+        </div>
+
+        <template v-else>
             <p
-                v-if="premier_jour_modifiable"
-                class="rounded-lg bg-muted/50 px-4 py-2 text-xs text-muted-foreground"
+                v-if="primesActuelles.length === 0"
+                class="p-6 text-center text-sm text-muted-foreground"
             >
-                La paie est figée jusqu’à fin {{ dernierMoisFige }} : toute
-                nouvelle date d’effet commence au plus tôt le
-                {{ formatDate(premier_jour_modifiable) }}.
+                Aucune prime en cours.
             </p>
-
-            <div class="overflow-hidden rounded-xl border bg-card">
-                <DataTable
-                    :value="affectations"
-                    :paginator="affectations.length > 25"
-                    :rows="25"
-                    data-key="id"
-                    striped-rows
-                    class="text-sm"
-                    :pt="{ root: { class: 'w-full' } }"
+            <div class="divide-y">
+                <div
+                    v-for="a in anciennesVisibles
+                        ? [...primesActuelles, ...primesAnciennes]
+                        : primesActuelles"
+                    :key="a.id"
+                    class="flex flex-wrap items-start justify-between gap-3 p-4 text-sm"
+                    :data-testid="`prime-${a.id}`"
                 >
-                    <Column header="Salarié" style="min-width: 200px">
-                        <template #body="{ data }">
-                            <p class="font-medium">
-                                {{ data.employe.nom_complet }}
-                            </p>
-                            <p class="text-xs text-muted-foreground">
-                                {{ data.employe.matricule ?? '—' }}
-                                <template v-if="data.employe.site">
-                                    · {{ data.employe.site }}</template
-                                >
-                            </p>
-                        </template>
-                    </Column>
-
-                    <Column header="Prime ou avantage" style="min-width: 220px">
-                        <template #body="{ data }">
-                            <p class="flex flex-wrap items-center gap-2">
-                                {{ data.type.libelle }}
-                                <span
-                                    v-if="data.type.valorise"
-                                    class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900 dark:text-amber-300"
-                                    >Avantage en nature · hors net à payer</span
-                                >
-                            </p>
-                            <p
-                                v-if="data.est_changement"
-                                class="text-[11px] text-muted-foreground"
+                    <div class="min-w-0 flex-1">
+                        <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span class="font-medium">{{
+                                a.type.libelle
+                            }}</span>
+                            <span class="tabular-nums">{{
+                                a.valeur_label
+                            }}</span>
+                            <span
+                                v-if="a.type.valorise"
+                                class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+                                >Avantage en nature · hors net à payer</span
                             >
-                                Changement de montant
-                            </p>
-                        </template>
-                    </Column>
-
-                    <Column header="Période d’effet" style="min-width: 190px">
-                        <template #body="{ data }">
-                            <p>{{ periode(data) }}</p>
-                            <p
-                                v-if="data.demande_fin"
-                                class="text-xs text-amber-700 dark:text-amber-300"
+                        </p>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            {{ periode(a) }}
+                            <template v-if="a.est_changement">
+                                · Changement de montant</template
                             >
-                                Fin demandée au
-                                {{ formatDate(data.demande_fin.date) }}
-                            </p>
-                            <p
-                                v-else-if="data.motif_fin"
-                                class="text-xs text-muted-foreground"
+                            <template
+                                v-if="a.type.nature_montant === 'variable'"
                             >
-                                {{ data.motif_fin }}
-                            </p>
-                        </template>
-                    </Column>
-
-                    <Column header="Montant attribué" style="min-width: 160px">
-                        <template #body="{ data }">
-                            <p class="font-medium tabular-nums">
-                                {{ data.valeur_label }}
-                            </p>
-                            <p
-                                v-if="data.type.nature_montant === 'variable'"
-                                class="text-xs text-muted-foreground"
+                                · {{ a.saisies.length }} mois saisi(s)</template
                             >
-                                {{ data.saisies.length }} mois saisi(s)
-                            </p>
-                        </template>
-                    </Column>
+                        </p>
+                        <p
+                            v-if="a.demande_fin"
+                            class="mt-0.5 text-xs text-amber-700 dark:text-amber-300"
+                        >
+                            Fin demandée au
+                            {{ formatDate(a.demande_fin.date) }}
+                        </p>
+                        <p
+                            v-else-if="a.motif_fin"
+                            class="mt-0.5 text-xs text-muted-foreground"
+                        >
+                            {{ a.motif_fin }}
+                        </p>
+                    </div>
 
-                    <Column header="Statut" style="width: 170px">
-                        <template #body="{ data }">
+                    <div class="flex items-start gap-2">
+                        <div class="text-right">
                             <StatusDot
                                 :status="
-                                    data.attend_validation
-                                        ? 'a_valider'
-                                        : data.etat
+                                    a.attend_validation ? 'a_valider' : a.etat
                                 "
                                 :label="
-                                    data.attend_validation &&
-                                    data.statut === 'validee'
+                                    a.attend_validation &&
+                                    a.statut === 'validee'
                                         ? 'Fin à valider'
-                                        : data.etat_label
+                                        : a.etat_label
                                 "
                             />
                             <p
-                                v-if="data.valide_par"
+                                v-if="a.valide_par"
                                 class="mt-0.5 text-[11px] text-muted-foreground"
                             >
-                                Validée par {{ data.valide_par }}
+                                Validée par {{ a.valide_par }}
                             </p>
                             <p
-                                v-else-if="data.cree_par"
+                                v-else-if="a.cree_par"
                                 class="mt-0.5 text-[11px] text-muted-foreground"
                             >
-                                Proposée par {{ data.cree_par }}
-                            </p>
-                        </template>
-                    </Column>
-
-                    <Column header="" style="width: 56px">
-                        <template #body="{ data }">
-                            <div class="flex justify-end">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger as-child>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="h-8 w-8"
-                                            :data-testid="`affectation-actions-${data.id}`"
-                                        >
-                                            <MoreHorizontal class="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="end"
-                                        class="w-64"
-                                    >
-                                        <DropdownMenuLabel>{{
-                                            data.type.libelle
-                                        }}</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            @click="ouvrirHistorique(data)"
-                                        >
-                                            <History class="mr-2 h-4 w-4" />
-                                            Historique
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            v-if="peutValiderLigne(data)"
-                                            data-testid="affectation-valider"
-                                            @click="demander(data, 'valider')"
-                                        >
-                                            <BadgeCheck class="mr-2 h-4 w-4" />
-                                            {{ libelleValidation(data) }}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            v-if="peutModifier(data)"
-                                            @click="ouvrirModification(data)"
-                                        >
-                                            <Pencil class="mr-2 h-4 w-4" />
-                                            Modifier la proposition
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            v-if="peutChangerMontant(data)"
-                                            @click="ouvrirChangement(data)"
-                                        >
-                                            <CalendarClock
-                                                class="mr-2 h-4 w-4"
-                                            />
-                                            Changer le montant
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            v-if="peutSaisir(data)"
-                                            @click="ouvrirSaisies(data)"
-                                        >
-                                            <ListOrdered class="mr-2 h-4 w-4" />
-                                            Montants mensuels
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            v-if="peutMettreFin(data)"
-                                            @click="ouvrirFin(data)"
-                                        >
-                                            <CalendarX class="mr-2 h-4 w-4" />
-                                            Mettre fin
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            v-if="peutRetirerFin(data)"
-                                            @click="
-                                                demander(data, 'retirer_fin')
-                                            "
-                                        >
-                                            <Undo2 class="mr-2 h-4 w-4" />
-                                            Retirer la demande de fin
-                                        </DropdownMenuItem>
-                                        <template v-if="peutAnnuler(data)">
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem
-                                                class="text-destructive focus:text-destructive"
-                                                @click="
-                                                    demander(data, 'annuler')
-                                                "
-                                            >
-                                                <XCircle class="mr-2 h-4 w-4" />
-                                                Annuler
-                                            </DropdownMenuItem>
-                                        </template>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <template #empty>
-                        <div
-                            class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
-                        >
-                            <Gift class="h-10 w-10 opacity-30" />
-                            <p class="text-sm">
-                                Aucune prime ni aucun avantage ne correspond.
+                                Proposée par {{ a.cree_par }}
                             </p>
                         </div>
-                    </template>
-                </DataTable>
+                        <Button
+                            v-if="peutValiderLigne(a)"
+                            size="sm"
+                            variant="outline"
+                            data-testid="affectation-valider"
+                            @click="demander(a, 'valider')"
+                        >
+                            <BadgeCheck class="mr-1.5 h-3.5 w-3.5" />
+                            Valider
+                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    class="h-8 w-8"
+                                    :aria-label="`Actions : ${a.type.libelle}`"
+                                    :data-testid="`affectation-actions-${a.id}`"
+                                >
+                                    <MoreHorizontal class="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-64">
+                                <DropdownMenuLabel>{{
+                                    a.type.libelle
+                                }}</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem @click="ouvrirHistorique(a)">
+                                    <History class="mr-2 h-4 w-4" />
+                                    Historique
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="peutModifier(a)"
+                                    @click="ouvrirModification(a)"
+                                >
+                                    <Pencil class="mr-2 h-4 w-4" />
+                                    Modifier la proposition
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="peutChangerMontant(a)"
+                                    @click="ouvrirChangement(a)"
+                                >
+                                    <CalendarClock class="mr-2 h-4 w-4" />
+                                    Changer le montant
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="peutSaisir(a)"
+                                    @click="ouvrirSaisies(a)"
+                                >
+                                    <ListOrdered class="mr-2 h-4 w-4" />
+                                    Montants mensuels
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="peutMettreFin(a)"
+                                    @click="ouvrirFin(a)"
+                                >
+                                    <CalendarX class="mr-2 h-4 w-4" />
+                                    Mettre fin
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="peutRetirerFin(a)"
+                                    @click="demander(a, 'retirer_fin')"
+                                >
+                                    <Undo2 class="mr-2 h-4 w-4" />
+                                    Retirer la demande de fin
+                                </DropdownMenuItem>
+                                <template v-if="peutAnnuler(a)">
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        class="text-destructive focus:text-destructive"
+                                        @click="demander(a, 'annuler')"
+                                    >
+                                        <XCircle class="mr-2 h-4 w-4" />
+                                        Annuler
+                                    </DropdownMenuItem>
+                                </template>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </div>
             </div>
-        </div>
-    </AppLayout>
+            <button
+                v-if="primesAnciennes.length > 0"
+                type="button"
+                class="flex w-full items-center justify-center gap-1.5 border-t px-5 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/50"
+                data-testid="primes-anciennes"
+                @click="anciennesVisibles = !anciennesVisibles"
+            >
+                <ChevronDown
+                    class="h-3.5 w-3.5 transition-transform"
+                    :class="{ 'rotate-180': anciennesVisibles }"
+                />
+                {{
+                    anciennesVisibles
+                        ? 'Masquer les anciennes primes'
+                        : `Voir les anciennes primes (${primesAnciennes.length})`
+                }}
+            </button>
+        </template>
+    </div>
 
     <!-- Attribuer / modifier une proposition -->
     <Dialog
         v-model:visible="showForm"
         modal
-        :header="
-            enEdition
-                ? 'Modifier la proposition'
-                : 'Attribuer une prime ou un avantage'
-        "
+        :header="enEdition ? 'Modifier la proposition' : 'Ajouter une prime'"
         :style="{ width: 'min(620px, 95vw)' }"
         :draggable="false"
         :closable="!form.processing"
         @hide="form.clearErrors()"
     >
         <form class="space-y-4 pt-2 pb-1" @submit.prevent="enregistrer(false)">
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div>
-                    <Label
-                        for="af-employe"
-                        class="mb-1.5 block text-xs font-medium"
+            <div>
+                <Label for="af-type" class="mb-1.5 block text-xs font-medium">
+                    Prime ou avantage
+                    <span class="text-destructive">*</span>
+                </Label>
+                <select
+                    id="af-type"
+                    :value="form.type_remuneration_id"
+                    :class="champSelect"
+                    :disabled="enEdition !== null"
+                    @change="
+                        choisirType(($event.target as HTMLSelectElement).value)
+                    "
+                >
+                    <option value="" disabled>Choisir un type validé</option>
+                    <option
+                        v-for="t in enEdition ? options.types : typesProposes"
+                        :key="t.value"
+                        :value="t.value"
                     >
-                        Salarié <span class="text-destructive">*</span>
-                    </Label>
-                    <select
-                        id="af-employe"
-                        v-model="form.employe_id"
-                        :class="champSelect"
-                        :disabled="enEdition !== null"
-                    >
-                        <option value="" disabled>Choisir un salarié</option>
-                        <option
-                            v-for="e in enEdition
-                                ? employes
-                                : employesAttribuables"
-                            :key="e.value"
-                            :value="e.value"
-                        >
-                            {{ e.label }}{{ e.site ? ` — ${e.site}` : '' }}
-                        </option>
-                    </select>
-                    <p
-                        v-if="form.errors.employe_id"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.employe_id }}
-                    </p>
-                    <p
-                        v-if="!enEdition && employeChoisi"
-                        class="mt-1 text-xs text-muted-foreground"
-                        data-testid="primes-actuelles"
-                    >
-                        <template v-if="primesActuelles.length">
-                            Déjà attribuées :
-                            <span class="text-foreground">{{
-                                primesActuelles.join(' · ')
-                            }}</span>
-                        </template>
-                        <template v-else>Aucune prime attribuée.</template>
-                    </p>
-                </div>
-                <div>
-                    <Label
-                        for="af-type"
-                        class="mb-1.5 block text-xs font-medium"
-                    >
-                        Prime ou avantage
-                        <span class="text-destructive">*</span>
-                    </Label>
-                    <select
-                        id="af-type"
-                        :value="form.type_remuneration_id"
-                        :class="champSelect"
-                        :disabled="enEdition !== null"
-                        @change="
-                            choisirType(
-                                ($event.target as HTMLSelectElement).value,
-                            )
-                        "
-                    >
-                        <option value="" disabled>
-                            Choisir un type validé
-                        </option>
-                        <option
-                            v-for="t in enEdition ? types : typesProposes"
-                            :key="t.value"
-                            :value="t.value"
-                        >
-                            {{ t.label
-                            }}{{ t.valorise ? ' (avantage en nature)' : '' }}
-                        </option>
-                    </select>
-                    <p
-                        v-if="form.errors.type_remuneration_id"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ form.errors.type_remuneration_id }}
-                    </p>
-                    <p
-                        v-if="!enEdition && typesAttribuables.length === 0"
-                        class="mt-1 text-xs text-muted-foreground"
-                    >
-                        Aucun type actif : un type doit être validé dans
-                        Paramètres → Primes et avantages.
-                    </p>
-                    <p
-                        v-else-if="
-                            !enEdition && typeChoisi && dejaAttribue(typeChoisi)
-                        "
-                        class="mt-1 text-xs text-amber-700 dark:text-amber-300"
-                        data-testid="prime-deja-attribuee"
-                    >
-                        Cette prime est déjà attribuée à ce salarié sur cette
-                        période.
-                    </p>
-                    <p
-                        v-else-if="!enEdition && typesProposes.length === 0"
-                        class="mt-1 text-xs text-muted-foreground"
-                        data-testid="toutes-primes-attribuees"
-                    >
-                        Ce salarié possède déjà toutes les primes disponibles
-                        sur cette période.
-                    </p>
-                </div>
+                        {{ t.label
+                        }}{{ t.valorise ? ' (avantage en nature)' : '' }}
+                    </option>
+                </select>
+                <p
+                    v-if="form.errors.type_remuneration_id"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ form.errors.type_remuneration_id }}
+                </p>
+                <p
+                    v-if="!enEdition && typesAttribuables.length === 0"
+                    class="mt-1 text-xs text-muted-foreground"
+                >
+                    Aucun type actif : un type doit être validé dans Paramètres
+                    → Primes et avantages.
+                </p>
+                <p
+                    v-else-if="
+                        !enEdition && typeChoisi && dejaAttribue(typeChoisi)
+                    "
+                    class="mt-1 text-xs text-amber-700 dark:text-amber-300"
+                    data-testid="prime-deja-attribuee"
+                >
+                    Cette prime est déjà attribuée à ce salarié sur cette
+                    période.
+                </p>
+                <p
+                    v-else-if="!enEdition && typesProposes.length === 0"
+                    class="mt-1 text-xs text-muted-foreground"
+                    data-testid="toutes-primes-attribuees"
+                >
+                    Ce salarié possède déjà toutes les primes disponibles sur
+                    cette période.
+                </p>
             </div>
 
             <p
@@ -1365,8 +1190,8 @@ const champSelect =
                 v-if="!peutValider"
                 class="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground"
             >
-                L’affectation sera « À valider » : elle ne produira aucun
-                montant tant qu’elle n’est pas validée.
+                La prime sera « À valider » : elle ne produira aucun montant
+                tant qu’elle n’est pas validée.
             </p>
 
             <div class="flex flex-wrap justify-between gap-2 pt-2">
@@ -1431,7 +1256,6 @@ const champSelect =
             @submit.prevent="enregistrerChangement(false)"
         >
             <p class="text-sm text-muted-foreground">
-                {{ changement.employe.nom_complet }} —
                 {{ changement.type.libelle }} : actuellement
                 {{ changement.valeur_label }}. Le montant actuel reste appliqué
                 jusqu’à la veille de la date d’effet ; les mois écoulés ne
@@ -1577,7 +1401,7 @@ const champSelect =
     <Dialog
         :visible="fin !== null"
         modal
-        header="Mettre fin à l’affectation"
+        header="Mettre fin à la prime"
         :style="{ width: 'min(480px, 95vw)' }"
         :draggable="false"
         :closable="!formFin.processing"
@@ -1593,8 +1417,8 @@ const champSelect =
             @submit.prevent="enregistrerFin(false)"
         >
             <p class="text-sm text-muted-foreground">
-                {{ fin.employe.nom_complet }} — {{ fin.type.libelle }}. Le type
-                reste attribuable aux autres salariés.
+                {{ fin.type.libelle }}. Le type reste attribuable aux autres
+                salariés.
             </p>
             <div>
                 <Label for="fin-date" class="mb-1.5 block text-xs font-medium">
@@ -1676,7 +1500,6 @@ const champSelect =
     >
         <div v-if="affectationSaisies" class="space-y-4 pt-1">
             <p class="text-sm text-muted-foreground">
-                {{ affectationSaisies.employe.nom_complet }} —
                 {{ affectationSaisies.type.libelle }} :
                 {{ periode(affectationSaisies).toLowerCase() }}. Un mois sans
                 montant validé n’est pas transmis.

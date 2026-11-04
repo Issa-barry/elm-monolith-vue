@@ -8,6 +8,7 @@ use App\Models\Depense;
 use App\Models\DepenseImputation;
 use App\Models\Employe;
 use App\Models\Livreur;
+use App\Models\Parrain;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
@@ -137,6 +138,7 @@ class ShowDepenseController extends Controller
             'vehicule' => optional(Vehicule::find($id))->nom_vehicule,
             'prestataire' => optional(Prestataire::find($id))->nom_complet,
             'client' => optional(Client::find($id))->nom_complet,
+            'parrain' => optional(Parrain::find($id))->nom_complet,
             default => null,
         };
     }

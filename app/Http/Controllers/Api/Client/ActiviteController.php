@@ -54,7 +54,9 @@ class ActiviteController extends Controller
             .'n\'est inventée entre les deux. `statut` **exige `type`** (422 explicite sinon, message '
             .'"Le filtre statut nécessite de préciser type"). `type` omis = les deux mélangés, triés '
             .'par date décroissante, mais alors sans filtre `statut` possible. `periode` (période rapide '
-            .'résolue par le serveur) exclut `date_debut`/`date_fin` (422 sinon).',
+            .'résolue par le serveur) exclut `date_debut`/`date_fin` (422 sinon). Période comptable : '
+            .'`annee` + `mois` + `quinzaine` (`P1` du 1er au 15, `P2` du 16 à la fin du mois, `TOUT` ou '
+            .'omise = le mois), bornes calculées par le serveur, exclut `periode` et `date_debut`/`date_fin`.',
     )]
     public function __invoke(ActiviteMineRequest $request): JsonResponse
     {
@@ -160,7 +162,13 @@ class ActiviteController extends Controller
     private function ventes(Builder $query, int $limite): Collection
     {
         return $query
-            ->with(['site:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'client:id,nom,prenom', 'lignes:id,commande_vente_id,quantite_demandee'])
+            ->with([
+                'site:id,nom',
+                'vehicule:id,nom_vehicule,immatriculation',
+                'client:id,nom,prenom',
+                'lignes:id,commande_vente_id,quantite_demandee',
+                'facture:id,commande_vente_id,statut_facture',
+            ])
             ->orderByRaw(self::DATE_VENTE.' DESC')
             ->orderByDesc('id')
             ->limit($limite)
@@ -168,13 +176,14 @@ class ActiviteController extends Controller
             ->map(function (CommandeVente $c) {
                 $client = $c->client;
                 $date = $c->validated_at ?? $c->created_at;
+                $statutFacture = $c->facture?->statut_facture;
 
                 return new ActiviteRow(
                     id: $c->id,
                     type: 'vente',
                     reference: $c->reference ?? '—',
                     statut: $c->statut?->value,
-                    statutLabel: $c->statut_label,
+                    statutLabel: $c->statutAffichage()['label'],
                     siteSource: $c->site?->nom ?? '—',
                     siteDestination: $client?->nom_complet ?? 'Vente directe',
                     vehicule: $c->vehicule ? new VehiculeSummary(
@@ -185,6 +194,8 @@ class ActiviteController extends Controller
                     date: $date?->toDateString(),
                     dateSort: $date?->timestamp ?? 0,
                     nbPacks: (int) $c->lignes->sum('quantite_demandee'),
+                    statutPaiement: $statutFacture?->value,
+                    statutPaiementLabel: $statutFacture?->label(),
                 );
             });
     }

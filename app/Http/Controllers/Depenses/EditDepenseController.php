@@ -48,6 +48,7 @@ class EditDepenseController extends Controller
             'proprietaires' => DepenseFormOptionsLoader::proprietaires($orgId),
             'prestataires' => DepenseFormOptionsLoader::prestataires($orgId),
             'clients' => DepenseFormOptionsLoader::clients($orgId),
+            'parrains' => DepenseFormOptionsLoader::parrains($orgId),
             'categories' => CategorieDepense::optionsConcerne(),
             'can_change_site' => $user->agitSurToutesLesAgences(),
         ]);

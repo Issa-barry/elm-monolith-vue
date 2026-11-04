@@ -28,7 +28,7 @@
         "/v1/mobile/activite": {
             "get": {
                 "operationId": "client.activite.mine",
-                "description": "M\u00e9lange deux mod\u00e8les \u00e0 vocabulaire de statut distinct (`StatutCommandeVente` pour `type=vente`, `StatutTransfert` pour `type=logistique`) \u2014 aucune correspondance n'est invent\u00e9e entre les deux. `statut` **exige `type`** (422 explicite sinon, message \"Le filtre statut n\u00e9cessite de pr\u00e9ciser type\"). `type` omis = les deux m\u00e9lang\u00e9s, tri\u00e9s par date d\u00e9croissante, mais alors sans filtre `statut` possible. `periode` (p\u00e9riode rapide r\u00e9solue par le serveur) exclut `date_debut`/`date_fin` (422 sinon).",
+                "description": "M\u00e9lange deux mod\u00e8les \u00e0 vocabulaire de statut distinct (`StatutCommandeVente` pour `type=vente`, `StatutTransfert` pour `type=logistique`) \u2014 aucune correspondance n'est invent\u00e9e entre les deux. `statut` **exige `type`** (422 explicite sinon, message \"Le filtre statut n\u00e9cessite de pr\u00e9ciser type\"). `type` omis = les deux m\u00e9lang\u00e9s, tri\u00e9s par date d\u00e9croissante, mais alors sans filtre `statut` possible. `periode` (p\u00e9riode rapide r\u00e9solue par le serveur) exclut `date_debut`/`date_fin` (422 sinon). P\u00e9riode comptable : `annee` + `mois` + `quinzaine` (`P1` du 1er au 15, `P2` du 16 \u00e0 la fin du mois, `TOUT` ou omise = le mois), bornes calcul\u00e9es par le serveur, exclut `periode` et `date_debut`/`date_fin`.",
                 "tags": [
                     "Activity"
                 ],
@@ -84,6 +84,45 @@
                                 "ce_mois",
                                 "mois_precedent",
                                 "cette_annee",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "annee",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 2000
+                        }
+                    },
+                    {
+                        "name": "mois",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 12
+                        }
+                    },
+                    {
+                        "name": "quinzaine",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "P1",
+                                "P2",
+                                "TOUT",
                                 null
                             ]
                         }
@@ -209,6 +248,24 @@
                                                         "statut": {},
                                                         "vehicule_id": {},
                                                         "periode": {},
+                                                        "annee": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "mois": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "quinzaine": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
                                                         "date_debut": {
                                                             "type": [
                                                                 "string",
@@ -227,6 +284,9 @@
                                                         "statut",
                                                         "vehicule_id",
                                                         "periode",
+                                                        "annee",
+                                                        "mois",
+                                                        "quinzaine",
                                                         "date_debut",
                                                         "date_fin"
                                                     ]
@@ -306,6 +366,24 @@
                                                         "statut": {},
                                                         "vehicule_id": {},
                                                         "periode": {},
+                                                        "annee": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "mois": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "quinzaine": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
                                                         "date_debut": {
                                                             "type": [
                                                                 "string",
@@ -324,6 +402,9 @@
                                                         "statut",
                                                         "vehicule_id",
                                                         "periode",
+                                                        "annee",
+                                                        "mois",
+                                                        "quinzaine",
                                                         "date_debut",
                                                         "date_fin"
                                                     ]
@@ -1113,7 +1194,7 @@
         "/auth/me": {
             "get": {
                 "operationId": "auth.me",
-                "description": "`roles` liste **tous** les r\u00f4les du compte (un compte peut cumuler un r\u00f4le staff ET un r\u00f4le client/proprietaire/livreur, cf. d\u00e9cision multi-r\u00f4le du 26/08/2026) \u2014 **tableau non ordonn\u00e9**, ne jamais utiliser `roles[0]` comme \"r\u00f4le principal\" (bug de conception d\u00e9j\u00e0 rencontr\u00e9 c\u00f4t\u00e9 frontend). Un frontend doit v\u00e9rifier `roles.some(r => ['client','proprietaire','livreur'].includes(r))` pour l'acc\u00e8s espace client, jamais une \u00e9galit\u00e9 stricte. `context` est r\u00e9solu exclusivement via `ClientIdentityResolver` \u00e0 partir du compte authentifi\u00e9, jamais un param\u00e8tre client. `context.parrain_id` suit uniquement le rattachement pos\u00e9 au back-office (ADR 0050).",
+                "description": "`roles` liste **tous** les r\u00f4les du compte (un compte peut cumuler un r\u00f4le staff ET un r\u00f4le client/proprietaire/livreur, cf. d\u00e9cision multi-r\u00f4le du 26/08/2026) \u2014 **tableau non ordonn\u00e9**, ne jamais utiliser `roles[0]` comme \"r\u00f4le principal\" (bug de conception d\u00e9j\u00e0 rencontr\u00e9 c\u00f4t\u00e9 frontend). Un frontend doit v\u00e9rifier `roles.some(r => ['client','proprietaire','livreur'].includes(r))` pour l'acc\u00e8s espace client, jamais une \u00e9galit\u00e9 stricte. `context` est r\u00e9solu exclusivement via `ClientIdentityResolver` \u00e0 partir du compte authentifi\u00e9, jamais un param\u00e8tre client. `context.parrain_id` et `context.consultant_ids` suivent uniquement le rattachement pos\u00e9 au back-office (ADR 0050).",
                 "tags": [
                     "Authentication"
                 ],
@@ -1185,6 +1266,13 @@
                                                         "null"
                                                     ],
                                                     "description": "Lu sur le rattachement pos\u00e9 au back-office (ADR 0050), jamais sur le t\u00e9l\u00e9phone."
+                                                },
+                                                "consultant_ids": {
+                                                    "type": "array",
+                                                    "description": "Consultants (prestataires) dont le compte per\u00e7oit les commissions, m\u00eame rattachement\nque le parrain (ADR 0050, 0054). Jamais `prestataire_id` : ce nom est r\u00e9serv\u00e9 c\u00f4t\u00e9\nfrontend \u00e0 un futur espace \u00ab prestations \u00bb.",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
                                                 }
                                             },
                                             "required": [
@@ -1192,7 +1280,8 @@
                                                 "client_id",
                                                 "proprietaire_id",
                                                 "livreur_id",
-                                                "parrain_id"
+                                                "parrain_id",
+                                                "consultant_ids"
                                             ]
                                         }
                                     },
@@ -1592,6 +1681,605 @@
                     }
                 },
                 "security": []
+            }
+        },
+        "/v1/mobile/commissions": {
+            "get": {
+                "operationId": "client.commissions.mine",
+                "description": "Une ligne par part du compte, de la plus r\u00e9cente \u00e0 la plus ancienne (date de gain). `activite` (`proprietaire`, `livreur`, `parrain`, `consultant`) vient du type de b\u00e9n\u00e9ficiaire enregistr\u00e9 sur la part, jamais des r\u00f4les du compte ; `beneficiaire_libelle` nomme l'entreprise (ou la personne) pour un consultant. Les commissions annul\u00e9es restent list\u00e9es avec leur statut mais sortent de `resume`. `resume` porte, sur les m\u00eames filtres et toutes les pages, les m\u00eames champs que `summary` et `par_activite` du dashboard. P\u00e9riode : `periode` (p\u00e9riode rapide), `annee` + `mois` + `quinzaine` (`P1` du 1er au 15, `P2` du 16 \u00e0 la fin du mois, `TOUT` ou omise = le mois) ou `date_debut`/`date_fin`, exclusifs (422 sinon). `recherche` : r\u00e9f\u00e9rence de l'op\u00e9ration, nom ou immatriculation du v\u00e9hicule. Un `vehicule_id` sans part du compte renvoie une liste vide.",
+                "summary": "D\u00e9tail des commissions (toutes activit\u00e9s)",
+                "tags": [
+                    "Autres"
+                ],
+                "parameters": [
+                    {
+                        "name": "periode",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "aujourd_hui",
+                                "hier",
+                                "cette_semaine",
+                                "semaine_precedente",
+                                "ce_mois",
+                                "mois_precedent",
+                                "cette_annee",
+                                "annee_precedente",
+                                "tout",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "annee",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 2000
+                        }
+                    },
+                    {
+                        "name": "mois",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 12
+                        }
+                    },
+                    {
+                        "name": "quinzaine",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "P1",
+                                "P2",
+                                "TOUT",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "date_debut",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "date_fin",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "vehicule_id",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "activite",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "proprietaire",
+                                "livreur",
+                                "parrain",
+                                "consultant",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "statut",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "creee",
+                                "impaye",
+                                "partiel",
+                                "paye",
+                                "annulee",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "recherche",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 100
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CommissionClientRow"
+                                            }
+                                        },
+                                        "links": {
+                                            "type": "object",
+                                            "properties": {
+                                                "first": {
+                                                    "type": "string"
+                                                },
+                                                "last": {
+                                                    "type": "string"
+                                                },
+                                                "prev": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "next": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "first",
+                                                "last",
+                                                "prev",
+                                                "next"
+                                            ]
+                                        },
+                                        "meta": {
+                                            "type": "object",
+                                            "properties": {
+                                                "current_page": {
+                                                    "type": "integer"
+                                                },
+                                                "last_page": {
+                                                    "type": "integer"
+                                                },
+                                                "per_page": {
+                                                    "type": "integer"
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "required": [
+                                                "current_page",
+                                                "last_page",
+                                                "per_page",
+                                                "total"
+                                            ]
+                                        },
+                                        "resume": {
+                                            "type": "object",
+                                            "properties": {
+                                                "summary": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "total_earned": {
+                                                            "type": "number"
+                                                        },
+                                                        "total_paid": {
+                                                            "type": "number"
+                                                        },
+                                                        "en_attente_validation": {
+                                                            "type": "number"
+                                                        },
+                                                        "frais_depenses_total": {
+                                                            "type": "number"
+                                                        },
+                                                        "balance": {
+                                                            "type": "number"
+                                                        },
+                                                        "operations_count": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "total_earned",
+                                                        "total_paid",
+                                                        "en_attente_validation",
+                                                        "frais_depenses_total",
+                                                        "balance",
+                                                        "operations_count"
+                                                    ]
+                                                },
+                                                "par_activite": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                }
+                                            },
+                                            "required": [
+                                                "summary",
+                                                "par_activite"
+                                            ]
+                                        },
+                                        "filters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "periode": {},
+                                                "annee": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "mois": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "quinzaine": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "date_debut": {
+                                                    "type": "string"
+                                                },
+                                                "date_fin": {
+                                                    "type": "string"
+                                                },
+                                                "vehicule_id": {},
+                                                "activite": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "statut": {},
+                                                "recherche": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "periode",
+                                                "annee",
+                                                "mois",
+                                                "quinzaine",
+                                                "date_debut",
+                                                "date_fin",
+                                                "vehicule_id",
+                                                "activite",
+                                                "statut",
+                                                "recherche"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "links",
+                                        "meta",
+                                        "resume",
+                                        "filters"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    }
+                }
+            }
+        },
+        "/v1/mobile/vehicules/rattaches": {
+            "get": {
+                "operationId": "client.vehicules.rattaches",
+                "description": "Un v\u00e9hicule par ligne, jamais dupliqu\u00e9 : `liens` porte chaque nature de rattachement actuel (`proprietaire`, `livreur` de l'\u00e9quipe actuelle, `parrain`). Un consultant n'a aucun v\u00e9hicule rattach\u00e9. Un v\u00e9hicule quitt\u00e9 sort de la liste ; ses commissions restent dans `GET /v1/mobile/commissions`. **Lecture seule.** `lecture_restreinte` = v\u00e9hicule seulement parrain\u00e9 : identit\u00e9 du v\u00e9hicule et nom du propri\u00e9taire, jamais ses coordonn\u00e9es ni son identifiant (`proprietaire.id`/`telephone` \u00e0 `null`), ni l'\u00e9quipe, ni les capacit\u00e9s, ni l'\u00e9tat de livraison (`en_livraison` \u00e0 `null`) ; ventes et d\u00e9penses de ce v\u00e9hicule restent ferm\u00e9es. `remuneration_parrain` : part du parrain en vigueur (GNF par pack) quand le compte le parraine.",
+                "summary": "V\u00e9hicules rattach\u00e9s au compte (propri\u00e9taire, livreur, parrain)",
+                "tags": [
+                    "Autres"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {
+                                                "type": "string"
+                                            },
+                                            "nom": {
+                                                "type": "string"
+                                            },
+                                            "immatriculation": {
+                                                "type": "string"
+                                            },
+                                            "type": {
+                                                "type": "string"
+                                            },
+                                            "statut": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "actif",
+                                                    "inactif"
+                                                ]
+                                            },
+                                            "is_active": {
+                                                "type": "boolean"
+                                            },
+                                            "photo_url": {
+                                                "type": [
+                                                    "string",
+                                                    "null"
+                                                ]
+                                            },
+                                            "liens": {
+                                                "type": "array",
+                                                "items": {}
+                                            },
+                                            "lecture_restreinte": {
+                                                "type": "boolean"
+                                            },
+                                            "en_livraison": {
+                                                "type": [
+                                                    "string",
+                                                    "null"
+                                                ]
+                                            },
+                                            "role": {
+                                                "type": "string"
+                                            },
+                                            "proprietaire": {
+                                                "anyOf": [
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "string"
+                                                            },
+                                                            "nom_complet": {
+                                                                "type": "string"
+                                                            },
+                                                            "telephone": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "nom_complet",
+                                                            "telephone"
+                                                        ]
+                                                    },
+                                                    {
+                                                        "type": "null"
+                                                    },
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "null"
+                                                            },
+                                                            "nom_complet": {
+                                                                "type": "string"
+                                                            },
+                                                            "telephone": {
+                                                                "type": "null"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "id",
+                                                            "nom_complet",
+                                                            "telephone"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            "equipe": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "id": {
+                                                            "type": "string"
+                                                        },
+                                                        "nom_complet": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "prenom": {
+                                                            "type": "string",
+                                                            "description": "nom_complet peut \u00eatre une d\u00e9signation provisoire (\"Chauffeur-1\") : le frontend\npr\u00e9f\u00e8re pr\u00e9nom + nom quand les deux sont connus."
+                                                        },
+                                                        "nom": {
+                                                            "type": "string"
+                                                        },
+                                                        "telephone": {
+                                                            "type": "string"
+                                                        },
+                                                        "role": {
+                                                            "type": "string"
+                                                        },
+                                                        "ordre": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "id",
+                                                        "nom_complet",
+                                                        "prenom",
+                                                        "nom",
+                                                        "telephone",
+                                                        "role",
+                                                        "ordre"
+                                                    ]
+                                                }
+                                            },
+                                            "capacites": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "categorie_id": {
+                                                            "type": "string"
+                                                        },
+                                                        "categorie": {
+                                                            "type": "string"
+                                                        },
+                                                        "capacite": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "categorie_id",
+                                                        "categorie",
+                                                        "capacite"
+                                                    ]
+                                                }
+                                            },
+                                            "remuneration_parrain": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "processus_label": {
+                                                            "type": "string"
+                                                        },
+                                                        "categorie_nom": {
+                                                            "type": "string"
+                                                        },
+                                                        "montant": {
+                                                            "type": "integer"
+                                                        },
+                                                        "a_definir": {
+                                                            "type": "boolean"
+                                                        },
+                                                        "depuis": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ],
+                                                            "description": "PARRAIN-023 : date de d\u00e9but de la part en vigueur."
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "processus_label",
+                                                        "categorie_nom",
+                                                        "montant",
+                                                        "a_definir",
+                                                        "depuis"
+                                                    ]
+                                                }
+                                            }
+                                        },
+                                        "required": [
+                                            "id",
+                                            "nom",
+                                            "immatriculation",
+                                            "type",
+                                            "statut",
+                                            "is_active",
+                                            "photo_url",
+                                            "liens",
+                                            "lecture_restreinte",
+                                            "en_livraison",
+                                            "role",
+                                            "proprietaire",
+                                            "equipe",
+                                            "capacites",
+                                            "remuneration_parrain"
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    }
+                }
             }
         },
         "/v1/mobile/parrain/synthese": {
@@ -2387,7 +3075,7 @@
         "/v1/mobile/dashboard": {
             "get": {
                 "operationId": "client.dashboard.mine",
-                "description": "Montants en **GNF** (franc guin\u00e9en), sans d\u00e9cimales dans la pratique mais\ntyp\u00e9s nombre (jamais des centimes, jamais un float \u00e0 diviser par 100).\n\nD\u00e9finitions exactes des champs de `summary` (m\u00eames noms, m\u00eames valeurs que\nle dashboard Inertia \u2014 `App\\Services\\Client\\ClientEarningsService`) :\n- `total_earned` : commissions de vente + logistique gagn\u00e9es sur la p\u00e9riode (brut d\u00fb).\n- `total_paid` : d\u00e9j\u00e0 vers\u00e9 sur ces m\u00eames commissions.\n- `frais_depenses_total` : d\u00e9penses v\u00e9hicule valid\u00e9es sur la p\u00e9riode (proprietaire uniquement \u2014 jamais imput\u00e9es \u00e0 un livreur dans ce moteur).\n- `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais n\u00e9gatif** (plancher \u00e0 0 \u2014 un solde n\u00e9gatif n'est jamais affich\u00e9 comme dette du propri\u00e9taire).\n- `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.\n\n`depenses_total` (hors `summary`, affichage seul) : `frais_depenses_total` + d\u00e9penses valid\u00e9es\nrattach\u00e9es directement au livreur sur la p\u00e9riode (ex. avance sur salaire), sauf filtre\n`vehicule_id`. **Jamais d\u00e9duit de `balance`.**\n\n`par_vehicule` : m\u00eame d\u00e9tail que `summary` mais par v\u00e9hicule (sch\u00e9ma\n`VehiculeEarningsRow`), **toujours la liste compl\u00e8te du parc accessible**\nm\u00eame si `vehicule_id` filtre le calcul (les v\u00e9hicules hors filtre\napparaissent avec des montants \u00e0 0) \u2014 ce n'est pas un bug.\n\n`filters.period` : raccourci appliqu\u00e9 (`custom` = `date_debut`/`date_fin`\npris tels quels, sinon calcul\u00e9s serveur \u2014 jamais un d\u00e9faut invent\u00e9 c\u00f4t\u00e9\nfrontend).\n\n`summary_evolution` (champ additif, cf. rapport du 27/08/2026) : \u00e9volution\nde chacun des 5 champs de `summary` entre la p\u00e9riode s\u00e9lectionn\u00e9e et la\np\u00e9riode **imm\u00e9diatement pr\u00e9c\u00e9dente de m\u00eame dur\u00e9e** (ex : 01/08\u219231/08 est\ncompar\u00e9 \u00e0 01/07\u219231/07 ; 10/08\u219216/08 [7 jours] est compar\u00e9 \u00e0 03/08\u219209/08\n[7 jours] \u2014 jamais \"le mois pr\u00e9c\u00e9dent\" arbitraire). `direction` est\n**factuelle** (`up`/`down`/`stable`), jamais un jugement m\u00e9tier : une\nhausse de `frais_depenses_total` vaut `up` exactement comme une hausse de\n`total_earned` \u2014 c'est au frontend de d\u00e9cider, KPI par KPI, si une hausse\ndonn\u00e9e est une bonne ou une mauvaise nouvelle. Quand la p\u00e9riode pr\u00e9c\u00e9dente\nvalait 0 et que la p\u00e9riode actuelle est non nulle, le pourcentage n'est pas\nd\u00e9fini math\u00e9matiquement : `percent` vaut alors `null` et `comparable` vaut\n`false` (jamais `Infinity`/`999999`/`100` en substitut) \u2014 `direction` reste\nrenseign\u00e9e pour permettre d'afficher une fl\u00e8che, typiquement \u00e0 c\u00f4t\u00e9 d'un\ntexte comme \"Nouveau\" plut\u00f4t que d'un pourcentage. `summary_evolution` et\n`comparison_period` sont tous les deux `null` uniquement dans le cas\nd\u00e9g\u00e9n\u00e9r\u00e9 `period=custom` sans `date_debut`/`date_fin` (aucune p\u00e9riode\nr\u00e9solue, donc aucune p\u00e9riode pr\u00e9c\u00e9dente calculable).\n\n`comparison_period` : bornes exactes de la p\u00e9riode pr\u00e9c\u00e9dente utilis\u00e9e par\n`summary_evolution`, pour affichage (ex. \"vs 01/07 - 31/07\").",
+                "description": "Montants en **GNF** (franc guin\u00e9en), sans d\u00e9cimales dans la pratique mais\ntyp\u00e9s nombre (jamais des centimes, jamais un float \u00e0 diviser par 100).\n\nToutes les activit\u00e9s du compte sont compt\u00e9es (ADR 0054) : propri\u00e9taire, livreur, parrain et\nconsultant. Chaque part l'est une seule fois, dans l'activit\u00e9 de son b\u00e9n\u00e9ficiaire (la part du\nparrain est d\u00e9j\u00e0 prise sur l'enveloppe Livreur). Une commission annul\u00e9e n'entre dans aucun\nmontant.\n\nD\u00e9finitions exactes des champs de `summary` (m\u00eames noms, m\u00eames valeurs que\nle dashboard Inertia \u2014 `App\\Services\\Client\\ClientEarningsService`) :\n- `total_earned` : commissions gagn\u00e9es sur la p\u00e9riode, toutes activit\u00e9s (brut d\u00fb, parts \u00ab Cr\u00e9\u00e9e \u00bb comprises).\n- `total_paid` : d\u00e9j\u00e0 vers\u00e9 sur ces m\u00eames commissions.\n- `en_attente_validation` : part de `total_earned` encore \u00ab Cr\u00e9\u00e9e \u00bb (p\u00e9riode de paiement pas encore valid\u00e9e).\n- `frais_depenses_total` : d\u00e9penses valid\u00e9es que les fiches de paiement d\u00e9duisent sur la p\u00e9riode (d\u00e9penses imput\u00e9es \u00e0 chaque b\u00e9n\u00e9ficiaire du compte, et d\u00e9penses des v\u00e9hicules du propri\u00e9taire). Filtr\u00e9 sur un v\u00e9hicule : seules les d\u00e9penses de ce v\u00e9hicule.\n- `balance` (reste \u00e0 payer) : par activit\u00e9 `total_earned - en_attente_validation - frais_depenses_total - total_paid`, **jamais n\u00e9gatif**, puis additionn\u00e9.\n- `operations_count` : nombre de parts entrant dans `total_earned`.\n\n`par_activite` : les m\u00eames champs par activit\u00e9 du compte (toutes ses activit\u00e9s, m\u00eame \u00e0 0) ;\nleur somme donne `summary`.\n\n`depenses_total` (hors `summary`) : \u00e9gal \u00e0 `frais_depenses_total`.\n\n`par_vehicule` : m\u00eame d\u00e9tail que `summary` mais par v\u00e9hicule (sch\u00e9ma\n`VehiculeEarningsRow`), **toujours la liste compl\u00e8te des v\u00e9hicules rattach\u00e9s**\n(propri\u00e9taire, livreur de l'\u00e9quipe actuelle, parrain) m\u00eame si `vehicule_id` filtre le calcul\n(les v\u00e9hicules hors filtre apparaissent avec des montants \u00e0 0) \u2014 ce n'est pas un bug. S'y\najoute tout v\u00e9hicule portant une part du compte sur la p\u00e9riode (\u00e9quipe quitt\u00e9e, commission\nde consultant), avec `liens` vide. `liens` : nature du rattachement ; `par_activite` : gains\ndu compte sur ce v\u00e9hicule, par activit\u00e9.\n\n`vehicules` : v\u00e9hicules rattach\u00e9s puis v\u00e9hicules portant une part du compte (toutes\np\u00e9riodes), avec `liens` ; c'est la liste accept\u00e9e par le filtre `vehicule_id` (ignor\u00e9 sinon).\n\n`filters.period` : raccourci appliqu\u00e9 (`custom` = `date_debut`/`date_fin`\npris tels quels, sinon calcul\u00e9s serveur \u2014 jamais un d\u00e9faut invent\u00e9 c\u00f4t\u00e9\nfrontend).\n\nFiltre de p\u00e9riode de l'accueil, exclusif de `period`/`date_debut`/`date_fin` (422 sinon) :\nsoit `periode` (p\u00e9riode rapide, `tout` = toutes les p\u00e9riodes), soit `annee` + `mois` +\n`quinzaine` (`P1` du 1er au 15, `P2` du 16 \u00e0 la fin du mois, `TOUT` ou omise = le mois ;\n`mois` omis = l'ann\u00e9e). Bornes calcul\u00e9es par le serveur et renvoy\u00e9es dans `filters`\n(`period` vaut alors `custom`). Ventes et logistique y sont dat\u00e9es par leur date de gain,\ncomme les fiches de paiement ; aucune formule ne change.\n\n`summary_evolution` (champ additif, cf. rapport du 27/08/2026) : \u00e9volution\nde chacun des 5 champs de `summary` entre la p\u00e9riode s\u00e9lectionn\u00e9e et la\np\u00e9riode **imm\u00e9diatement pr\u00e9c\u00e9dente de m\u00eame dur\u00e9e** (ex : 01/08\u219231/08 est\ncompar\u00e9 \u00e0 01/07\u219231/07 ; 10/08\u219216/08 [7 jours] est compar\u00e9 \u00e0 03/08\u219209/08\n[7 jours] \u2014 jamais \"le mois pr\u00e9c\u00e9dent\" arbitraire). `direction` est\n**factuelle** (`up`/`down`/`stable`), jamais un jugement m\u00e9tier : une\nhausse de `frais_depenses_total` vaut `up` exactement comme une hausse de\n`total_earned` \u2014 c'est au frontend de d\u00e9cider, KPI par KPI, si une hausse\ndonn\u00e9e est une bonne ou une mauvaise nouvelle. Quand la p\u00e9riode pr\u00e9c\u00e9dente\nvalait 0 et que la p\u00e9riode actuelle est non nulle, le pourcentage n'est pas\nd\u00e9fini math\u00e9matiquement : `percent` vaut alors `null` et `comparable` vaut\n`false` (jamais `Infinity`/`999999`/`100` en substitut) \u2014 `direction` reste\nrenseign\u00e9e pour permettre d'afficher une fl\u00e8che, typiquement \u00e0 c\u00f4t\u00e9 d'un\ntexte comme \"Nouveau\" plut\u00f4t que d'un pourcentage. `summary_evolution` et\n`comparison_period` sont tous les deux `null` uniquement dans le cas\nd\u00e9g\u00e9n\u00e9r\u00e9 `period=custom` sans `date_debut`/`date_fin` (aucune p\u00e9riode\nr\u00e9solue, donc aucune p\u00e9riode pr\u00e9c\u00e9dente calculable).\n\n`comparison_period` : bornes exactes de la p\u00e9riode pr\u00e9c\u00e9dente utilis\u00e9e par\n`summary_evolution`, pour affichage (ex. \"vs 01/07 - 31/07\").",
                 "summary": "Dashboard financier (r\u00e9sum\u00e9 + d\u00e9tail par v\u00e9hicule)",
                 "tags": [
                     "Dashboard"
@@ -2460,6 +3148,67 @@
                                 null
                             ]
                         }
+                    },
+                    {
+                        "name": "periode",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "aujourd_hui",
+                                "hier",
+                                "cette_semaine",
+                                "semaine_precedente",
+                                "ce_mois",
+                                "mois_precedent",
+                                "cette_annee",
+                                "annee_precedente",
+                                "tout",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "annee",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 2000
+                        }
+                    },
+                    {
+                        "name": "mois",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 12
+                        }
+                    },
+                    {
+                        "name": "quinzaine",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "P1",
+                                "P2",
+                                "TOUT",
+                                null
+                            ]
+                        }
                     }
                 ],
                 "responses": {
@@ -2481,6 +3230,7 @@
                                                         {
                                                             "type": "string",
                                                             "enum": [
+                                                                "custom",
                                                                 "ce_mois"
                                                             ]
                                                         }
@@ -2503,6 +3253,25 @@
                                                         "string",
                                                         "null"
                                                     ]
+                                                },
+                                                "periode": {},
+                                                "annee": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "mois": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "quinzaine": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
                                                 }
                                             },
                                             "required": [
@@ -2510,7 +3279,11 @@
                                                 "date_debut",
                                                 "date_fin",
                                                 "vehicule_id",
-                                                "statut"
+                                                "statut",
+                                                "periode",
+                                                "annee",
+                                                "mois",
+                                                "quinzaine"
                                             ]
                                         },
                                         "summary": {
@@ -2522,25 +3295,33 @@
                                                 "total_paid": {
                                                     "type": "number"
                                                 },
+                                                "en_attente_validation": {
+                                                    "type": "number"
+                                                },
                                                 "frais_depenses_total": {
                                                     "type": "number"
                                                 },
                                                 "balance": {
-                                                    "type": "number",
-                                                    "description": "(float) explicite : max(0, float) renvoie l'entier litt\u00e9ral 0 (pas 0.0) d\u00e8s que le\nsolde est nul/n\u00e9gatif \u2014 m\u00eame sortie JSON (0), mais un type PHP sans ambigu\u00eft\u00e9 pour\nl'inf\u00e9rence statique (Scramble/PHPStan) et pour tout futur usage strict du retour."
+                                                    "type": "number"
                                                 },
                                                 "operations_count": {
-                                                    "type": "integer",
-                                                    "description": "(int) explicite pour la m\u00eame raison que (float) ci-dessus sur `balance` \u2014 la\nsomme de deux Collection::count() est d\u00e9j\u00e0 un int \u00e0 l'ex\u00e9cution, ce cast ne\nchange rien au comportement, seulement \u00e0 la clart\u00e9 du type pour l'analyse statique."
+                                                    "type": "integer"
                                                 }
                                             },
                                             "required": [
                                                 "total_earned",
                                                 "total_paid",
+                                                "en_attente_validation",
                                                 "frais_depenses_total",
                                                 "balance",
                                                 "operations_count"
                                             ]
+                                        },
+                                        "par_activite": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/ActiviteEarningsRow"
+                                            }
                                         },
                                         "depenses_total": {
                                             "type": "number"
@@ -2574,29 +3355,14 @@
                                         "vehicules": {
                                             "type": "array",
                                             "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "id": {
-                                                        "type": "string"
-                                                    },
-                                                    "nom_vehicule": {
-                                                        "type": "string"
-                                                    },
-                                                    "immatriculation": {
-                                                        "type": "string"
-                                                    }
-                                                },
-                                                "required": [
-                                                    "id",
-                                                    "nom_vehicule",
-                                                    "immatriculation"
-                                                ]
+                                                "$ref": "#/components/schemas/VehiculeLieSummary"
                                             }
                                         }
                                     },
                                     "required": [
                                         "filters",
                                         "summary",
+                                        "par_activite",
                                         "depenses_total",
                                         "summary_evolution",
                                         "comparison_period",
@@ -2918,6 +3684,67 @@
                         }
                     },
                     {
+                        "name": "periode",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "aujourd_hui",
+                                "hier",
+                                "cette_semaine",
+                                "semaine_precedente",
+                                "ce_mois",
+                                "mois_precedent",
+                                "cette_annee",
+                                "annee_precedente",
+                                "tout",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "annee",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 2000
+                        }
+                    },
+                    {
+                        "name": "mois",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 12
+                        }
+                    },
+                    {
+                        "name": "quinzaine",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "P1",
+                                "P2",
+                                "TOUT",
+                                null
+                            ]
+                        }
+                    },
+                    {
                         "name": "date_debut",
                         "in": "query",
                         "schema": {
@@ -3088,23 +3915,54 @@
                                                 "vehicule_id": {},
                                                 "depense_type_id": {},
                                                 "statut": {},
-                                                "date_debut": {},
-                                                "date_fin": {}
+                                                "periode": {},
+                                                "annee": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "mois": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "quinzaine": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "date_debut": {
+                                                    "type": "string"
+                                                },
+                                                "date_fin": {
+                                                    "type": "string"
+                                                }
                                             },
                                             "required": [
                                                 "vehicule_id",
                                                 "depense_type_id",
                                                 "statut",
+                                                "periode",
+                                                "annee",
+                                                "mois",
+                                                "quinzaine",
                                                 "date_debut",
                                                 "date_fin"
                                             ]
+                                        },
+                                        "total_valide": {
+                                            "type": "number"
                                         }
                                     },
                                     "required": [
                                         "data",
                                         "links",
                                         "meta",
-                                        "filters"
+                                        "filters",
+                                        "total_valide"
                                     ]
                                 }
                             }
@@ -4672,7 +5530,7 @@
         "/v1/mobile/vehicules/mine": {
             "get": {
                 "operationId": "client.vehicules.mine",
-                "description": "Liste des v\u00e9hicules du proprietaire (les siens) ou du livreur (ceux de son \u00e9quipe) \u2014 jamais toute la flotte de l'organisation. **Aucun statut \"Entretien\"/maintenance n'existe dans le mod\u00e8le ELM** \u2014 seul `is_active` (bool\u00e9en) existe ; n'affichez pas un statut de ce type sans colonne backend d\u00e9di\u00e9e (elle n'existe pas). `capacite`/`conducteur` sont des champs h\u00e9rit\u00e9s conserv\u00e9s pour compatibilit\u00e9 descendante \u2014 la source canonique est d\u00e9sormais `capacites[]` (une entr\u00e9e par cat\u00e9gorie, cf. VehiculeCapacite) et `equipe[]` (tous les membres actifs, avec `role` = valeur r\u00e9elle stock\u00e9e en base : `chauffeur`/`convoyeur`, jamais traduite ; `nom_complet` peut \u00eatre une d\u00e9signation provisoire comme `Chauffeur-1`, \u00e0 remplacer \u00e0 l'affichage par `prenom` + `nom` quand les deux sont renseign\u00e9s). `proprietaire` est `null` si le v\u00e9hicule n'a aucun propri\u00e9taire renseign\u00e9.",
+                "description": "Liste des v\u00e9hicules du proprietaire (les siens) ou du livreur (ceux de son \u00e9quipe) \u2014 jamais toute la flotte de l'organisation. **Aucun statut \"Entretien\"/maintenance n'existe dans le mod\u00e8le ELM** \u2014 seul `is_active` (bool\u00e9en) existe ; n'affichez pas un statut de ce type sans colonne backend d\u00e9di\u00e9e (elle n'existe pas). `capacite`/`conducteur` sont des champs h\u00e9rit\u00e9s conserv\u00e9s pour compatibilit\u00e9 descendante \u2014 la source canonique est d\u00e9sormais `capacites[]` (une entr\u00e9e par cat\u00e9gorie, cf. VehiculeCapacite) et `equipe[]` (tous les membres actifs, avec `role` = valeur r\u00e9elle stock\u00e9e en base : `chauffeur`/`convoyeur`, jamais traduite ; `nom_complet` peut \u00eatre une d\u00e9signation provisoire comme `Chauffeur-1`, \u00e0 remplacer \u00e0 l'affichage par `prenom` + `nom` quand les deux sont renseign\u00e9s). `proprietaire` est `null` si le v\u00e9hicule n'a aucun propri\u00e9taire renseign\u00e9. Les v\u00e9hicules parrain\u00e9s n'y figurent pas : cf. `GET /v1/mobile/vehicules/rattaches`.",
                 "tags": [
                     "Vehicles"
                 ],
@@ -5032,6 +5890,47 @@
             }
         },
         "schemas": {
+            "ActiviteEarningsRow": {
+                "type": "object",
+                "properties": {
+                    "activite": {
+                        "type": "string"
+                    },
+                    "libelle": {
+                        "type": "string"
+                    },
+                    "total_earned": {
+                        "type": "number"
+                    },
+                    "total_paid": {
+                        "type": "number"
+                    },
+                    "en_attente_validation": {
+                        "type": "number"
+                    },
+                    "frais_depenses_total": {
+                        "type": "number"
+                    },
+                    "balance": {
+                        "type": "number"
+                    },
+                    "operations_count": {
+                        "type": "integer",
+                        "minimum": 0
+                    }
+                },
+                "required": [
+                    "activite",
+                    "libelle",
+                    "total_earned",
+                    "total_paid",
+                    "en_attente_validation",
+                    "frais_depenses_total",
+                    "balance",
+                    "operations_count"
+                ],
+                "title": "ActiviteEarningsRow"
+            },
             "CheckPhoneRequest": {
                 "type": "object",
                 "properties": {
@@ -5152,6 +6051,107 @@
                     "total_commande"
                 ],
                 "title": "CommandeVenteMineResource"
+            },
+            "CommissionClientRow": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "activite": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "activite_label": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "Propri\u00e9taire",
+                            "Livreur",
+                            "Parrain",
+                            "Consultant",
+                            null
+                        ]
+                    },
+                    "beneficiaire_libelle": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "operation": {
+                        "type": "string",
+                        "enum": [
+                            "logistique",
+                            "vente"
+                        ]
+                    },
+                    "operation_label": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "reference": {
+                        "type": "string"
+                    },
+                    "vehicule": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/VehiculeSummary"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "date": {
+                        "type": "string"
+                    },
+                    "montant_a_payer": {
+                        "type": "number"
+                    },
+                    "montant_verse": {
+                        "type": "number"
+                    },
+                    "montant_restant": {
+                        "type": "number"
+                    },
+                    "statut": {
+                        "type": "string"
+                    },
+                    "statut_label": {
+                        "type": "string",
+                        "enum": [
+                            "Cr\u00e9\u00e9e",
+                            "Impay\u00e9e",
+                            "Partiellement pay\u00e9e",
+                            "Pay\u00e9e",
+                            "Annul\u00e9e"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "activite",
+                    "activite_label",
+                    "beneficiaire_libelle",
+                    "operation",
+                    "operation_label",
+                    "reference",
+                    "vehicule",
+                    "date",
+                    "montant_a_payer",
+                    "montant_verse",
+                    "montant_restant",
+                    "statut",
+                    "statut_label"
+                ],
+                "title": "CommissionClientRow"
             },
             "CommissionParrainResource": {
                 "type": "object",
@@ -6619,6 +7619,28 @@
                     },
                     "balance": {
                         "type": "number"
+                    },
+                    "liens": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "par_activite": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "activite": {
+                                    "type": "string"
+                                },
+                                "total_earned": {
+                                    "type": "number"
+                                }
+                            },
+                            "required": [
+                                "activite",
+                                "total_earned"
+                            ]
+                        }
                     }
                 },
                 "required": [
@@ -6628,9 +7650,56 @@
                     "frais_depenses",
                     "total_earned",
                     "total_paid",
-                    "balance"
+                    "balance",
+                    "liens",
+                    "par_activite"
                 ],
                 "title": "VehiculeEarningsRow"
+            },
+            "VehiculeLieSummary": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "nom_vehicule": {
+                        "type": "string"
+                    },
+                    "immatriculation": {
+                        "type": "string"
+                    },
+                    "liens": {
+                        "type": "array",
+                        "items": {}
+                    }
+                },
+                "required": [
+                    "id",
+                    "nom_vehicule",
+                    "immatriculation",
+                    "liens"
+                ],
+                "title": "VehiculeLieSummary"
+            },
+            "VehiculeSummary": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "nom_vehicule": {
+                        "type": "string"
+                    },
+                    "immatriculation": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "nom_vehicule",
+                    "immatriculation"
+                ],
+                "title": "VehiculeSummary"
             },
             "WebPushSubscriptionStoreRequest": {
                 "type": "object",

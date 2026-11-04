@@ -211,8 +211,9 @@ Distribution.
 **Paiement (lot 3, 23/10/2026)** :
 - **PARRAIN-017 — Fiche « Parrain » à la quinzaine.** Type de période `parrain` (référence
   `PAY-AAAAMM-P1-PAR`), P1 du 1er au 15, P2 du 16 à la fin du mois. Une fiche par parrain et par
-  période (`PeriodeCalculatorService::calculerParrains()`), une ligne par vente, **sans déduction**
-  (aucune dépense n'est imputable à un parrain). Agence de paiement = site du véhicule, qui
+  période (`PeriodeCalculatorService::calculerParrains()`), une ligne par vente, moins les dépenses
+  validées imputées au parrain sur la quinzaine (PARRAIN-026 ; « sans déduction » jusqu'au
+  03/11/2026). Agence de paiement = site du véhicule, qui
   suit ses réaffectations comme la fiche du livreur (ADR 0020, `FicheSiteResponsableService`).
   La fiche naît dès la génération de la commission : la période « Parrains » qui la couvre est
   créée si elle n'existe pas encore (`CommissionEnveloppeGenerator::ouvrirPeriodesParrain()`,
@@ -229,11 +230,25 @@ Distribution.
   mécanisme commun des fiches (décaissement depuis un support, ADR 0009 ; fiche figée et fiche
   complémentaire, ADR 0010).
 - **PARRAIN-019 — Comptabilité.** À la validation : débit **622500 « Commissions parrains »**,
-  crédit **467210 « Parrains — commissions à payer »** (467220 pour d'éventuelles avances) ; au
+  crédit **467210 « Parrains — commissions à payer »** et, pour les dépenses retenues, crédit
+  **467220 « Parrains — avances à récupérer »** (PARRAIN-026) ; au
   paiement : débit 467210, crédit trésorerie (`fiche_parrain_validee`, `paiement_parrain`). La
   charge du parrain sort de celle des livreurs : 622200 + 622500 = l'enveloppe, jamais plus.
   Comptes créés par la migration `2026_10_23_100000_bootstrap_comptes_commission_parrain`
   (idempotente ; un numéro déjà utilisé pour un autre usage est signalé dans le journal).
+- **PARRAIN-026 — Dépenses imputées au parrain** (décision du 03/11/2026, révise PARRAIN-017). Un
+  type de dépense peut avoir pour concerné **Parrain** (Dépenses → Types de dépense). La dépense
+  désigne un parrain de l'organisation (`depenses.beneficiaire_type = parrain`, référentiel
+  `parrains`, aucun autre) ; à sa validation : imputation `commission_parrain` à la **quinzaine** de
+  sa date, écriture d'avance débit 467220 / crédit trésorerie (`depense_avance_tiers_validee`), puis
+  retenue sur la fiche Parrain de la quinzaine, dont la validation crédite 467220 (avance soldée).
+  Comme pour le livreur, la retenue ne se fait que sur une fiche existante : un parrain sans
+  commission sur la quinzaine n'a pas de fiche, la dépense attend. Une dépense validée après la
+  validation automatique de la période la rouvre (ADR 0008 révisé le 03/11/2026) ; si la fiche est
+  déjà payée, la retenue va sur une fiche complémentaire et le négatif est reporté (ADR 0010).
+  L'espace parrain (API `/v1/parrain`) n'affiche pas encore ces retenues. Mapping comptable posé
+  pour les organisations existantes par `2026_11_03_100000_bootstrap_mapping_depense_parrain`.
+  Cf. [depenses-concernes.md](depenses-concernes.md).
 - **PARRAIN-020 — Prévision de trésorerie.** Colonnes « Parrains P1 » / « Parrains P2 » du
   financement des agences (`ParrainObligationContributor`), restant dû des fiches, comme les
   livreurs.

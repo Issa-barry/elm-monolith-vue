@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
@@ -99,6 +100,7 @@ interface Salarie {
 interface Anomalie {
     code: string;
     niveau: 'bloquante' | 'avertissement';
+    employe_id: string | null;
     salarie: string | null;
     message: string;
 }
@@ -149,9 +151,9 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
     },
 ]);
 
-const formatGnf = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
+// null : pas de montant de ce côté de l'écart (élément ajouté ou retiré), à ne pas confondre avec 0 GNF.
 function gnf(valeur: number | null): string {
-    return valeur === null ? '—' : `${formatGnf.format(valeur)} GNF`;
+    return valeur === null ? '—' : formatGNF(valeur);
 }
 
 const bloquantes = computed(() =>
@@ -524,7 +526,9 @@ function periodeLigne(l: Ligne): string {
                         >
                             <td class="py-1 pr-2">{{ c.salarie }}</td>
                             <td class="py-1 pr-2">{{ c.element }}</td>
-                            <td class="py-1 pr-2 text-right tabular-nums">
+                            <td
+                                class="py-1 pr-2 text-right whitespace-nowrap tabular-nums"
+                            >
                                 {{ gnf(c.avant) }} → {{ gnf(c.apres) }}
                             </td>
                         </tr>
@@ -533,7 +537,7 @@ function periodeLigne(l: Ligne): string {
             </div>
 
             <!-- Totaux -->
-            <div class="grid gap-3 sm:grid-cols-3">
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div class="rounded-xl border bg-card p-4 sm:p-5">
                     <p class="text-sm text-muted-foreground">Salariés</p>
                     <p class="mt-1 text-2xl font-semibold tabular-nums">
@@ -542,7 +546,9 @@ function periodeLigne(l: Ligne): string {
                 </div>
                 <div class="rounded-xl border bg-card p-4 sm:p-5">
                     <p class="text-sm text-muted-foreground">Total à verser</p>
-                    <p class="mt-1 text-2xl font-semibold tabular-nums">
+                    <p
+                        class="mt-1 text-2xl font-semibold whitespace-nowrap tabular-nums"
+                    >
                         {{ gnf(totaux_visibles.verse) }}
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">
@@ -554,7 +560,7 @@ function periodeLigne(l: Ligne): string {
                         Avantages en nature
                     </p>
                     <p
-                        class="mt-1 text-2xl font-semibold text-muted-foreground tabular-nums"
+                        class="mt-1 text-2xl font-semibold whitespace-nowrap text-muted-foreground tabular-nums"
                     >
                         {{ gnf(totaux_visibles.valorise) }}
                     </p>
@@ -583,7 +589,14 @@ function periodeLigne(l: Ligne): string {
                     </p>
                     <ul class="mt-1 list-disc space-y-0.5 pl-5 text-xs">
                         <li v-for="(a, i) in bloquantes" :key="i">
-                            <strong>{{ a.salarie }}</strong> : {{ a.message }}
+                            <Link
+                                v-if="a.employe_id && can('rh-employes.read')"
+                                :href="`/backoffice/employes/${a.employe_id}`"
+                                class="font-bold underline underline-offset-2"
+                                >{{ a.salarie }}</Link
+                            >
+                            <strong v-else>{{ a.salarie }}</strong> :
+                            {{ a.message }}
                         </li>
                     </ul>
                 </div>
@@ -597,7 +610,14 @@ function periodeLigne(l: Ligne): string {
                     </p>
                     <ul class="mt-1 list-disc space-y-0.5 pl-5 text-xs">
                         <li v-for="(a, i) in avertissements" :key="i">
-                            <strong>{{ a.salarie }}</strong> : {{ a.message }}
+                            <Link
+                                v-if="a.employe_id && can('rh-employes.read')"
+                                :href="`/backoffice/employes/${a.employe_id}`"
+                                class="font-bold underline underline-offset-2"
+                                >{{ a.salarie }}</Link
+                            >
+                            <strong v-else>{{ a.salarie }}</strong> :
+                            {{ a.message }}
                         </li>
                     </ul>
                 </div>
@@ -644,14 +664,18 @@ function periodeLigne(l: Ligne): string {
                             <tr v-for="(e, i) in ecarts_precedente" :key="i">
                                 <td class="px-4 py-2">{{ e.salarie }}</td>
                                 <td class="px-4 py-2">{{ e.element }}</td>
-                                <td class="px-4 py-2 text-right tabular-nums">
+                                <td
+                                    class="px-4 py-2 text-right whitespace-nowrap tabular-nums"
+                                >
                                     {{ gnf(e.avant) }}
                                 </td>
-                                <td class="px-4 py-2 text-right tabular-nums">
+                                <td
+                                    class="px-4 py-2 text-right whitespace-nowrap tabular-nums"
+                                >
                                     {{ gnf(e.apres) }}
                                 </td>
                                 <td
-                                    class="px-4 py-2 text-right font-medium tabular-nums"
+                                    class="px-4 py-2 text-right font-medium whitespace-nowrap tabular-nums"
                                     :class="
                                         e.ecart < 0
                                             ? 'text-red-600 dark:text-red-400'
@@ -712,7 +736,7 @@ function periodeLigne(l: Ligne): string {
                                     {{ r.nb_salaries }}
                                 </td>
                                 <td
-                                    class="px-4 py-2 text-right font-medium tabular-nums"
+                                    class="px-4 py-2 text-right font-medium whitespace-nowrap tabular-nums"
                                 >
                                     {{ gnf(r.total) }}
                                 </td>
@@ -806,12 +830,14 @@ function periodeLigne(l: Ligne): string {
                             </p>
                         </div>
                         <div class="text-right text-sm">
-                            <p class="font-semibold tabular-nums">
+                            <p
+                                class="font-semibold whitespace-nowrap tabular-nums"
+                            >
                                 {{ gnf(s.total_verse) }}
                             </p>
                             <p
                                 v-if="s.total_valorise > 0"
-                                class="text-xs text-muted-foreground tabular-nums"
+                                class="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
                             >
                                 + {{ gnf(s.total_valorise) }} valorisés
                             </p>
@@ -875,7 +901,7 @@ function periodeLigne(l: Ligne): string {
                                         {{ periodeLigne(l) }}
                                     </td>
                                     <td
-                                        class="px-4 py-3 text-right tabular-nums"
+                                        class="px-4 py-3 text-right whitespace-nowrap tabular-nums"
                                     >
                                         <template
                                             v-if="l.montant_reference !== null"
@@ -896,7 +922,7 @@ function periodeLigne(l: Ligne): string {
                                         {{ l.detail_calcul }}
                                     </td>
                                     <td
-                                        class="px-4 py-3 text-right font-medium tabular-nums"
+                                        class="px-4 py-3 text-right font-medium whitespace-nowrap tabular-nums"
                                         :class="{
                                             'text-muted-foreground':
                                                 l.versement === 'valorise',

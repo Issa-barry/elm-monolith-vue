@@ -41,8 +41,9 @@ export interface LignePrime {
 
 /**
  * Primes ajoutées à la création du contrat (ADR 0048) : plusieurs lignes, comme les produits d'une
- * vente. Toujours validées à l'enregistrement ; les règles sont celles de « Primes des salariés »,
- * revérifiées par le serveur (ContratService::creerAvecPrimes).
+ * vente. Toujours validées à l'enregistrement ; les règles sont celles de la fiche du salarié,
+ * revérifiées par le serveur (ContratService::creerAvecPrimes). Elles appartiennent au salarié :
+ * elles continuent après la fin d'un CDD (ADR 0052).
  */
 const props = defineProps<{
     types: TypePrime[];
@@ -51,7 +52,6 @@ const props = defineProps<{
     primesEmploye: PrimeOccupee[];
     employeChoisi: boolean;
     dateDebutContrat: string;
-    dateFinContrat: string;
     errors: Record<string, string | undefined>;
 }>();
 
@@ -88,10 +88,7 @@ function periodeVisee(
         );
     }
 
-    return [
-        ligne?.date_debut || dateProposee.value || aujourdhui,
-        props.dateFinContrat || SANS_FIN,
-    ];
+    return [ligne?.date_debut || dateProposee.value || aujourdhui, SANS_FIN];
 }
 
 function dejaAttribue(t: TypePrime, ligne: LignePrime | null): boolean {

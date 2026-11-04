@@ -169,6 +169,50 @@ class PeriodeCalculatorService
         ];
     }
 
+    /**
+     * Dépenses validées après la validation de la période, à retenir sur la fiche d'un de ses
+     * bénéficiaires mais absentes de toute fiche (ADR 0008 révisé le 03/11/2026). Seuls les
+     * bénéficiaires ayant déjà une fiche dans la période comptent : le recalcul ne crée de fiche
+     * qu'à partir des commissions, une dépense seule n'y figurerait jamais. La borne `validated_at`
+     * (quand elle est connue) évite de rouvrir deux fois pour la même dépense.
+     */
+    public function depensesHorsFiches(PaiementPeriode $periode): int
+    {
+        $types = match ($periode->type) {
+            TypePeriodePaiement::LIVREUR => ['livreur'],
+            TypePeriodePaiement::PROPRIETAIRE => ['proprietaire', 'vehicule'],
+            TypePeriodePaiement::SITE => [CommissionEnveloppePart::TYPE_SITE],
+            TypePeriodePaiement::CONSULTANT => [CommissionEnveloppePart::TYPE_PRESTATAIRE],
+            TypePeriodePaiement::PARRAIN => [CommissionEnveloppePart::TYPE_PARRAIN],
+            default => [],
+        };
+
+        $fiches = $periode->fiches()->get(['id', 'beneficiaire_id']);
+        if ($types === [] || $fiches->isEmpty()) {
+            return 0;
+        }
+
+        $beneficiaires = $fiches->pluck('beneficiaire_id')->flip();
+        $surFiches = PaiementFicheLigne::whereIn('fiche_id', $fiches->pluck('id'))
+            ->where('source_type', Depense::class)
+            ->pluck('source_id')
+            ->flip();
+
+        return Depense::where('organization_id', $periode->organization_id)
+            ->where('statut', StatutDepense::VALIDE)
+            ->whereIn('beneficiaire_type', $types)
+            ->whereNotNull('beneficiaire_id')
+            ->whereBetween('date_depense', [$periode->date_debut, $periode->date_fin])
+            ->when($periode->validated_at, fn ($q, $validee) => $q->where('updated_at', '>=', $validee))
+            ->with('vehiculeBeneficiaire:id,proprietaire_id')
+            ->get()
+            ->reject(fn (Depense $d) => $surFiches->has($d->id))
+            ->filter(fn (Depense $d) => $beneficiaires->has(
+                $d->beneficiaire_type === 'vehicule' ? $d->vehiculeBeneficiaire?->proprietaire_id : $d->beneficiaire_id,
+            ))
+            ->count();
+    }
+
     // DateTimeInterface : les appelants passent indifféremment Carbon\Carbon ou
     // Illuminate\Support\Carbon (un typage strict faisait échouer l'appel du générateur).
     public function recalculerPeriodesConcernees(string $organizationId, \DateTimeInterface $date): void
@@ -703,9 +747,9 @@ class PeriodeCalculatorService
 
     /**
      * Fiches des parrains (ADR 0035) : leurs parts sortent de l'enveloppe de l'équipe de livraison,
-     * jamais d'une commission logistique legacy, et ne supportent aucune déduction (aucune dépense
-     * n'est imputable à un parrain). Agence de paiement = site du véhicule (ADR 0020), comme le
-     * livreur dont il partage l'enveloppe.
+     * jamais d'une commission logistique legacy. Les dépenses validées imputées au parrain sur la
+     * quinzaine y sont déduites (PARRAIN-026), comme sur la fiche du livreur. Agence de paiement =
+     * site du véhicule (ADR 0020), comme le livreur dont il partage l'enveloppe.
      */
     private function calculerParrains(PaiementPeriode $periode): int
     {
@@ -716,6 +760,15 @@ class PeriodeCalculatorService
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
                 ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
             ->with(['enveloppe.source.vehicule'])
+            ->get()
+            ->groupBy('beneficiaire_id');
+
+        $depenses = Depense::where('organization_id', $orgId)
+            ->where('statut', StatutDepense::VALIDE)
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PARRAIN)
+            ->whereNotNull('beneficiaire_id')
+            ->whereBetween('date_depense', [$periode->date_debut, $periode->date_fin])
+            ->with('depenseType')
             ->get()
             ->groupBy('beneficiaire_id');
 
@@ -746,6 +799,17 @@ class PeriodeCalculatorService
                     'ordre' => $ordre++,
                 ]);
                 $this->accumulerSite($montantParSite, $part->enveloppe->siteResponsableId(), $montant);
+            }
+
+            foreach ($depenses->get($parrainId, collect()) as $dep) {
+                $lignes->push([
+                    'source_type' => Depense::class,
+                    'source_id' => $dep->id,
+                    'type_ligne' => TypeLignePaiement::DEPENSE->value,
+                    'libelle' => $dep->depenseType?->libelle ?? 'Dépense',
+                    'montant' => -(float) $dep->montant,
+                    'ordre' => $ordre++,
+                ]);
             }
 
             if ($lignes->isEmpty()) {

@@ -5,7 +5,7 @@ namespace App\Services\Client\Data;
 use JsonSerializable;
 
 /**
- * Évolution des 5 KPI de `ClientEarningsService::calculateEarnings()`
+ * Évolution des 5 KPI de `ClientEarningsService::totaux()`
  * (même clés que `summary`) entre la période sélectionnée et la période
  * précédente de même durée — cf. `ClientEarningsService::summaryEvolution()`.
  *

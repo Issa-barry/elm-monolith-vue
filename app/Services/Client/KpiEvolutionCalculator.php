@@ -9,7 +9,7 @@ use App\Services\Client\Data\KpiEvolution;
  * Formule UNIQUE de comparaison de période pour tous les KPI du dashboard
  * espace client (cf. rapport du 27/08/2026) — centralisée ici pour ne
  * jamais la dupliquer par KPI (`ClientEarningsService::summaryEvolution()`
- * l'appelle une fois par champ de `calculateEarnings()`).
+ * l'appelle une fois par champ de `totaux()`).
  *
  * Cas particulier volontaire : `previous == 0`.
  * - `current == 0` aussi → 0 % / stable / comparable (deux zéros ne sont

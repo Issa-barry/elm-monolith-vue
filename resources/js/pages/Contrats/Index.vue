@@ -262,7 +262,18 @@ function confirmDelete(c: Contrat) {
                         style="width: 100px"
                     >
                         <template #body="{ data }">
+                            <Link
+                                v-if="can('rh-employes.read')"
+                                :href="`/backoffice/employes/${data.employe_id}`"
+                                class="text-sm underline-offset-2 hover:underline"
+                                :class="{
+                                    'text-muted-foreground': !data.primes_count,
+                                }"
+                                data-testid="nombre-primes"
+                                >{{ libellePrimes(data.primes_count) }}</Link
+                            >
                             <span
+                                v-else
                                 class="text-sm"
                                 :class="{
                                     'text-muted-foreground': !data.primes_count,

@@ -8,6 +8,7 @@ use App\Models\Depense;
 use App\Models\DroitCreationDepense;
 use App\Models\Employe;
 use App\Models\Livreur;
+use App\Models\Parrain;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\User;
@@ -139,6 +140,17 @@ final class DepenseListingService
                     ->orWhere(fn ($w2) => $w2
                         ->where('beneficiaire_type', 'prestataire')
                         ->whereHas('prestataireBeneficiaire', $this->matchPrestataireIdentite($like, $likeTel, $norm))
+                    )
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'parrain')
+                        ->whereHas('parrainBeneficiaire', fn ($q) => $q->whereHas('personne', function ($p) use ($like, $likeTel, $norm) {
+                            $p->where('nom', 'LIKE', $like)
+                                ->orWhere('prenom', 'LIKE', $like)
+                                ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
+                            if ($likeTel) {
+                                $p->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                            }
+                        }))
                     )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'client')
                     ->whereHas('clientBeneficiaire', fn ($q) => $q
@@ -187,6 +199,9 @@ final class DepenseListingService
                     ->where('beneficiaire_type', 'prestataire')
                     ->whereHas('prestataireBeneficiaire', $this->matchPrestataireIdentite($like, $likeTel, $norm))
                 )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'parrain')
+                    ->whereHas('parrainBeneficiaire', $matchPersonne)
+                )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'client')
                     ->whereHas('clientBeneficiaire', fn ($q) => $q
                         ->where('nom', 'LIKE', $like)
@@ -220,6 +235,9 @@ final class DepenseListingService
                         ->whereHas('personne', fn ($p) => $p->whereRaw("{$norm} LIKE ?", [$likeTel]))
                         ->orWhereHas('entrepriseTierce', fn ($e) => $e->whereRaw("REPLACE(REPLACE(telephone, ' ', ''), '-', '') LIKE ?", [$likeTel]))
                     )
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'parrain')
+                    ->whereHas('parrainBeneficiaire', $matchTel)
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'client')
                     ->whereHas('clientBeneficiaire', fn ($q) => $q->whereRaw("{$norm} LIKE ?", [$likeTel]))
@@ -424,6 +442,7 @@ final class DepenseListingService
                     'proprietaire' => Proprietaire::with('personne')->findMany($ids, $fields),
                     'prestataire' => Prestataire::with(['personne', 'entrepriseTierce'])->findMany($ids),
                     'client' => Client::findMany($ids, $fields),
+                    'parrain' => Parrain::with('personne')->findMany($ids, $fields),
                     default => collect(),
                 };
 

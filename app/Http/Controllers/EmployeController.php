@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\Civilite;
-use App\Enums\StatutAffectationRemuneration;
 use App\Enums\StatutContrat;
 use App\Enums\StatutEmploye;
 use App\Enums\TypeContrat;
@@ -173,7 +172,7 @@ class EmployeController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['statut', 'type_employe', 'type_contrat', 'service_rh_id', 'search']);
+        $filters = $request->only(['statut', 'type_employe', 'type_contrat', 'service_rh_id', 'search', 'primes']);
         $filtreSiteIds = $user->voitToutesLesAgences()
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : [];
@@ -205,6 +204,12 @@ class EmployeController extends Controller
                 $q->where('type_contrat', $filters['type_contrat'])
                     ->where('statut_contrat', StatutContrat::ACTIF->value);
             });
+        }
+
+        // Salariés dont une prime attend une validation : même droit que le bandeau de la liste.
+        $voitPrimes = $user->can('rh-affectations-remuneration.read');
+        if ($voitPrimes && ($filters['primes'] ?? null) === 'a_valider') {
+            $query->whereIn('id', AffectationRemuneration::where('organization_id', $orgId)->attendantValidation()->select('employe_id'));
         }
 
         if (! empty($filters['search'])) {
@@ -239,7 +244,18 @@ class EmployeController extends Controller
             'type_employe_options' => TypeEmploye::options(),
             'type_contrat_options' => TypeContrat::options(),
             'service_options' => $this->serviceOptions($orgId),
+            // null sans le droit de voir les primes : ni bandeau ni filtre.
+            'nb_primes_a_valider' => $voitPrimes ? $this->nombrePrimesAValider($user, $orgId) : null,
         ]);
+    }
+
+    /** Propositions à valider des salariés consultables (ADR 0052). */
+    private function nombrePrimesAValider(User $user, string $orgId): int
+    {
+        return AffectationRemuneration::where('organization_id', $orgId)
+            ->attendantValidation()
+            ->whereHas('employe', fn ($q) => app(SiteScopeService::class)->applyToQuery($q, $user))
+            ->count();
     }
 
     public function create(): Response
@@ -431,12 +447,13 @@ class EmployeController extends Controller
                 'peut_designer_pdg' => $employe->statut === StatutEmploye::ACTIF && PdgService::peutDesigner(auth()->user(), $employe),
             ]),
             'primes' => $this->primes($employe),
+            'primes_options' => $this->primesOptions($employe),
         ]);
     }
 
     /**
-     * Primes et avantages du salarié (hors annulées) : seulement avec
-     * `rh-affectations-remuneration.read` et pour un salarié d'une agence consultable — sinon
+     * Primes et avantages du salarié, annulées comprises (seul écran qui les montre) : seulement
+     * avec `rh-affectations-remuneration.read` et pour un salarié d'une agence consultable — sinon
      * null, jamais envoyé au navigateur.
      *
      * @return list<array<string, mixed>>|null
@@ -444,17 +461,29 @@ class EmployeController extends Controller
     private function primes(Employe $employe): ?array
     {
         $user = auth()->user();
-        if (! $user->can('rh-affectations-remuneration.read') || ! AffectationRemunerationService::peutConsulter($employe, $user)) {
+        if (! $this->peutVoirPrimes($employe, $user)) {
             return null;
         }
 
         $affectations = AffectationRemuneration::where('employe_id', $employe->id)
-            ->where('statut', '!=', StatutAffectationRemuneration::ANNULEE->value)
             ->with(AffectationRemunerationPresenter::RELATIONS)
             ->orderByDesc('date_debut')
             ->get();
 
         return (new AffectationRemunerationPresenter($user))->liste($affectations);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function primesOptions(Employe $employe): ?array
+    {
+        $user = auth()->user();
+
+        return $this->peutVoirPrimes($employe, $user) ? (new AffectationRemunerationPresenter($user))->optionsFiche($employe) : null;
+    }
+
+    private function peutVoirPrimes(Employe $employe, User $user): bool
+    {
+        return $user->can('rh-affectations-remuneration.read') && AffectationRemunerationService::peutConsulter($employe, $user);
     }
 
     /**

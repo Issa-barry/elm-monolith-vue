@@ -200,6 +200,99 @@ class DepensesControllerTest extends TestCase
             ->assertJsonPath('data.0.montant', 7000);
     }
 
+    public function test_total_valide_includes_older_depenses_without_period_filter(): void
+    {
+        // Régression 03/11 : une avance validée en septembre affichait 0 GNF sur l'accueil
+        // en novembre, alors que la page Dépenses (toutes périodes) la comptait.
+        $org = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+        $this->makeDepensePersonnelle($org, $user->livreur->id, [
+            'montant' => 2000,
+            'date_depense' => now()->subMonths(2)->toDateString(),
+        ]);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine', ['statut' => StatutDepense::VALIDE->value, 'per_page' => 1]))
+            ->assertOk()
+            ->assertJsonPath('total_valide', 2000);
+    }
+
+    public function test_total_valide_covers_vehicule_and_personal_depenses_of_livreur_only_when_validated(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeLivreurUser($org);
+        $autreLivreur = $this->makeLivreurUser($org);
+        $vehicule = $this->makeVehicule($org, $this->makeProprietaireUser($org)->proprietaire->id);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $org->id,
+            'vehicule_id' => $vehicule->id,
+            'nom' => 'Equipe Test',
+            'is_active' => true,
+            'taux_commission_proprietaire' => 0,
+        ]);
+        EquipeLivreur::create([
+            'equipe_id' => $equipe->id,
+            'livreur_id' => $user->livreur->id,
+            'role' => 'chauffeur',
+            'ordre' => 1,
+        ]);
+
+        $this->makeDepense($org, $vehicule, ['montant' => 7000]);
+        $this->makeDepense($org, $vehicule, ['montant' => 900, 'statut' => StatutDepense::SOUMIS->value]);
+        $this->makeDepensePersonnelle($org, $user->livreur->id, ['montant' => 2000]);
+        $this->makeDepensePersonnelle($org, $autreLivreur->livreur->id, ['montant' => 50000]);
+
+        Sanctum::actingAs($user, ['*']);
+
+        // Sans filtre de statut, la liste contient aussi la dépense soumise, pas le total.
+        $this->getJson(route('client.depenses.mine', ['per_page' => 1]))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.total', 3)
+            ->assertJsonPath('total_valide', 9000);
+    }
+
+    public function test_total_valide_respects_filters(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $vehiculeA = $this->makeVehicule($org, $user->proprietaire->id, 'Vehicule A');
+        $vehiculeB = $this->makeVehicule($org, $user->proprietaire->id, 'Vehicule B');
+
+        $this->makeDepense($org, $vehiculeA, ['montant' => 4000, 'date_depense' => '2026-08-10']);
+        $this->makeDepense($org, $vehiculeB, ['montant' => 6000, 'date_depense' => '2026-09-10']);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine', ['vehicule_id' => $vehiculeA->id]))
+            ->assertOk()
+            ->assertJsonPath('total_valide', 4000);
+        $this->getJson(route('client.depenses.mine', ['date_debut' => '2026-09-01', 'date_fin' => '2026-09-30']))
+            ->assertOk()
+            ->assertJsonPath('total_valide', 6000);
+        $this->getJson(route('client.depenses.mine', ['statut' => StatutDepense::SOUMIS->value]))
+            ->assertOk()
+            ->assertJsonPath('total_valide', 0);
+    }
+
+    public function test_total_valide_is_isolated_between_organizations(): void
+    {
+        $org = Organization::factory()->create();
+        $autreOrg = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $vehicule = $this->makeVehicule($org, $user->proprietaire->id);
+
+        $this->makeDepense($org, $vehicule, ['montant' => 4000]);
+        $this->makeDepense($autreOrg, $vehicule, ['montant' => 80000]);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine'))
+            ->assertOk()
+            ->assertJsonPath('total_valide', 4000);
+    }
+
     public function test_livreur_filters_apply_to_their_own_depenses(): void
     {
         $org = Organization::factory()->create();

@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\DepenseType;
 use App\Models\Employe;
 use App\Models\Livreur;
+use App\Models\Parrain;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -140,6 +141,24 @@ final class DepenseFormOptionsLoader
                 'id' => $p->id,
                 'nom_complet' => $p->nom_complet,
                 'telephone' => $p->phone,
+                // Le concerné « Consultant » ne propose que les prestataires de ce type.
+                'type' => $p->type?->value,
+            ])
+            ->values();
+    }
+
+    public static function parrains(string $orgId): Collection
+    {
+        return Parrain::with(['personne', 'vehicules'])
+            ->where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->get()
+            ->sortBy('nom_complet')
+            ->map(fn (Parrain $p) => [
+                'id' => $p->id,
+                'nom_complet' => $p->nom_complet,
+                'telephone' => $p->telephone,
+                ...self::vehiculeInfoDepuis($p->vehicules),
             ])
             ->values();
     }

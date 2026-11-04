@@ -42,6 +42,7 @@ class ProfileResource extends JsonResource
                 default => null,
             },
             'pays_disponibles' => UpdateProfileRequest::paysDisponibles(),
+            'pays_options' => UpdateProfileRequest::paysOptions(),
         ];
     }
 

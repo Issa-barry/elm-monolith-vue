@@ -35,11 +35,11 @@ class DepenseObserver
 
         match ($depense->beneficiaire_type) {
             'employe' => $this->syncPaieLigne($depense),
-            // Une dépense livreur/propriétaire/véhicule (dé)validée modifie le net à payer d'une
-            // période de paiement déjà calculée (cf. PeriodeCalculatorService::signatureSource) :
+            // Une dépense livreur/propriétaire/véhicule/prestataire/parrain (dé)validée modifie le net
+            // à payer d'une période déjà calculée, ou la rouvre si elle est validée (ADR 0008) :
             // on la recalcule immédiatement plutôt que de laisser des montants obsolètes affichés
             // jusqu'à la prochaine ouverture de la page.
-            'livreur', 'proprietaire', 'vehicule' => $this->recalculerPeriodePaiement($depense),
+            'livreur', 'proprietaire', 'vehicule', 'prestataire', 'parrain' => $this->recalculerPeriodePaiement($depense),
             default => null,
         };
 

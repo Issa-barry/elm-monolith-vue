@@ -16,9 +16,17 @@ use JsonSerializable;
  * spec générée. Suit la convention déjà en place (`ClientIdentity`) :
  * propriétés PHP en camelCase, clés JSON en snake_case via `jsonSerialize()`
  * — jamais l'inverse, le contrat API existant ne bouge pas.
+ *
+ * `liens` : nature du rattachement actuel du compte au véhicule (vide pour un véhicule quitté ou
+ * vu seulement au travers d'une commission de consultant). `par_activite` : gains du compte sur ce
+ * véhicule, par activité (ADR 0054).
  */
 final class VehiculeEarningsRow implements JsonSerializable
 {
+    /**
+     * @param  string[]  $liens
+     * @param  array<int, array{activite: string, total_earned: float}>  $parActivite
+     */
     public function __construct(
         public readonly string $vehiculeId,
         public readonly string $nomVehicule,
@@ -27,6 +35,8 @@ final class VehiculeEarningsRow implements JsonSerializable
         public readonly float $totalEarned,
         public readonly float $totalPaid,
         public readonly float $balance,
+        public readonly array $liens = [],
+        public readonly array $parActivite = [],
     ) {}
 
     public function jsonSerialize(): array
@@ -39,6 +49,8 @@ final class VehiculeEarningsRow implements JsonSerializable
             'total_earned' => $this->totalEarned,
             'total_paid' => $this->totalPaid,
             'balance' => $this->balance,
+            'liens' => array_values($this->liens),
+            'par_activite' => $this->parActivite,
         ];
     }
 }

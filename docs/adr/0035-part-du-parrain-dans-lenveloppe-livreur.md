@@ -75,7 +75,8 @@ barèmes sont par catégorie et type de véhicule, jamais par véhicule).
 ## Lot 3 — livré le 2026-10-23
 
 - **Période et fiche** : type `parrain` (quinzaine, abréviation `PAR`), `calculerParrains()` (sans
-  déduction, agence = site du véhicule, réaffectation ADR 0020), validation automatique.
+  déduction à l'origine — révisé le 03/11/2026, cf. Lot 10 —, agence = site du véhicule,
+  réaffectation ADR 0020), validation automatique.
 - **Comptabilité** (choix du 23/10/2026) : compte de charge dédié **622500 « Commissions
   parrains »**, dette 467210, avances 467220 ; événements `fiche_parrain_validee` et
   `paiement_parrain`, réaffectation d'agence ; migration de mise en place idempotente.
@@ -226,6 +227,18 @@ versionnement, de la conformité, de l'équipe et des fiches en dépendent) ;
 `PartageParrainService::appliquerChangementDeParrain()` traite aussi le partage Logistique ;
 `PartParrainService::definir()` ne date jamais un partage Logistique avant aujourd'hui ; onglet
 Parrain sans la ligne « Jamais rémunéré ».
+
+## Lot 10 — dépenses imputées au parrain (2026-11-03, PARRAIN-026)
+
+Décision de l'utilisateur : « Parrain » devient un concerné de type de dépense, et la dépense est
+**déduite de la fiche Parrain** de la quinzaine, comme pour un livreur. Contradiction signalée avec
+PARRAIN-017 (« aucune dépense n'est imputable à un parrain ») et assumée. Comptabilisation en avance
+tiers (467220), soldée par la validation de la fiche. Comme la période Parrain se valide d'elle-même
+dès la première vente, une dépense validée ensuite rouvre la période (ADR 0008, révision du
+03/11/2026, commune à tous les bénéficiaires). Mise en œuvre : `CategorieDepense::PARRAIN`,
+`calculerParrains()`, `DepenseComptabilisationService`, mapping `depense_avance_tiers_validee` /
+`avance_tiers_parrain`. Tests : `DepenseConcerneConsultantParrainTest`,
+`ParrainFichePaiementTest::test_une_depense_imputee_au_parrain_*`.
 
 ## Conséquences
 

@@ -71,14 +71,14 @@ class ContratService
             throw ValidationException::withMessages(['date_debut' => 'La prime ne peut pas commencer après la fin du contrat ('.$contrat->date_fin->format('d/m/Y').').']);
         }
 
-        // Une prime mensuelle s'arrête avec le CDD, ou plus tôt si le type lui-même prend fin.
-        $fins = array_filter([$contrat->date_fin?->toDateString(), $type->date_fin_application?->toDateString()]);
+        // La prime appartient au salarié : elle survit à la fin du CDD (ADR 0052). Seul le type peut lui imposer une fin.
+        $fin = $type->date_fin_application?->toDateString();
 
         app(AffectationRemunerationService::class)->affecter([
             'employe_id' => $contrat->employe_id,
             'type_remuneration_id' => $type->id,
             'date_debut' => $debut->toDateString(),
-            'date_fin' => $ponctuelle || $fins === [] ? null : min($fins),
+            'date_fin' => $ponctuelle ? null : $fin,
             'montant' => $prime['montant'] ?? null,
             'taux' => $prime['taux'] ?? null,
         ], $acteur, valider: true);

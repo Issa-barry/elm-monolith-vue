@@ -4,17 +4,22 @@ namespace App\Support\Rh;
 
 use App\Enums\ModeCalculRemuneration;
 use App\Enums\NatureMontantRemuneration;
+use App\Enums\StatutEmploye;
+use App\Enums\StatutTypeRemuneration;
 use App\Models\AffectationRemuneration;
+use App\Models\Employe;
 use App\Models\SaisieRemuneration;
 use App\Models\TransmissionPaie;
 use App\Models\TransmissionPaieLigne;
+use App\Models\TypeRemuneration;
 use App\Models\User;
+use App\Services\Rh\AffectationRemunerationService;
+use App\Services\Rh\Paie\CalendrierPaieService;
 use Illuminate\Support\Collection;
 
 /**
- * Mise en forme des affectations pour l'écran « Primes des salariés » et la fiche salarié. Les
- * droits d'agir (agence du salarié) sont calculés ici une fois pour toute la liste ; le serveur
- * les revérifie à chaque action.
+ * Mise en forme des primes de la fiche salarié (ADR 0052). Les droits d'agir (agence du salarié)
+ * sont calculés ici une fois pour toute la liste ; le serveur les revérifie à chaque action.
  */
 class AffectationRemunerationPresenter
 {
@@ -46,6 +51,55 @@ class AffectationRemunerationPresenter
             ->all();
 
         return $affectations->map(fn (AffectationRemuneration $a) => $this->ligne($a))->values()->all();
+    }
+
+    /**
+     * Données des fenêtres de la fiche : types, primes déjà occupées (aide à la saisie, le refus
+     * serveur d'AFF-004 reste l'autorité), premier jour modifiable, droit d'attribuer.
+     *
+     * @return array<string, mixed>
+     */
+    public function optionsFiche(Employe $employe): array
+    {
+        $orgId = $employe->organization_id;
+        $premierJour = app(CalendrierPaieService::class)->premierJourModifiable($orgId);
+        $occupations = app(AffectationRemunerationService::class)->primesOccupeesParEmploye($orgId, [$employe->id]);
+
+        return [
+            'types' => $this->types($orgId),
+            'primes_occupees' => $occupations[$employe->id] ?? [],
+            'premier_jour_modifiable' => $premierJour?->toDateString(),
+            'peut_attribuer' => PerimetreEmploye::peutModifier($this->user, $employe)
+                && ! ($employe->statut === StatutEmploye::SORTI && $employe->date_sortie === null),
+        ];
+    }
+
+    /**
+     * Tous les types de l'organisation ; `attribuable` = actif (la période d'application est
+     * revérifiée par le serveur à la date d'effet).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function types(string $orgId): array
+    {
+        return TypeRemuneration::where('organization_id', $orgId)
+            ->orderBy('libelle')
+            ->get()
+            ->map(fn (TypeRemuneration $t) => [
+                'value' => $t->id,
+                'label' => $t->libelle,
+                'valorise' => $t->categorie->estValorise(),
+                'mode_calcul' => $t->mode_calcul->value,
+                'periodicite' => $t->periodicite->value,
+                'nature_montant' => $t->nature_montant->value,
+                'cumul_autorise' => $t->cumul_autorise,
+                'montant_defaut' => $t->montant_defaut !== null ? (float) $t->montant_defaut : null,
+                'taux_defaut' => $t->taux_defaut !== null ? (float) $t->taux_defaut : null,
+                'date_fin_application' => $t->date_fin_application?->toDateString(),
+                'attribuable' => $t->statut === StatutTypeRemuneration::ACTIF,
+            ])
+            ->values()
+            ->all();
     }
 
     /** @return array<string, mixed> */

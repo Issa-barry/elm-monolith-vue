@@ -275,6 +275,11 @@ class UpdateProfileControllerTest extends TestCase
         $liste = $this->getJson(route('client.profile.mine'))->assertOk()->json('pays_disponibles');
         $this->assertContains('Sénégal', $liste);
 
+        // Mêmes pays, dans le même ordre, avec le code ISO qui donne le drapeau.
+        $options = $this->getJson(route('client.profile.mine'))->json('pays_options');
+        $this->assertSame($liste, array_column($options, 'label'));
+        $this->assertContains(['label' => 'Sénégal', 'code' => 'SN'], $options);
+
         $this->patchJson(route('client.profile.update'), ['pays' => 'Atlantide'])
             ->assertStatus(422)
             ->assertJsonValidationErrors(['pays']);

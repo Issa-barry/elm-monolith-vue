@@ -11,7 +11,6 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     Briefcase,
     Crown,
-    Gift,
     History,
     Loader2,
     LogOut,
@@ -24,6 +23,10 @@ import {
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import { computed, ref } from 'vue';
+import PrimesSalarie, {
+    type Affectation,
+    type PrimesOptions,
+} from './partials/PrimesSalarie.vue';
 
 interface ContratRow {
     id: string;
@@ -99,21 +102,11 @@ interface EmployeData {
     peut_designer_pdg: boolean;
 }
 
-interface PrimeRow {
-    id: string;
-    type: { libelle: string; categorie_label: string; valorise: boolean };
-    date_debut: string;
-    date_fin: string | null;
-    valeur_label: string;
-    etat: string;
-    etat_label: string;
-    attend_validation: boolean;
-}
-
 const props = defineProps<{
     employe: EmployeData;
     // null sans la permission rh-affectations-remuneration.read (jamais envoyé)
-    primes: PrimeRow[] | null;
+    primes: Affectation[] | null;
+    primes_options: PrimesOptions | null;
 }>();
 
 const { can } = usePermissions();
@@ -686,74 +679,13 @@ function dateFr(iso: string | null): string {
                     </div>
 
                     <!-- Primes et avantages : transmis seulement avec rh-affectations-remuneration.read -->
-                    <div
-                        v-if="primes !== null"
-                        class="overflow-hidden rounded-xl border bg-card"
-                        data-testid="employe-primes"
-                    >
-                        <div
-                            class="flex items-center justify-between gap-4 border-b px-5 py-4"
-                        >
-                            <h3
-                                class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                            >
-                                <Gift class="h-4 w-4" />
-                                Primes et avantages
-                            </h3>
-                            <Link
-                                :href="`/backoffice/affectations-remuneration?employe_id=${employe.id}`"
-                                class="text-xs font-medium text-primary hover:underline"
-                            >
-                                Gérer
-                            </Link>
-                        </div>
-                        <div
-                            v-if="primes.length === 0"
-                            class="p-6 text-center text-sm text-muted-foreground"
-                        >
-                            Aucune prime ni aucun avantage attribué.
-                        </div>
-                        <div v-else class="divide-y">
-                            <div
-                                v-for="p in primes"
-                                :key="p.id"
-                                class="flex items-center justify-between gap-3 p-4 text-sm"
-                            >
-                                <div>
-                                    <p class="font-medium">
-                                        {{ p.type.libelle }}
-                                        <span
-                                            class="font-normal text-muted-foreground"
-                                            >— {{ p.valeur_label }}</span
-                                        >
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{ p.type.categorie_label }}
-                                        <template v-if="p.type.valorise">
-                                            (valorisé, hors net)</template
-                                        >
-                                        · du {{ dateFr(p.date_debut) }}
-                                        <template v-if="p.date_fin">
-                                            au
-                                            {{ dateFr(p.date_fin) }}</template
-                                        >
-                                    </p>
-                                </div>
-                                <StatusDot
-                                    :status="
-                                        p.attend_validation
-                                            ? 'a_valider'
-                                            : p.etat
-                                    "
-                                    :label="
-                                        p.attend_validation
-                                            ? 'À valider'
-                                            : p.etat_label
-                                    "
-                                />
-                            </div>
-                        </div>
-                    </div>
+                    <PrimesSalarie
+                        v-if="primes !== null && primes_options !== null"
+                        :key="employe.id"
+                        :employe-id="employe.id"
+                        :primes="primes"
+                        :options="primes_options"
+                    />
 
                     <div
                         v-if="employe.affectations.length > 0"

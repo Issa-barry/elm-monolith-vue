@@ -226,8 +226,7 @@ function submit() {
                                 <InfoTooltip label="Aide : salaire de base">
                                     Salaire de base mensuel prévu au contrat,
                                     distinct des primes et autres éléments de
-                                    rémunération (écran « Primes des salariés
-                                    »).
+                                    rémunération (fiche du salarié).
                                 </InfoTooltip>
                             </div>
                             <MontantInput
@@ -257,7 +256,7 @@ function submit() {
                         :errors="form.errors"
                     />
 
-                    <!-- Lecture seule : « Primes des salariés » garde l'historique des montants. -->
+                    <!-- Lecture seule : la fiche du salarié garde l'historique des montants. -->
                     <div
                         v-if="primes"
                         class="space-y-1 border-t pt-5"
@@ -270,10 +269,11 @@ function submit() {
                                 Primes et avantages
                             </h4>
                             <Link
-                                :href="`/backoffice/affectations-remuneration?employe_id=${contrat.employe_id}`"
+                                v-if="can('rh-employes.read')"
+                                :href="`/backoffice/employes/${contrat.employe_id}`"
                                 class="text-xs underline underline-offset-2"
                             >
-                                Gérer dans Primes des salariés
+                                Gérer sur la fiche du salarié
                             </Link>
                         </div>
                         <p

@@ -938,9 +938,8 @@ Route::prefix('backoffice')->group(function () {
                     ->whereIn('action', ['valider', 'fermer', 'desactiver', 'reactiver'])
                     ->name('statut');
             });
-            // Primes des salariés : affectations datées et montants mensuels (ADR 0039).
+            // Primes d'un salarié, gérées depuis sa fiche : affectations datées et montants mensuels (ADR 0039, ADR 0052).
             Route::prefix('affectations-remuneration')->name('affectations-remuneration.')->group(function () {
-                Route::get('/', [AffectationRemunerationController::class, 'index'])->name('index');
                 Route::post('/', [AffectationRemunerationController::class, 'store'])->name('store');
                 Route::patch('saisies/{saisie}/valider', [SaisieRemunerationController::class, 'valider'])->name('saisies.valider');
                 Route::delete('saisies/{saisie}', [SaisieRemunerationController::class, 'destroy'])->name('saisies.destroy');
