@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\Backoffice\StatsController;
 use App\Http\Controllers\Api\Client\ActiviteController;
 use App\Http\Controllers\Api\Client\Commandes\IndexCommandeController;
 use App\Http\Controllers\Api\Client\Commandes\ShowCommandeController;
+use App\Http\Controllers\Api\Client\CommissionsCompteController;
 use App\Http\Controllers\Api\Client\DashboardController;
 use App\Http\Controllers\Api\Client\DepensesController;
 use App\Http\Controllers\Api\Client\GainsController;
@@ -38,6 +39,7 @@ use App\Http\Controllers\Api\Client\UpdateProfileController;
 use App\Http\Controllers\Api\Client\VehiculeCommissionsController;
 use App\Http\Controllers\Api\Client\VehiculeFraisController;
 use App\Http\Controllers\Api\Client\VehiculesController;
+use App\Http\Controllers\Api\Client\VehiculesRattachesController;
 use App\Http\Controllers\Api\Mobile\ChangePasswordController;
 use App\Http\Controllers\Api\Mobile\ContactController;
 use App\Http\Controllers\Api\Mobile\Logistique\ConfirmerDepartController;
@@ -222,6 +224,8 @@ Route::middleware('auth:sanctum')->group(function () {
             // route('client.dashboard') ambigu pour l'helper de nommage Laravel.
             Route::get('dashboard', DashboardController::class)
                 ->name('client.dashboard.mine');
+            Route::get('commissions', CommissionsCompteController::class)
+                ->name('client.commissions.mine');
             Route::get('depenses/mine', DepensesController::class)
                 ->name('client.depenses.mine');
             Route::get('activite', ActiviteController::class)
@@ -239,6 +243,8 @@ Route::middleware('auth:sanctum')->group(function () {
                 ->name('client.propositions-vehicules.store');
             Route::get('vehicules/mine', VehiculesController::class)
                 ->name('client.vehicules.mine');
+            Route::get('vehicules/rattaches', VehiculesRattachesController::class)
+                ->name('client.vehicules.rattaches');
             Route::get('vehicules/{vehiculeId}/commissions', VehiculeCommissionsController::class)
                 ->name('client.vehicules.commissions');
             Route::get('vehicules/{vehiculeId}/frais', VehiculeFraisController::class)

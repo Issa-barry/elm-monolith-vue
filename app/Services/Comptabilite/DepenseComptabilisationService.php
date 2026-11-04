@@ -6,6 +6,7 @@ use App\Enums\CategorieDepense;
 use App\Enums\EvenementComptable;
 use App\Models\Depense;
 use App\Models\Livreur;
+use App\Models\Parrain;
 use App\Models\PieceComptable;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
@@ -16,7 +17,7 @@ use Illuminate\Support\Carbon;
  * Traduit la validation d'une Depense en écriture comptable.
  *
  * Point d'attention (règle #22 de la spec) : une dépense catégorie VEHICULE/
- * PROPRIETAIRE/LIVREUR n'est PAS une charge d'ELM — DepenseImputationService
+ * PROPRIETAIRE/LIVREUR/PARRAIN n'est PAS une charge d'ELM — DepenseImputationService
  * la traite déjà aujourd'hui comme une simple retenue sur la commission du
  * bénéficiaire. Elle est donc comptabilisée
  * comme une AVANCE récupérable sur le tiers (créance), jamais comme une
@@ -48,7 +49,7 @@ class DepenseComptabilisationService
             // client. Elle est donc une charge décaissée, puis déduite du net encore versable,
             // jamais une avance tiers à solder une seconde fois.
             CategorieDepense::INTERNE, CategorieDepense::CLIENT => EvenementComptable::DEPENSE_INTERNE_VALIDEE,
-            CategorieDepense::VEHICULE, CategorieDepense::PROPRIETAIRE, CategorieDepense::LIVREUR => EvenementComptable::DEPENSE_AVANCE_TIERS_VALIDEE,
+            CategorieDepense::VEHICULE, CategorieDepense::PROPRIETAIRE, CategorieDepense::LIVREUR, CategorieDepense::PARRAIN => EvenementComptable::DEPENSE_AVANCE_TIERS_VALIDEE,
             default => null,
         };
     }
@@ -60,7 +61,7 @@ class DepenseComptabilisationService
 
         return match ($categorie) {
             CategorieDepense::INTERNE, CategorieDepense::CLIENT => $this->comptabiliserInterne($depense),
-            CategorieDepense::VEHICULE, CategorieDepense::PROPRIETAIRE, CategorieDepense::LIVREUR => $this->comptabiliserAvanceTiers($depense, $categorie),
+            CategorieDepense::VEHICULE, CategorieDepense::PROPRIETAIRE, CategorieDepense::LIVREUR, CategorieDepense::PARRAIN => $this->comptabiliserAvanceTiers($depense, $categorie),
             // EMPLOYE (salaire) : géré par le module Paie existant, hors périmètre V1
             // de la comptabilité générale — laissé volontairement non branché.
             default => null,
@@ -142,6 +143,10 @@ class DepenseComptabilisationService
 
         if ($categorie === CategorieDepense::PROPRIETAIRE) {
             return ['proprietaire', Proprietaire::find($depense->beneficiaire_id)];
+        }
+
+        if ($categorie === CategorieDepense::PARRAIN) {
+            return ['parrain', Parrain::find($depense->beneficiaire_id)];
         }
 
         return ['livreur', Livreur::find($depense->beneficiaire_id)];

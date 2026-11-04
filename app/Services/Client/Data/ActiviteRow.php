@@ -11,6 +11,10 @@ use JsonSerializable;
  * avant pagination) — volontairement absent de `jsonSerialize()`, jamais
  * exposé (remplace l'ancien `unset($row['date_sort'])` fait à la main après
  * pagination).
+ *
+ * Vente : `statutLabel` est le libellé affiché au back-office
+ * (`CommandeVente::statutAffichage()`), `statutPaiement` celui de la facture.
+ * Logistique : aucun paiement, les deux champs de paiement valent null.
  */
 final class ActiviteRow implements JsonSerializable
 {
@@ -26,6 +30,8 @@ final class ActiviteRow implements JsonSerializable
         public readonly ?string $date,
         public readonly int $dateSort,
         public readonly int $nbPacks,
+        public readonly ?string $statutPaiement = null,
+        public readonly ?string $statutPaiementLabel = null,
     ) {}
 
     public function jsonSerialize(): array
@@ -36,6 +42,8 @@ final class ActiviteRow implements JsonSerializable
             'reference' => $this->reference,
             'statut' => $this->statut,
             'statut_label' => $this->statutLabel,
+            'statut_paiement' => $this->statutPaiement,
+            'statut_paiement_label' => $this->statutPaiementLabel,
             'site_source' => $this->siteSource,
             'site_destination' => $this->siteDestination,
             'vehicule' => $this->vehicule,

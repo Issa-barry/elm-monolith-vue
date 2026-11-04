@@ -5,11 +5,13 @@ namespace App\Services;
 use App\Enums\AuditEvent;
 use App\Enums\EvenementComptable;
 use App\Enums\StatutCommission;
+use App\Enums\StatutDepense;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\StatutPieceComptable;
 use App\Enums\TypePeriodePaiement;
 use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistiquePart;
+use App\Models\Depense;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFicheLigne;
 use App\Models\PaiementFichePaiement;
@@ -182,14 +184,17 @@ class PeriodeValidationService
         }
 
         $horsFiches = app(PeriodeCalculatorService::class)->commissionsHorsFiches($periode);
+        $depensesHorsFiches = app(PeriodeCalculatorService::class)->depensesHorsFiches($periode);
         $obsoletes = $this->lignesObsoletes($periode);
-        if ($horsFiches['nombre'] === 0 && $obsoletes === 0) {
+        if ($horsFiches['nombre'] === 0 && $depensesHorsFiches === 0 && $obsoletes === 0) {
             return false;
         }
 
-        $motif = $horsFiches['nombre'] > 0
-            ? "{$horsFiches['nombre']} commission(s) arrivée(s) après la validation"
-            : "{$obsoletes} commission(s) annulée(s) après la validation (retour ou annulation de commande)";
+        $motif = match (true) {
+            $horsFiches['nombre'] > 0 => "{$horsFiches['nombre']} commission(s) arrivée(s) après la validation",
+            $depensesHorsFiches > 0 => "{$depensesHorsFiches} dépense(s) validée(s) après la validation",
+            default => "{$obsoletes} commission(s) ou dépense(s) annulée(s) après la validation (retour, annulation de commande, dépense dévalidée)",
+        };
 
         try {
             DB::transaction(function () use ($periode, $motif) {
@@ -245,12 +250,14 @@ class PeriodeValidationService
         }
 
         return app(PeriodeCalculatorService::class)->commissionsHorsFiches($periode)['nombre'] > 0
+            || app(PeriodeCalculatorService::class)->depensesHorsFiches($periode) > 0
             || $this->lignesObsoletes($periode) > 0;
     }
 
     /**
-     * Lignes de fiche non figée dont la commission source a été annulée ou supprimée depuis le
-     * calcul (retour de livraison, annulation de commande) : la fiche porterait un montant périmé.
+     * Lignes de fiche non figée dont la source a été annulée ou supprimée depuis le calcul
+     * (retour de livraison, annulation de commande, dépense dévalidée ou supprimée) : la fiche
+     * porterait un montant périmé.
      */
     private function lignesObsoletes(PaiementPeriode $periode): int
     {
@@ -259,13 +266,17 @@ class PeriodeValidationService
             ->pluck('id');
 
         $lignes = PaiementFicheLigne::whereIn('fiche_id', $ficheIds)
-            ->whereIn('source_type', [CommissionEnveloppePart::class, CommissionLogistiquePart::class])
+            ->whereIn('source_type', [CommissionEnveloppePart::class, CommissionLogistiquePart::class, Depense::class])
             ->get(['source_type', 'source_id']);
 
         $obsoletes = 0;
         foreach ($lignes->groupBy('source_type') as $type => $groupe) {
             $actives = $type::whereIn('id', $groupe->pluck('source_id'))
-                ->where('statut', '!=', StatutCommission::ANNULEE->value)
+                ->when(
+                    $type === Depense::class,
+                    fn ($q) => $q->where('statut', StatutDepense::VALIDE->value),
+                    fn ($q) => $q->where('statut', '!=', StatutCommission::ANNULEE->value),
+                )
                 ->pluck('id')
                 ->flip();
             $obsoletes += $groupe->reject(fn (PaiementFicheLigne $l) => $actives->has($l->source_id))->count();

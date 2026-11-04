@@ -31,6 +31,7 @@ class IndexClientDashboardController extends Controller
         return Inertia::render('client/Dashboard', [
             'actor' => $payload['actor'],
             'earnings' => $payload['earnings'],
+            'earnings_by_activite' => $payload['earnings_by_activite'],
             'earnings_by_vehicule' => $payload['earnings_by_vehicule'],
             'vehicules' => $payload['vehicules'],
             'status_options' => StatutCommission::options(),

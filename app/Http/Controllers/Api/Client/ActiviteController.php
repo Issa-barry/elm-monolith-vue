@@ -162,7 +162,13 @@ class ActiviteController extends Controller
     private function ventes(Builder $query, int $limite): Collection
     {
         return $query
-            ->with(['site:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'client:id,nom,prenom', 'lignes:id,commande_vente_id,quantite_demandee'])
+            ->with([
+                'site:id,nom',
+                'vehicule:id,nom_vehicule,immatriculation',
+                'client:id,nom,prenom',
+                'lignes:id,commande_vente_id,quantite_demandee',
+                'facture:id,commande_vente_id,statut_facture',
+            ])
             ->orderByRaw(self::DATE_VENTE.' DESC')
             ->orderByDesc('id')
             ->limit($limite)
@@ -170,13 +176,14 @@ class ActiviteController extends Controller
             ->map(function (CommandeVente $c) {
                 $client = $c->client;
                 $date = $c->validated_at ?? $c->created_at;
+                $statutFacture = $c->facture?->statut_facture;
 
                 return new ActiviteRow(
                     id: $c->id,
                     type: 'vente',
                     reference: $c->reference ?? '—',
                     statut: $c->statut?->value,
-                    statutLabel: $c->statut_label,
+                    statutLabel: $c->statutAffichage()['label'],
                     siteSource: $c->site?->nom ?? '—',
                     siteDestination: $client?->nom_complet ?? 'Vente directe',
                     vehicule: $c->vehicule ? new VehiculeSummary(
@@ -187,6 +194,8 @@ class ActiviteController extends Controller
                     date: $date?->toDateString(),
                     dateSort: $date?->timestamp ?? 0,
                     nbPacks: (int) $c->lignes->sum('quantite_demandee'),
+                    statutPaiement: $statutFacture?->value,
+                    statutPaiementLabel: $statutFacture?->label(),
                 );
             });
     }

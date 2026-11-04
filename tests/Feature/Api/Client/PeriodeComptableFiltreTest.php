@@ -271,6 +271,49 @@ class PeriodeComptableFiltreTest extends TestCase
         $this->assertEquals($gains, collect($reponse->json('par_vehicule'))->sum('total_earned'));
     }
 
+    #[DataProvider('periodesRapides')]
+    public function test_depenses_periodes_rapides_calculees_par_le_serveur(string $cle, ?string $debut, ?string $fin, float $montant): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $vehicule = $this->makeVehicule($org, $user->proprietaire->id);
+
+        foreach (['2026-11-20' => 1, '2026-11-19' => 10, '2026-11-10' => 100, '2026-10-05' => 1000, '2025-06-15' => 10000] as $date => $valeur) {
+            $this->makeDepense($org, $vehicule, $date, $valeur);
+        }
+
+        Sanctum::actingAs($user, ['*']);
+
+        $reponse = $this->getJson(route('client.depenses.mine', ['periode' => $cle, 'per_page' => 100]))
+            ->assertOk()
+            ->assertJsonPath('filters.periode', $cle)
+            ->assertJsonPath('filters.date_debut', $debut)
+            ->assertJsonPath('filters.date_fin', $fin);
+
+        $this->assertEquals($montant, $reponse->json('total_valide'));
+        $this->assertEquals($montant, collect($reponse->json('data'))->sum('montant'));
+
+        // Même montant que la carte Dépenses de l'accueil sur la même période.
+        $this->assertEquals($montant, $this->getJson(route('client.dashboard.mine', ['periode' => $cle]))->json('depenses_total'));
+    }
+
+    public function test_depenses_periode_rapide_refusee_avec_un_autre_filtre_de_periode(): void
+    {
+        $org = Organization::factory()->create();
+        Sanctum::actingAs($this->makeProprietaireUser($org), ['*']);
+
+        foreach ([
+            ['periode' => 'demain'],
+            ['periode' => ['hier']],
+            ['periode' => 'hier', 'date_debut' => '2026-11-01'],
+            ['periode' => 'hier', 'date_fin' => '2026-11-30'],
+        ] as $query) {
+            $this->getJson(route('client.depenses.mine', $query))->assertStatus(422)->assertJsonValidationErrors('periode');
+        }
+        $this->getJson(route('client.depenses.mine', ['periode' => 'hier', 'annee' => 2026, 'mois' => 11]))
+            ->assertStatus(422)->assertJsonValidationErrors('annee');
+    }
+
     public function test_accueil_mois_de_trente_et_trente_et_un_jours_sans_chevauchement(): void
     {
         $org = Organization::factory()->create();

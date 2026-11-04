@@ -38,6 +38,14 @@ n'étaient validables depuis aucun écran : leurs périodes restaient bloquées 
    La réouverture couvre aussi le cas inverse : une fiche portant une commission **annulée ou
    supprimée** depuis la validation (retour de livraison, annulation de commande) ; l'annulation des
    commissions d'une commande relance donc le traitement des périodes concernées.
+   **Révisé le 03/11/2026 (dépenses)** : une **dépense** validée après la validation, imputée à un
+   bénéficiaire qui a déjà une fiche dans la période (livreur, propriétaire ou véhicule, consultant,
+   parrain), rouvre aussi la période ; une dépense dévalidée encore retenue sur une fiche non figée
+   également. Avant, elle n'était jamais retenue et son avance tiers (467130/467140) restait non
+   soldée. Une dépense d'un bénéficiaire sans fiche dans la période ne rouvre rien (le recalcul ne
+   crée de fiche qu'à partir des commissions). Décision de l'utilisateur, prise avec l'ajout du
+   concerné Parrain (sa période se valide dès la première vente : sans cette règle, presque aucune
+   dépense parrain ne serait retenue).
 4. **Rattrapage** : `php artisan commissions:valider-beneficiaire-unique [--dry-run]` applique la
    règle 2 aux commissions existantes, puis laisse les périodes complètes se valider.
 5. **Garde-fou retour/annulation révisé** (`CommissionTriggerService::aDesCommissionsFigees`) :

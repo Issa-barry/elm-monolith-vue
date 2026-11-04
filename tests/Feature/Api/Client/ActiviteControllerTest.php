@@ -3,10 +3,12 @@
 namespace Tests\Feature\Api\Client;
 
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutFactureVente;
 use App\Enums\StatutTransfert;
 use App\Models\CommandeVente;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
+use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
@@ -626,6 +628,66 @@ class ActiviteControllerTest extends TestCase
         Sanctum::actingAs($user, ['*']);
 
         $this->getJson(route('client.activite.mine'))->assertStatus(403);
+    }
+
+    public function test_vente_expose_le_statut_de_paiement_de_sa_facture(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $vehicule = $this->makeVehicule($org, $user->proprietaire->id);
+        $commande = $this->makeCommande($org, $vehicule, ['statut' => StatutCommandeVente::LIVREE->value]);
+        FactureVente::factory()->create([
+            'organization_id' => $org->id,
+            'commande_vente_id' => $commande->id,
+            'statut_facture' => StatutFactureVente::PARTIEL,
+        ]);
+        $this->makeTransfert($org, $vehicule);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $data = collect($this->getJson(route('client.activite.mine'))->assertOk()->json('data'))->keyBy('type');
+
+        $this->assertSame('livree', $data['vente']['statut']);
+        $this->assertSame('Livrée', $data['vente']['statut_label']);
+        $this->assertSame('partiel', $data['vente']['statut_paiement']);
+        $this->assertSame('Partiellement payée', $data['vente']['statut_paiement_label']);
+        $this->assertNull($data['logistique']['statut_paiement']);
+        $this->assertNull($data['logistique']['statut_paiement_label']);
+    }
+
+    public function test_vente_sans_facture_n_a_pas_de_statut_de_paiement(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $vehicule = $this->makeVehicule($org, $user->proprietaire->id);
+        $this->makeCommande($org, $vehicule);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $response = $this->getJson(route('client.activite.mine'))->assertOk();
+
+        $this->assertNull($response->json('data.0.statut_paiement'));
+        $this->assertNull($response->json('data.0.statut_paiement_label'));
+    }
+
+    public function test_vente_soldee_en_attente_des_commissions_affiche_le_libelle_du_back_office(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $vehicule = $this->makeVehicule($org, $user->proprietaire->id);
+        $commande = $this->makeCommande($org, $vehicule, ['statut' => StatutCommandeVente::FACTURATION->value]);
+        FactureVente::factory()->payee()->create([
+            'organization_id' => $org->id,
+            'commande_vente_id' => $commande->id,
+        ]);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $response = $this->getJson(route('client.activite.mine'))->assertOk();
+
+        $this->assertSame('facturation', $response->json('data.0.statut'));
+        $this->assertSame('Commissions à verser', $response->json('data.0.statut_label'));
+        $this->assertSame('payee', $response->json('data.0.statut_paiement'));
     }
 
     public function test_requires_authentication(): void

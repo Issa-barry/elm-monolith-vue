@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\CategorieDepense;
+use App\Enums\PrestataireType;
 use App\Http\Requests\Concerns\ValideRattachementCommande;
 use App\Models\DepenseType;
 use Illuminate\Foundation\Http\FormRequest;
@@ -60,13 +61,12 @@ class StoreDepenseRequest extends FormRequest
             return ['nullable'];
         }
 
-        $table = $categorie->beneficiaireTable();
+        $existe = Rule::exists($categorie->beneficiaireTable(), 'id')->where('organization_id', $orgId)->whereNull('deleted_at');
+        if ($categorie === CategorieDepense::CONSULTANT) {
+            $existe->where('type', PrestataireType::CONSULTANT->value);
+        }
 
-        return [
-            'required',
-            'ulid',
-            Rule::exists($table, 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
-        ];
+        return ['required', 'ulid', $existe];
     }
 
     public function messages(): array

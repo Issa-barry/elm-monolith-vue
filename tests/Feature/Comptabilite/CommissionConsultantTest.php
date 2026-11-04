@@ -336,6 +336,36 @@ class CommissionConsultantTest extends TestCase
         );
     }
 
+    /** @test Concerné « Consultant » (03/11/2026) : raccourci vers Prestataire, même retenue. */
+    public function une_depense_de_type_consultant_est_deduite_comme_une_depense_prestataire(): void
+    {
+        $consultant = $this->creerConsultant();
+        $this->genererCommissionPourConsultant($consultant, 200, 5); // 1000 GNF
+
+        $type = DepenseType::create([
+            'organization_id' => $this->org->id,
+            'code' => 'AVANCE_CONSULTANT',
+            'libelle' => 'Avance consultant',
+            'categorie' => CategorieDepense::CONSULTANT->value,
+            'is_active' => true,
+        ]);
+        Depense::create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => $type->id,
+            'beneficiaire_type' => CategorieDepense::CONSULTANT->beneficiaireType(),
+            'beneficiaire_id' => $consultant->id,
+            'montant' => 150,
+            'date_depense' => now()->toDateString(),
+            'statut' => StatutDepense::VALIDE->value,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.consultants.index'))
+            ->assertInertia(fn ($page) => $page->where('beneficiaires.0.total_frais', 150));
+    }
+
     /** @test */
     public function export_excel_contient_les_colonnes_et_le_consultant(): void
     {

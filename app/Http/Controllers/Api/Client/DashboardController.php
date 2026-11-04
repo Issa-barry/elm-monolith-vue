@@ -6,13 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Client\DashboardMineRequest;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Client\BeneficiairesCompteResolver;
 use App\Services\Client\ClientEarningsService;
-use App\Services\Client\ClientIdentityResolver;
 use App\Services\Client\Data\ComparisonPeriod;
+use App\Services\Client\Data\VehiculeLieSummary;
+use App\Services\Client\Data\VehiculeRattache;
+use App\Services\Client\VehiculesRattachesService;
 use App\Support\Periodes\PeriodeComptableFiltre;
 use Carbon\CarbonImmutable;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 
 /**
  * Dashboard financier de l'espace client — même moteur (`ClientEarningsService`)
@@ -31,8 +35,9 @@ use Illuminate\Http\JsonResponse;
 class DashboardController extends Controller
 {
     public function __construct(
-        private readonly ClientIdentityResolver $identityResolver,
+        private readonly BeneficiairesCompteResolver $beneficiairesResolver,
         private readonly ClientEarningsService $earningsService,
+        private readonly VehiculesRattachesService $vehiculesRattaches,
     ) {}
 
     #[Endpoint(
@@ -41,22 +46,35 @@ class DashboardController extends Controller
             Montants en **GNF** (franc guinéen), sans décimales dans la pratique mais
             typés nombre (jamais des centimes, jamais un float à diviser par 100).
 
+            Toutes les activités du compte sont comptées (ADR 0054) : propriétaire, livreur, parrain et
+            consultant. Chaque part l'est une seule fois, dans l'activité de son bénéficiaire (la part du
+            parrain est déjà prise sur l'enveloppe Livreur). Une commission annulée n'entre dans aucun
+            montant.
+
             Définitions exactes des champs de `summary` (mêmes noms, mêmes valeurs que
             le dashboard Inertia — `App\Services\Client\ClientEarningsService`) :
-            - `total_earned` : commissions de vente + logistique gagnées sur la période (brut dû).
+            - `total_earned` : commissions gagnées sur la période, toutes activités (brut dû, parts « Créée » comprises).
             - `total_paid` : déjà versé sur ces mêmes commissions.
-            - `frais_depenses_total` : dépenses véhicule validées sur la période (proprietaire uniquement — jamais imputées à un livreur dans ce moteur).
-            - `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais négatif** (plancher à 0 — un solde négatif n'est jamais affiché comme dette du propriétaire).
-            - `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.
+            - `en_attente_validation` : part de `total_earned` encore « Créée » (période de paiement pas encore validée).
+            - `frais_depenses_total` : dépenses validées que les fiches de paiement déduisent sur la période (dépenses imputées à chaque bénéficiaire du compte, et dépenses des véhicules du propriétaire). Filtré sur un véhicule : seules les dépenses de ce véhicule.
+            - `balance` (reste à payer) : par activité `total_earned - en_attente_validation - frais_depenses_total - total_paid`, **jamais négatif**, puis additionné.
+            - `operations_count` : nombre de parts entrant dans `total_earned`.
 
-            `depenses_total` (hors `summary`, affichage seul) : `frais_depenses_total` + dépenses validées
-            rattachées directement au livreur sur la période (ex. avance sur salaire), sauf filtre
-            `vehicule_id`. **Jamais déduit de `balance`.**
+            `par_activite` : les mêmes champs par activité du compte (toutes ses activités, même à 0) ;
+            leur somme donne `summary`.
+
+            `depenses_total` (hors `summary`) : égal à `frais_depenses_total`.
 
             `par_vehicule` : même détail que `summary` mais par véhicule (schéma
-            `VehiculeEarningsRow`), **toujours la liste complète du parc accessible**
-            même si `vehicule_id` filtre le calcul (les véhicules hors filtre
-            apparaissent avec des montants à 0) — ce n'est pas un bug.
+            `VehiculeEarningsRow`), **toujours la liste complète des véhicules rattachés**
+            (propriétaire, livreur de l'équipe actuelle, parrain) même si `vehicule_id` filtre le calcul
+            (les véhicules hors filtre apparaissent avec des montants à 0) — ce n'est pas un bug. S'y
+            ajoute tout véhicule portant une part du compte sur la période (équipe quittée, commission
+            de consultant), avec `liens` vide. `liens` : nature du rattachement ; `par_activite` : gains
+            du compte sur ce véhicule, par activité.
+
+            `vehicules` : véhicules rattachés puis véhicules portant une part du compte (toutes
+            périodes), avec `liens` ; c'est la liste acceptée par le filtre `vehicule_id` (ignoré sinon).
 
             `filters.period` : raccourci appliqué (`custom` = `date_debut`/`date_fin`
             pris tels quels, sinon calculés serveur — jamais un défaut inventé côté
@@ -102,24 +120,20 @@ class DashboardController extends Controller
             ? ClientEarningsService::DATE_LOGISTIQUE_GAIN
             : ClientEarningsService::DATE_LOGISTIQUE_CREATION;
 
-        $identity = $this->identityResolver->resolve($user);
-        $organizationId = $identity->organizationId;
-        $proprietaire = $identity->proprietaire;
-        $livreur = $identity->livreur;
+        $beneficiaires = $this->beneficiairesResolver->resolve($user);
 
-        $vehicules = $this->earningsService->vehiculesAccessibles($organizationId, $proprietaire, $livreur);
+        $rattaches = $this->vehiculesRattaches->pour($beneficiaires);
+        $vehicules = $this->listeVehicules($rattaches, $this->earningsService->vehiculesDesParts($beneficiaires));
 
-        $vehiculeIdsAccessibles = $vehicules->pluck('id')->map(fn ($id) => (string) $id)->values()->all();
+        $vehiculeIdsAccessibles = array_map(fn (VehiculeLieSummary $v) => $v->id, $vehicules);
         $vehiculeIdsContrainte = null;
         if ($filters['vehicule_id'] !== null && in_array($filters['vehicule_id'], $vehiculeIdsAccessibles, true)) {
             $vehiculeIdsContrainte = [$filters['vehicule_id']];
         }
 
         $earnings = $this->earningsService->summary(
-            $vehicules,
-            $organizationId,
-            $proprietaire,
-            $livreur,
+            $rattaches,
+            $beneficiaires,
             $filters['date_debut'],
             $filters['date_fin'],
             $filters['statut'],
@@ -148,9 +162,7 @@ class DashboardController extends Controller
         $summaryEvolution = $hasResolvedPeriod
             ? $this->earningsService->summaryEvolution(
                 $earnings['totals'],
-                $organizationId,
-                $proprietaire,
-                $livreur,
+                $beneficiaires,
                 $filters['date_debut'],
                 $filters['date_fin'],
                 $filters['statut'],
@@ -159,23 +171,43 @@ class DashboardController extends Controller
             )
             : null;
 
-        $depensesLivreur = $vehiculeIdsContrainte === null
-            ? $this->earningsService->depensesLivreurTotal($organizationId, $livreur, $filters['date_debut'], $filters['date_fin'])
-            : 0.0;
-
         return response()->json([
             'filters' => $filters,
             'summary' => $earnings['totals'],
-            'depenses_total' => round($earnings['totals']['frais_depenses_total'] + $depensesLivreur, 2),
+            'par_activite' => $earnings['par_activite'],
+            'depenses_total' => $earnings['totals']['frais_depenses_total'],
             'summary_evolution' => $summaryEvolution,
             'comparison_period' => $comparisonPeriod,
             'par_vehicule' => $earnings['by_vehicule'],
-            'vehicules' => $vehicules->map(fn (Vehicule $v) => [
-                'id' => $v->id,
-                'nom_vehicule' => $v->nom_vehicule,
-                'immatriculation' => $v->immatriculation,
-            ])->values(),
+            'vehicules' => $vehicules,
         ]);
+    }
+
+    /**
+     * Véhicules rattachés (avec leurs liens), puis ceux qui portent seulement une part du compte.
+     *
+     * @param  Collection<int, VehiculeRattache>  $rattaches
+     * @param  Collection<int, Vehicule>  $desParts
+     * @return array<int, VehiculeLieSummary>
+     */
+    private function listeVehicules(Collection $rattaches, Collection $desParts): array
+    {
+        $connus = $rattaches->map(fn (VehiculeRattache $r) => (string) $r->vehicule->id)->all();
+        $lignes = $rattaches
+            ->map(fn (VehiculeRattache $r) => [$r->vehicule, $r->liensValeurs()])
+            ->concat($desParts
+                ->reject(fn (Vehicule $v) => in_array((string) $v->id, $connus, true))
+                ->map(fn (Vehicule $v) => [$v, []]));
+
+        return $lignes
+            ->map(fn (array $ligne) => new VehiculeLieSummary(
+                id: (string) $ligne[0]->id,
+                nomVehicule: (string) $ligne[0]->nom_vehicule,
+                immatriculation: (string) $ligne[0]->immatriculation,
+                liens: $ligne[1],
+            ))
+            ->values()
+            ->all();
     }
 
     /**

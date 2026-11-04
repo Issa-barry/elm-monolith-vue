@@ -56,6 +56,7 @@ interface PersonneOption {
     site_nom?: string | null;
     vehicule_noms?: string | null;
     vehicule_immatriculations?: string | null;
+    type?: string | null;
 }
 interface SiteOption {
     id: string;
@@ -71,6 +72,7 @@ const props = defineProps<{
     proprietaires: PersonneOption[];
     prestataires: PersonneOption[];
     clients: PersonneOption[];
+    parrains: PersonneOption[];
     default_site_id: string | null;
     categories: { value: string; label: string }[];
     can_change_site: boolean;
@@ -95,6 +97,7 @@ watch(concerneSelectionne, () => {
     proprietaireSelected.value = null;
     prestataireSelected.value = null;
     clientSelected.value = null;
+    parrainSelected.value = null;
 });
 
 const typesFiltres = computed<TypeOption[]>(() =>
@@ -172,6 +175,7 @@ watch(
         proprietaireSelected.value = null;
         prestataireSelected.value = null;
         clientSelected.value = null;
+        parrainSelected.value = null;
     },
 );
 
@@ -277,6 +281,12 @@ function clearProprietaire() {
     form.beneficiaire_id = '';
 }
 
+// Concerné « Consultant » : même picker que Prestataire, limité aux consultants ;
+// la dépense reste enregistrée comme prestataire (CategorieDepense::CONSULTANT).
+const consultants = computed(() =>
+    props.prestataires.filter((p) => p.type === 'consultant'),
+);
+
 const prestataireSelected = ref<PersonneOption | null>(null);
 const showPrestatairePicker = ref(false);
 const prestataireFields: PickerField<PersonneOption>[] = [
@@ -291,6 +301,20 @@ function onPrestataireSelect(p: PersonneOption) {
 
 function clearPrestataire() {
     prestataireSelected.value = null;
+    form.beneficiaire_id = '';
+}
+
+const parrainSelected = ref<PersonneOption | null>(null);
+const showParrainPicker = ref(false);
+const parrainFields = proprietaireFields;
+
+function onParrainSelect(p: PersonneOption) {
+    parrainSelected.value = p;
+    form.beneficiaire_id = p.id;
+}
+
+function clearParrain() {
+    parrainSelected.value = null;
     form.beneficiaire_id = '';
 }
 
@@ -344,9 +368,14 @@ const beneficiaireLabel = computed<string | null>(() => {
             props.proprietaires.find((p) => p.id === form.beneficiaire_id)
                 ?.nom_complet ?? null
         );
-    if (cat === 'prestataire')
+    if (cat === 'prestataire' || cat === 'consultant')
         return (
             props.prestataires.find((p) => p.id === form.beneficiaire_id)
+                ?.nom_complet ?? null
+        );
+    if (cat === 'parrain')
+        return (
+            props.parrains.find((p) => p.id === form.beneficiaire_id)
                 ?.nom_complet ?? null
         );
     if (cat === 'client')
@@ -952,13 +981,116 @@ function submitBrouillon() {
                             </BeneficiairePickerDialog>
                         </div>
 
+                        <!-- Parrain -->
+                        <div v-else-if="categorie === 'parrain'">
+                            <Label
+                                for="dep-parrain"
+                                class="mb-1.5 block text-sm font-medium sm:text-xs"
+                            >
+                                Parrain
+                                <span class="text-destructive">*</span>
+                            </Label>
+                            <div class="relative">
+                                <button
+                                    id="dep-parrain"
+                                    type="button"
+                                    class="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-muted/40"
+                                    :class="[
+                                        form.errors.beneficiaire_id
+                                            ? 'border-destructive'
+                                            : '',
+                                        parrainSelected ? 'pr-12 sm:pr-8' : '',
+                                    ]"
+                                    @click="showParrainPicker = true"
+                                >
+                                    <Search
+                                        class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                    />
+                                    <span
+                                        class="truncate text-left"
+                                        :class="
+                                            parrainSelected
+                                                ? ''
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{
+                                            parrainSelected?.nom_complet ??
+                                            'Rechercher un parrain…'
+                                        }}
+                                    </span>
+                                </button>
+                                <button
+                                    v-if="parrainSelected"
+                                    type="button"
+                                    class="absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground sm:right-2 sm:h-auto sm:w-auto"
+                                    aria-label="Effacer la sélection"
+                                    @click.stop="clearParrain"
+                                >
+                                    <X class="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                            <p
+                                v-if="form.errors.beneficiaire_id"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.beneficiaire_id }}
+                            </p>
+
+                            <BeneficiairePickerDialog
+                                v-model:visible="showParrainPicker"
+                                title="Sélectionner un parrain"
+                                :options="parrains"
+                                :fields="parrainFields"
+                                empty-label="Aucun parrain trouvé"
+                                @select="onParrainSelect"
+                            >
+                                <template #option="{ option }">
+                                    <div class="leading-tight font-medium">
+                                        {{ option.nom_complet }}
+                                    </div>
+                                    <div
+                                        v-if="option.vehicule_noms"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        🚚 {{ option.vehicule_noms }}
+                                        <span
+                                            v-if="
+                                                option.vehicule_immatriculations
+                                            "
+                                            class="font-mono"
+                                            >—
+                                            {{
+                                                option.vehicule_immatriculations
+                                            }}</span
+                                        >
+                                    </div>
+                                    <div
+                                        v-if="option.telephone"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        ☎ {{ option.telephone }}
+                                    </div>
+                                </template>
+                            </BeneficiairePickerDialog>
+                        </div>
+
                         <!-- Prestataire -->
-                        <div v-else-if="categorie === 'prestataire'">
+                        <div
+                            v-else-if="
+                                categorie === 'prestataire' ||
+                                categorie === 'consultant'
+                            "
+                        >
                             <Label
                                 for="dep-prestataire"
                                 class="mb-1.5 block text-sm font-medium sm:text-xs"
                             >
-                                Prestataire
+                                {{
+                                    categorie === 'consultant'
+                                        ? 'Consultant'
+                                        : 'Prestataire'
+                                }}
                                 <span class="text-destructive">*</span>
                             </Label>
                             <div class="relative">
@@ -989,7 +1121,9 @@ function submitBrouillon() {
                                     >
                                         {{
                                             prestataireSelected?.nom_complet ??
-                                            'Rechercher un prestataire…'
+                                            (categorie === 'consultant'
+                                                ? 'Rechercher un consultant…'
+                                                : 'Rechercher un prestataire…')
                                         }}
                                     </span>
                                 </button>
@@ -1012,10 +1146,22 @@ function submitBrouillon() {
 
                             <BeneficiairePickerDialog
                                 v-model:visible="showPrestatairePicker"
-                                title="Sélectionner un prestataire"
-                                :options="prestataires"
+                                :title="
+                                    categorie === 'consultant'
+                                        ? 'Sélectionner un consultant'
+                                        : 'Sélectionner un prestataire'
+                                "
+                                :options="
+                                    categorie === 'consultant'
+                                        ? consultants
+                                        : prestataires
+                                "
                                 :fields="prestataireFields"
-                                empty-label="Aucun prestataire trouvé"
+                                :empty-label="
+                                    categorie === 'consultant'
+                                        ? 'Aucun consultant trouvé'
+                                        : 'Aucun prestataire trouvé'
+                                "
                                 @select="onPrestataireSelect"
                             >
                                 <template #option="{ option }">

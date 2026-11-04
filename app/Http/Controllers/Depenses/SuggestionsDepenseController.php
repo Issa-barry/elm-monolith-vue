@@ -51,16 +51,17 @@ class SuggestionsDepenseController extends Controller
         if ($field === 'concerne') {
             $results = collect();
 
-            // livreur/proprietaire : recherche par leur propre nom OU par le nom du véhicule
-            // auquel ils sont rattachés (livreur → equipes.vehicule, proprietaire → vehicules) —
+            // livreur/proprietaire/parrain : recherche par leur propre nom OU par le nom du véhicule
+            // auquel ils sont rattachés (livreur → equipes.vehicule, proprietaire/parrain → vehicules) —
             // en pratique, on identifie souvent ces bénéficiaires par le véhicule plutôt que
             // par leur nom propre.
             $vehiculeRelationParType = [
                 'livreur' => 'equipes.vehicule',
                 'proprietaire' => 'vehicules',
+                'parrain' => 'vehicules',
             ];
 
-            foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire'] as $type => $relation) {
+            foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire', 'parrain' => 'parrainBeneficiaire'] as $type => $relation) {
                 $vehiculeRelation = $vehiculeRelationParType[$type] ?? null;
 
                 $items = Depense::where('organization_id', $orgId)
@@ -146,7 +147,7 @@ class SuggestionsDepenseController extends Controller
             $likeTel = '%'.($digits ?: $q).'%';
             $results = collect();
 
-            foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire'] as $type => $relation) {
+            foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire', 'parrain' => 'parrainBeneficiaire'] as $type => $relation) {
                 $items = Depense::where('organization_id', $orgId)
                     ->where('beneficiaire_type', $type)
                     ->whereHas($relation, fn ($qb) => $qb->whereHas('personne', fn ($p) => $p

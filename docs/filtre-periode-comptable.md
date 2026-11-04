@@ -29,14 +29,15 @@ appliqué par défaut que par l'écran Nuxt.
 
 **Réponse 422** : année hors bornes (y compris future), mois hors 1-12, quinzaine inconnue, paramètre
 manquant (`mois` sans `annee`, `quinzaine` sans `mois`…), combinaison avec un autre filtre de date
-(`date_debut`, `date_fin`, `period` sur le dashboard, `periode` sur l'activité et le dashboard).
+(`date_debut`, `date_fin`, `period` sur le dashboard, `periode` sur l'activité, le dashboard et les
+dépenses).
 
 Le paramètre s'appelle `quinzaine` et non `periode`, car `periode` désigne déjà les périodes rapides
 (`periode=hier`).
 
 ### Périodes rapides de l'accueil
 
-`GET /v1/mobile/dashboard` accepte aussi `periode`, résolu par le serveur (`SituationPeriode`, fuseau de
+`GET /v1/mobile/dashboard` et `GET /v1/mobile/depenses/mine` acceptent aussi `periode`, résolu par le serveur (`SituationPeriode`, fuseau de
 l'application, semaine du lundi au dimanche) et renvoyé avec ses bornes dans `filters` :
 
 | `periode` | Bornes |
@@ -58,6 +59,7 @@ les ventes et les dépenses.
 |---|---|---|
 | Accueil et Commissions | part de vente | `commission_enveloppes.earned_at` (date de gain) |
 | Accueil et Commissions | part logistique | `commission_logistique_parts.earned_at` (date de gain) |
+| Accueil et Commissions | part de parrain et de consultant (ADR 0054) | `commission_enveloppes.earned_at` (date de gain) |
 | Accueil et Commissions | dépenses déduites, `depenses_total` | `depenses.date_depense` |
 | Accueil | carte « Dépenses » mobile | `depenses.date_depense` (`total_valide` de `depenses/mine`) |
 | Ventes | commande de vente | `validated_at`, sinon `created_at` |
@@ -91,6 +93,13 @@ garde sa date » ; aligner les écrans serait une décision métier.
 
 Aucune formule ne change. Sur la période sélectionnée, le dashboard recalcule `total_earned`,
 `total_paid`, `frais_depenses_total`, `balance`, `operations_count`, `depenses_total` et `par_vehicule`.
+
+Depuis l'[ADR 0054](adr/0054-gains-multi-activites-espace-client.md), ces montants couvrent toutes les
+activités du compte (propriétaire, livreur, parrain, consultant), sans les commissions annulées, et
+`par_activite` les répartit. Toutes ces parts sont datées par la date de gain de leur enveloppe : P1 + P2
+donne le mois pour chaque activité. Les dépenses déduites du reste à payer sont datées par
+`date_depense`, comme sur les fiches. `GET /v1/mobile/commissions` (détail des commissions) accepte les
+mêmes paramètres de période et son `resume` donne les mêmes montants que le dashboard.
 
 `summary_evolution` garde sa définition : période précédente de **même durée**. Pour une quinzaine,
 elle ne correspond donc pas forcément à la quinzaine précédente (P1 de novembre, 15 jours, est comparée
@@ -135,10 +144,18 @@ Aucun filtre existant n'a été retiré. Une seule période s'applique à la foi
 |---|---|---|
 | Commissions | liste « Période » (7 jours, 30 jours…) | remplace la période comptable |
 | Ventes | périodes rapides et date du panneau Filtre | remplacent la période comptable |
-| Dépenses | période du panneau Filtre, dont « Toutes les périodes » | remplace la période comptable |
+| Dépenses | période du panneau Filtre : période rapide ou dates personnalisées | remplace la période comptable |
 
 Toucher au filtre comptable le réactive et efface l'autre période. Les filtres véhicule, statut, type et
 la recherche se combinent avec lui.
+
+### Panneau Filtre des Dépenses
+
+Mêmes choix que le panneau de l'accueil, plus les dates personnalisées : périodes rapides (`Aujourd'hui`
+à `Toutes les périodes`, envoyées en `periode`), puis année, mois et quinzaine (même composant que la tête
+de page, sélection partagée), puis `Période personnalisée` (`date_debut`/`date_fin`). « Ce mois » est le
+mois comptable en cours, pas une période rapide de plus. `Réinitialiser` revient à « Ce mois ».
+L'ancienne option « 3 derniers mois » n'existe plus.
 
 ### Liens qui ouvrent toutes les périodes
 

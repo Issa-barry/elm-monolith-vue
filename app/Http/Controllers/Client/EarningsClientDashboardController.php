@@ -24,6 +24,7 @@ class EarningsClientDashboardController extends Controller
             'actor' => $payload['actor'],
             'vehicules' => $payload['vehicules'],
             'earnings' => $payload['earnings'],
+            'earnings_by_activite' => $payload['earnings_by_activite'],
             'earnings_by_vehicule' => $payload['earnings_by_vehicule'],
             'statement' => $payload['statement'],
             'filters' => ['date_debut' => $dateDebut, 'date_fin' => $dateFin],

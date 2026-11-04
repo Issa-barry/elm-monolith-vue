@@ -26,6 +26,8 @@ async function ouvrir(
         ['interne', 'Dépense interne'],
         ['prestataire', 'Prestataire'],
         ['client', 'Client'],
+        ['consultant', 'Consultant'],
+        ['parrain', 'Parrain'],
     ].map(([value, label]) => ({ value, label }));
     const fixture = {
         component: 'Depenses/Create',
@@ -90,7 +92,36 @@ async function ouvrir(
                 : [],
             employes: [],
             proprietaires: [],
-            prestataires: [],
+            prestataires: [
+                {
+                    id: 'prestataire-consultant',
+                    nom_complet: 'Alpha Barry',
+                    telephone: '+224 621 00 00 01',
+                    type: 'consultant',
+                },
+                {
+                    id: 'prestataire-mecanicien',
+                    nom_complet: 'Garage Camara',
+                    telephone: '+224 621 00 00 02',
+                    type: 'mecanicien',
+                },
+            ],
+            parrains: [
+                {
+                    id: 'parrain-1',
+                    nom_complet: 'Mariama Sow',
+                    telephone: '+224 620 11 22 33',
+                    vehicule_noms: 'ADAMA',
+                    vehicule_immatriculations: 'OU114',
+                },
+                {
+                    id: 'parrain-2',
+                    nom_complet: 'Ibrahima Bah',
+                    telephone: '+224 620 44 55 66',
+                    vehicule_noms: 'KOBA',
+                    vehicule_immatriculations: 'RC-9988',
+                },
+            ],
             clients: [],
             livreurs: Array.from({ length: 18 }, (_, i) => ({
                 id: `livreur-${i}`,
@@ -485,6 +516,61 @@ test('sélecteur plein écran : recherche téléphone, sélection par ID et effa
     expect((await clear.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await clear.click();
     await expect(page.locator('#dep-livreur')).toContainText('Rechercher');
+});
+
+test('concerné Consultant : seuls les consultants, enregistrés comme prestataire', async ({
+    page,
+}) => {
+    const payloads = await ouvrir(page);
+    await choisir(page, 'consultant');
+    await expect(page.locator('label[for="dep-prestataire"]')).toContainText(
+        'Consultant',
+    );
+    await page.locator('#dep-prestataire').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Sélectionner un consultant');
+    await expect(dialog.getByRole('option')).toHaveCount(1);
+    await dialog.getByRole('option', { name: /Alpha Barry/ }).click();
+    await expect(page.locator('#dep-prestataire')).toContainText('Alpha Barry');
+    await page.locator('#dep-montant').fill('5000');
+    await page.getByRole('button', { name: 'Brouillon', exact: true }).click();
+    await expect.poll(() => payloads.length).toBe(1);
+    expect(payloads[0]).toMatchObject({
+        depense_type_id: 'type-consultant',
+        beneficiaire_id: 'prestataire-consultant',
+    });
+});
+
+test('concerné Prestataire : tous les prestataires, consultants compris', async ({
+    page,
+}) => {
+    await ouvrir(page);
+    await choisir(page, 'prestataire');
+    await page.locator('#dep-prestataire').click();
+    await expect(page.getByRole('dialog').getByRole('option')).toHaveCount(2);
+});
+
+test('concerné Parrain : recherche par immatriculation et sélection', async ({
+    page,
+}, info) => {
+    const payloads = await ouvrir(page);
+    await choisir(page, 'parrain');
+    await page.locator('#dep-parrain').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Sélectionner un parrain');
+    await dialog.getByLabel('Immatriculation').fill('OU114');
+    await expect(dialog.getByRole('option')).toHaveCount(1);
+    await page.screenshot({ path: info.outputPath('parrain.png') });
+    await dialog.getByRole('option', { name: /Mariama Sow/ }).click();
+    await expect(page.locator('#dep-parrain')).toContainText('Mariama Sow');
+    await page.locator('#dep-montant').fill('30000');
+    await page.getByRole('button', { name: 'Brouillon', exact: true }).click();
+    await expect.poll(() => payloads.length).toBe(1);
+    expect(payloads[0]).toMatchObject({
+        depense_type_id: 'type-parrain',
+        beneficiaire_id: 'parrain-1',
+        montant: 30000,
+    });
 });
 
 test('brouillon : montant numérique, site et identifiants conservés', async ({

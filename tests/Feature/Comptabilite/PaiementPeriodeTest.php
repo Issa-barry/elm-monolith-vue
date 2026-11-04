@@ -644,6 +644,87 @@ class PaiementPeriodeTest extends TestCase
         $this->assertNull($periode->fresh()->validated_at);
     }
 
+    private function depenseLivreur(Livreur $livreur, float $montant, StatutDepense $statut = StatutDepense::VALIDE): Depense
+    {
+        return Depense::create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'depense_type_id' => DepenseType::factory()->livreur()->create(['organization_id' => $this->org->id])->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
+            'montant' => $montant,
+            'date_depense' => '2026-06-12',
+            'statut' => $statut->value,
+        ]);
+    }
+
+    /** ADR 0008 révisé le 03/11/2026 : une dépense validée après la validation rouvre la période. */
+    public function test_depense_validee_apres_validation_rouvre_la_periode_et_est_retenue(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+        $livreur = Livreur::findOrFail($periode->fiches()->value('beneficiaire_id'));
+
+        $this->depenseLivreur($livreur, 5000);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page->where('periode.statut', StatutPeriodePaiement::CALCULEE->value));
+
+        $fiche = PaiementFiche::where('periode_id', $periode->id)->sole();
+        $this->assertEquals(5000.0, (float) $fiche->total_deductions);
+        $this->assertEquals(295000.0, (float) $fiche->montant_net);
+    }
+
+    /** Fiche déjà payée en partie : elle reste intacte, la dépense va sur une fiche complémentaire reportée. */
+    public function test_depense_tardive_sur_fiche_payee_va_sur_une_fiche_complementaire_reportee(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+        $payee = $periode->fiches()->firstOrFail();
+        $payee->update(['montant_paye' => 1000]);
+
+        $this->depenseLivreur(Livreur::findOrFail($payee->beneficiaire_id), 5000);
+
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+
+        $fiches = PaiementFiche::where('periode_id', $periode->id)->orderBy('rang')->get();
+        $this->assertCount(2, $fiches);
+        $this->assertEquals(300000.0, (float) $fiches->first()->montant_net, 'la fiche payée est conservée telle quelle');
+        $this->assertSame($payee->id, $fiches->last()->fiche_origine_id);
+        $this->assertEquals(5000.0, (float) $fiches->last()->report_a_deduire, 'retenue reportée sur la fiche suivante');
+    }
+
+    /** Une dépense d'un bénéficiaire sans fiche dans la période ne la rouvre pas (aucune fiche à corriger). */
+    public function test_depense_d_un_beneficiaire_sans_fiche_ne_rouvre_pas_la_periode(): void
+    {
+        $periode = $this->makePeriodeValideeAvecUneFiche();
+
+        $this->depenseLivreur($this->makeLivreur('Oumar Bah'), 5000);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page->where('periode.statut', StatutPeriodePaiement::VALIDEE->value));
+    }
+
+    /** Une dépense dévalidée encore retenue sur une fiche non payée rouvre la période et disparaît de la fiche. */
+    public function test_depense_devalidee_apres_validation_rouvre_la_periode_et_quitte_la_fiche(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+        $livreur = $this->makeLivreur();
+        $this->makeEnveloppeAvecPart(300000, null, $livreur);
+        $depense = $this->depenseLivreur($livreur, 5000);
+        $periode = $this->makePeriode();
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $this->assertEquals(5000.0, (float) $periode->fiches()->value('total_deductions'));
+        $periode->refresh()->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
+
+        $depense->update(['statut' => StatutDepense::REJETE->value]);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page->where('periode.statut', StatutPeriodePaiement::CALCULEE->value));
+        $this->assertEquals(0.0, (float) PaiementFiche::where('periode_id', $periode->id)->sole()->total_deductions);
+    }
+
     public function test_revalider_une_periode_validee_est_refuse_meme_pour_le_super_admin(): void
     {
         $periode = $this->makePeriodeValideeAvecUneFiche();

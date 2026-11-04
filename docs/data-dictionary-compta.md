@@ -169,7 +169,7 @@ Ce document distingue deux couches, volontairement séparées :
 | `paiement_site` | idem (site) | Règlement, **bloquant** | `dette_tiers` (467170) / `tresorerie` |
 | `paiement_consultant` | idem (prestataire) | Règlement, **bloquant** | `dette_tiers` (467180) / `tresorerie` |
 | `depense_interne_validee` | `Depense` (beneficiaire_type=null) validée | Charge + règlement combinés, **bloquant** | `charge`/`charge_defaut` (628800 ou compte du DepenseType) / `tresorerie` |
-| `depense_avance_tiers_validee` | `Depense` (vehicule/proprietaire/livreur) validée | Avance récupérable, **bloquant** | `avance_tiers_{type}` / `tresorerie` |
+| `depense_avance_tiers_validee` | `Depense` (vehicule/proprietaire/livreur/parrain) validée | Avance récupérable, **bloquant** | `avance_tiers_{type}` (parrain : 467220) / `tresorerie` |
 | `paiement_salaire` | `PaiePaiement` créé | Règlement, jambe trésorerie uniquement, **bloquant** | `charge_salaire` (661000) / `tresorerie` |
 | `paiement_commission_logistique_direct` | `CommissionPayment` créé | Règlement, jambe trésorerie uniquement, **bloquant** | `charge_commission_{livreur\|proprietaire}` / `tresorerie` |
 | `versement_cashback` | `CashbackVersement` créé | Règlement, jambe trésorerie uniquement, **bloquant** | `charge_cashback` (658100) / `tresorerie` |

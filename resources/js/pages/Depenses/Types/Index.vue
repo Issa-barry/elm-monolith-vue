@@ -267,6 +267,8 @@ const categorieColors: Record<string, string> = {
         'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
     prestataire:
         'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
+    consultant: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',
+    parrain: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300',
 };
 </script>
 

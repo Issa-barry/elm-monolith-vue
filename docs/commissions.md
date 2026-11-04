@@ -1338,6 +1338,15 @@ Aucune règle de validation ne change : seule la façon d'exécuter une grande s
 - Une commission **annulée** portée par une fiche figée ne déclenche pas de réouverture (le
   recalcul ne pourrait pas la retirer) ; retour et annulation restent de toute façon refusés sur
   une période payée.
+- **Dépenses validées après la validation** (révision du 03/11/2026) : même traitement.
+  `PeriodeCalculatorService::depensesHorsFiches()` compte les dépenses validées datées dans la
+  période, absentes de ses fiches, dont le bénéficiaire (ou, pour une dépense véhicule, son
+  propriétaire actuel) a déjà une fiche dans la période et modifiées depuis `validated_at`. La
+  période est rouverte, la dépense retenue (sur une fiche complémentaire reportée si la fiche est
+  payée). Une dépense dévalidée encore portée par une fiche non figée rouvre aussi la période
+  (`lignesObsoletes`). La dépense (dé)validée déclenche le traitement immédiatement
+  (`DepenseObserver`, bénéficiaires livreur, propriétaire, véhicule, prestataire, parrain).
+  Tests : `PaiementPeriodeTest::test_depense_*`.
 - Tests : `tests/Feature/Comptabilite/PaiementPeriodeTest.php` (`test_bouton_valider_*`,
   `test_commission_arrivee_apres_validation_*`, `test_revalider_*`).
 
@@ -1447,8 +1456,9 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
   activation `creee → impaye`, comptabilisation des fiches). Déclenchée après toute validation de
   commission, tout calcul de période et toute génération. Jamais pour une période sans commission.
 - **Réouverture automatique** d'une période validée quand ses fiches ne reflètent plus les
-  commissions (nouvelle commission datée dans la période, ou commission annulée/supprimée sur une
-  fiche non figée) : contrepassation des pièces « fiche validée » des fiches non figées, recalcul,
+  commissions ou les dépenses (nouvelle commission datée dans la période, commission
+  annulée/supprimée sur une fiche non figée, dépense validée ou dévalidée après la validation —
+  révision du 03/11/2026) : contrepassation des pièces « fiche validée » des fiches non figées, recalcul,
   puis revalidation si tout est validé. Depuis le 30/09/2026, une période déjà payée en partie est
   aussi rouverte : ses fiches payées restent intactes et la nouvelle commission va sur une fiche
   complémentaire (ADR 0010, point 4). Une période clôturée n'est jamais rouverte.
