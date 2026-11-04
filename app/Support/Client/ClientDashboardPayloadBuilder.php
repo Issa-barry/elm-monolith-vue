@@ -10,9 +10,11 @@ use App\Models\Proprietaire;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Client\BeneficiairesCompteResolver;
 use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
 use App\Services\Client\VehicleProposalService;
+use App\Services\Client\VehiculesRattachesService;
 use Illuminate\Support\Collection;
 
 /**
@@ -29,6 +31,8 @@ class ClientDashboardPayloadBuilder
         private readonly ClientIdentityResolver $identityResolver,
         private readonly ClientEarningsService $earningsService,
         private readonly VehicleProposalService $proposalService,
+        private readonly BeneficiairesCompteResolver $beneficiairesResolver,
+        private readonly VehiculesRattachesService $vehiculesRattaches,
     ) {}
 
     public function build(
@@ -51,11 +55,12 @@ class ClientDashboardPayloadBuilder
         }
 
         $ownerVehicules = $this->vehiculesDuProprietaire($organizationId, $proprietaire);
+        // Mêmes bénéficiaires et mêmes véhicules rattachés que l'API (ADR 0054) : les montants des
+        // deux surfaces restent identiques.
+        $beneficiaires = $this->beneficiairesResolver->resolve($user);
         $earnings = $this->earningsService->summary(
-            $vehicules,
-            $organizationId,
-            $proprietaire,
-            $livreur,
+            $this->vehiculesRattaches->pour($beneficiaires),
+            $beneficiaires,
             $dateDebut,
             $dateFin,
             $statut,
@@ -123,6 +128,7 @@ class ClientDashboardPayloadBuilder
             'vehicules' => $mappedVehicules,
             'owner_vehicules' => $mappedOwnerVehicules,
             'earnings' => $earnings['totals'],
+            'earnings_by_activite' => $earnings['par_activite'],
             'earnings_by_vehicule' => $earnings['by_vehicule'],
             'statement' => $earnings['statement'],
             'vehicle_proposals' => $this->userProposals($user->id, $organizationId),

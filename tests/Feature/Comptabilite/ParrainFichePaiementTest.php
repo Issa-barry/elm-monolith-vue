@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Comptabilite;
 
+use App\Enums\CategorieDepense;
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionMode;
 use App\Enums\CommissionMotifNonGeneration;
@@ -12,6 +13,7 @@ use App\Enums\DeclencheurCommissionVente;
 use App\Enums\EvenementComptable;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutDepense;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Models\Categorie;
@@ -22,6 +24,8 @@ use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
+use App\Models\Depense;
+use App\Models\DepenseType;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
@@ -345,6 +349,51 @@ class ParrainFichePaiementTest extends TestCase
         $this->assertSame(2, $fiches->last()->rang);
         $this->assertSame($fiche->id, $fiches->last()->fiche_origine_id);
         $this->assertEquals(2000.0, (float) $fiches->last()->montant_net);
+    }
+
+    /** PARRAIN-026 : une dépense validée imputée au parrain est retenue sur sa fiche de la quinzaine. */
+    public function test_une_depense_imputee_au_parrain_est_deduite_de_sa_fiche_et_soldee_en_comptabilite(): void
+    {
+        $this->vendre(100);
+        $type = DepenseType::factory()->create(['organization_id' => $this->org->id, 'categorie' => CategorieDepense::PARRAIN->value]);
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'user_id' => $this->user->id,
+            'site_id' => $this->site->id,
+            'depense_type_id' => $type->id,
+            'beneficiaire_type' => 'parrain',
+            'beneficiaire_id' => $this->parrain->id,
+            'montant' => 3000,
+            'date_depense' => '2026-10-10',
+        ]);
+        $depense->update(['statut' => StatutDepense::VALIDE]);
+
+        $periode = $this->periode(TypePeriodePaiement::PARRAIN);
+        $fiche = $this->fichesParrain($periode)->sole();
+        $this->assertEquals(20000.0, (float) $fiche->montant_brut);
+        $this->assertEquals(3000.0, (float) $fiche->total_deductions);
+        $this->assertEquals(17000.0, (float) $fiche->montant_net);
+        $this->assertTrue($fiche->lignes()->where('source_id', $depense->id)->where('montant', -3000)->exists());
+
+        app(PeriodeValidationService::class)->validerSiComplete($periode);
+        $this->assertSame(StatutPeriodePaiement::VALIDEE, $periode->fresh()->statut);
+
+        $engagement = PieceComptable::where('source_type', $fiche->getMorphClass())
+            ->where('source_id', $fiche->id)
+            ->where('type_evenement', EvenementComptable::FICHE_PARRAIN_VALIDEE->value)
+            ->firstOrFail();
+        $lignes = $engagement->lignes()->with('compte')->get()->keyBy(fn ($l) => $l->compte->numero);
+        $this->assertEquals(20000.0, (float) $lignes['622500']->debit);
+        $this->assertEquals(17000.0, (float) $lignes['467210']->credit);
+        $this->assertEquals(3000.0, (float) $lignes['467220']->credit);
+
+        $solde467220 = DB::table('compta_ecritures')
+            ->join('compta_comptes', 'compta_comptes.id', '=', 'compta_ecritures.compte_comptable_id')
+            ->where('compta_comptes.organization_id', $this->org->id)
+            ->where('compta_comptes.numero', '467220')
+            ->selectRaw('SUM(debit) - SUM(credit) as solde')
+            ->value('solde');
+        $this->assertEquals(0.0, (float) $solde467220, 'L\'avance de la dépense est soldée par la retenue sur la fiche.');
     }
 
     public function test_la_prevision_de_tresorerie_porte_les_parrains_en_p1(): void

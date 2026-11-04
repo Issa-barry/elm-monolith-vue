@@ -20,12 +20,14 @@ class MeController extends Controller
             ."`roles.some(r => ['client','proprietaire','livreur'].includes(r))` pour l'accès espace "
             .'client, jamais une égalité stricte. `context` est résolu exclusivement via '
             .'`ClientIdentityResolver` à partir du compte authentifié, jamais un paramètre client. '
-            .'`context.parrain_id` suit uniquement le rattachement posé au back-office (ADR 0050).',
+            .'`context.parrain_id` et `context.consultant_ids` suivent uniquement le rattachement posé au '
+            .'back-office (ADR 0050).',
     )]
     public function __invoke(Request $request, ClientIdentityResolver $identityResolver, QrPayloadResolver $qrPayloadResolver, ActivitesCompteResolver $activites): JsonResponse
     {
         $user = $request->user();
         $identity = $identityResolver->resolve($user);
+        $rattachements = $activites->resolve($user);
 
         return response()->json([
             'id' => $user->id,
@@ -57,7 +59,11 @@ class MeController extends Controller
                 'proprietaire_id' => $identity->proprietaire?->id,
                 'livreur_id' => $identity->livreur?->id,
                 // Lu sur le rattachement posé au back-office (ADR 0050), jamais sur le téléphone.
-                'parrain_id' => $activites->resolve($user)->parrain?->id,
+                'parrain_id' => $rattachements->parrain?->id,
+                // Consultants (prestataires) dont le compte perçoit les commissions, même rattachement
+                // que le parrain (ADR 0050, 0054). Jamais `prestataire_id` : ce nom est réservé côté
+                // frontend à un futur espace « prestations ».
+                'consultant_ids' => $rattachements->consultants->pluck('id')->map(fn ($id): string => (string) $id)->values()->all(),
             ],
         ]);
     }

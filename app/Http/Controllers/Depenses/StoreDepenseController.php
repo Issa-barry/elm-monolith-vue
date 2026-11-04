@@ -59,7 +59,7 @@ class StoreDepenseController extends Controller
                 'organization_id' => $orgId,
                 'user_id' => auth()->id(),
                 'depense_type_id' => $request->depense_type_id,
-                'beneficiaire_type' => $type->categorie->needsBeneficiaire() ? $type->categorie->value : null,
+                'beneficiaire_type' => $type->categorie->beneficiaireType(),
                 'beneficiaire_id' => $type->categorie->needsBeneficiaire() ? $request->beneficiaire_id : null,
                 ...$rattachement,
                 'site_id' => $request->site_id,

@@ -96,6 +96,7 @@ const categorieClass: Record<string, string> = {
     livreur: 'bg-amber-100 text-amber-700 border-amber-200',
     proprietaire: 'bg-purple-100 text-purple-700 border-purple-200',
     vehicule: 'bg-green-100 text-green-700 border-green-200',
+    parrain: 'bg-rose-100 text-rose-700 border-rose-200',
 };
 
 const impactBanner: Record<string, string> = {
@@ -104,6 +105,7 @@ const impactBanner: Record<string, string> = {
     livreur: 'border-amber-200 bg-amber-50 text-amber-700',
     proprietaire: 'border-purple-200 bg-purple-50 text-purple-700',
     vehicule: 'border-green-200 bg-green-50 text-green-700',
+    parrain: 'border-rose-200 bg-rose-50 text-rose-700',
 };
 
 const toast = useToast();

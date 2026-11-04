@@ -231,13 +231,26 @@ function exportExcel() {
             />
 
             <!-- Table -->
-            <div class="overflow-hidden rounded-xl border bg-card">
+            <div
+                class="max-w-full min-w-0 overflow-hidden rounded-xl border bg-card"
+            >
                 <DataTable
                     :value="fiches.data"
                     data-key="id"
                     striped-rows
                     class="text-sm"
-                    :pt="{ bodyRow: bodyRowPt }"
+                    table-style="width: max-content; min-width: 100%"
+                    :pt="{
+                        root: { class: 'w-full min-w-0' },
+                        table: { class: 'whitespace-nowrap' },
+                        tableContainer: {
+                            class: 'overflow-x-auto overscroll-x-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                            tabindex: 0,
+                            role: 'region',
+                            'aria-label': typeTitle[type],
+                        },
+                        bodyRow: bodyRowPt,
+                    }"
                     @row-click="onRowClick"
                 >
                     <Column header="Référence" style="width: 160px">
@@ -272,7 +285,12 @@ function exportExcel() {
                         </template>
                     </Column>
 
-                    <Column header="Bénéficiaire" style="min-width: 180px">
+                    <Column
+                        :header="
+                            type === 'parrain' ? 'Parrain' : 'Bénéficiaire'
+                        "
+                        style="min-width: 180px"
+                    >
                         <template #body="{ data }">
                             <Link
                                 :href="`/backoffice/comptabilite/fiches/${data.id}`"

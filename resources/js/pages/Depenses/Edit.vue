@@ -45,6 +45,7 @@ interface PersonneOption {
     site_nom?: string | null;
     vehicule_noms?: string | null;
     vehicule_immatriculations?: string | null;
+    type?: string | null;
 }
 interface SiteOption {
     id: string;
@@ -73,6 +74,7 @@ const props = defineProps<{
     proprietaires: PersonneOption[];
     prestataires: PersonneOption[];
     clients: PersonneOption[];
+    parrains: PersonneOption[];
     categories: { value: string; label: string }[];
     can_change_site: boolean;
 }>();
@@ -98,6 +100,7 @@ watch(concerneSelectionne, (newVal, oldVal) => {
         proprietaireSelected.value = null;
         prestataireSelected.value = null;
         clientSelected.value = null;
+        parrainSelected.value = null;
     }
 });
 
@@ -155,6 +158,7 @@ watch(
             proprietaireSelected.value = null;
             prestataireSelected.value = null;
             clientSelected.value = null;
+            parrainSelected.value = null;
         }
     },
 );
@@ -287,6 +291,12 @@ function clearProprietaire() {
     form.beneficiaire_id = '';
 }
 
+// Concerné « Consultant » : même picker que Prestataire, limité aux consultants ;
+// la dépense reste enregistrée comme prestataire (CategorieDepense::CONSULTANT).
+const consultants = computed(() =>
+    props.prestataires.filter((p) => p.type === 'consultant'),
+);
+
 const prestataireSelected = ref<PersonneOption | null>(
     props.depense.beneficiaire_type === 'prestataire' &&
         props.depense.beneficiaire_id
@@ -308,6 +318,26 @@ function onPrestataireSelect(p: PersonneOption) {
 
 function clearPrestataire() {
     prestataireSelected.value = null;
+    form.beneficiaire_id = '';
+}
+
+const parrainSelected = ref<PersonneOption | null>(
+    props.depense.beneficiaire_type === 'parrain' &&
+        props.depense.beneficiaire_id
+        ? (props.parrains.find((p) => p.id === props.depense.beneficiaire_id) ??
+              null)
+        : null,
+);
+const showParrainPicker = ref(false);
+const parrainFields = proprietaireFields;
+
+function onParrainSelect(p: PersonneOption) {
+    parrainSelected.value = p;
+    form.beneficiaire_id = p.id;
+}
+
+function clearParrain() {
+    parrainSelected.value = null;
     form.beneficiaire_id = '';
 }
 
@@ -376,9 +406,14 @@ const beneficiaireLabel = computed<string | null>(() => {
             props.proprietaires.find((p) => p.id === form.beneficiaire_id)
                 ?.nom_complet ?? null
         );
-    if (cat === 'prestataire')
+    if (cat === 'prestataire' || cat === 'consultant')
         return (
             props.prestataires.find((p) => p.id === form.beneficiaire_id)
+                ?.nom_complet ?? null
+        );
+    if (cat === 'parrain')
+        return (
+            props.parrains.find((p) => p.id === form.beneficiaire_id)
                 ?.nom_complet ?? null
         );
     if (cat === 'client')
@@ -402,6 +437,8 @@ const concerneBadgeClass = computed(() => {
         interne: 'border-slate-200 bg-slate-50 text-slate-700',
         prestataire: 'border-teal-200 bg-teal-50 text-teal-700',
         client: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+        consultant: 'border-teal-200 bg-teal-50 text-teal-700',
+        parrain: 'border-rose-200 bg-rose-50 text-rose-700',
     };
     return map[concerneSelectionne.value] ?? '';
 });
@@ -950,13 +987,116 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                 </BeneficiairePickerDialog>
                             </div>
 
+                            <!-- Parrain -->
+                            <div v-else-if="categorie === 'parrain'">
+                                <Label
+                                    for="dep-parrain"
+                                    class="mb-1.5 block text-xs font-medium"
+                                >
+                                    Parrain
+                                    <span class="text-destructive">*</span>
+                                </Label>
+                                <div class="relative">
+                                    <button
+                                        id="dep-parrain"
+                                        type="button"
+                                        class="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-muted/40"
+                                        :class="[
+                                            form.errors.beneficiaire_id
+                                                ? 'border-destructive'
+                                                : '',
+                                            parrainSelected ? 'pr-8' : '',
+                                        ]"
+                                        @click="showParrainPicker = true"
+                                    >
+                                        <Search
+                                            class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                        />
+                                        <span
+                                            class="truncate text-left"
+                                            :class="
+                                                parrainSelected
+                                                    ? ''
+                                                    : 'text-muted-foreground'
+                                            "
+                                        >
+                                            {{
+                                                parrainSelected?.nom_complet ??
+                                                'Rechercher un parrain…'
+                                            }}
+                                        </span>
+                                    </button>
+                                    <button
+                                        v-if="parrainSelected"
+                                        type="button"
+                                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                        aria-label="Effacer la sélection"
+                                        @click.stop="clearParrain"
+                                    >
+                                        <X class="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                                <p
+                                    v-if="form.errors.beneficiaire_id"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.beneficiaire_id }}
+                                </p>
+
+                                <BeneficiairePickerDialog
+                                    v-model:visible="showParrainPicker"
+                                    title="Sélectionner un parrain"
+                                    :options="parrains"
+                                    :fields="parrainFields"
+                                    empty-label="Aucun parrain trouvé"
+                                    @select="onParrainSelect"
+                                >
+                                    <template #option="{ option }">
+                                        <div class="leading-tight font-medium">
+                                            {{ option.nom_complet }}
+                                        </div>
+                                        <div
+                                            v-if="option.vehicule_noms"
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            🚚 {{ option.vehicule_noms }}
+                                            <span
+                                                v-if="
+                                                    option.vehicule_immatriculations
+                                                "
+                                                class="font-mono"
+                                                >—
+                                                {{
+                                                    option.vehicule_immatriculations
+                                                }}</span
+                                            >
+                                        </div>
+                                        <div
+                                            v-if="option.telephone"
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            ☎ {{ option.telephone }}
+                                        </div>
+                                    </template>
+                                </BeneficiairePickerDialog>
+                            </div>
+
                             <!-- Prestataire -->
-                            <div v-else-if="categorie === 'prestataire'">
+                            <div
+                                v-else-if="
+                                    categorie === 'prestataire' ||
+                                    categorie === 'consultant'
+                                "
+                            >
                                 <Label
                                     for="dep-prestataire"
                                     class="mb-1.5 block text-xs font-medium"
                                 >
-                                    Prestataire
+                                    {{
+                                        categorie === 'consultant'
+                                            ? 'Consultant'
+                                            : 'Prestataire'
+                                    }}
                                     <span class="text-destructive">*</span>
                                 </Label>
                                 <div class="relative">
@@ -985,7 +1125,9 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                         >
                                             {{
                                                 prestataireSelected?.nom_complet ??
-                                                'Rechercher un prestataire…'
+                                                (categorie === 'consultant'
+                                                    ? 'Rechercher un consultant…'
+                                                    : 'Rechercher un prestataire…')
                                             }}
                                         </span>
                                     </button>
@@ -1008,10 +1150,22 @@ function submitAs(statut: 'brouillon' | 'soumis') {
 
                                 <BeneficiairePickerDialog
                                     v-model:visible="showPrestatairePicker"
-                                    title="Sélectionner un prestataire"
-                                    :options="prestataires"
+                                    :title="
+                                        categorie === 'consultant'
+                                            ? 'Sélectionner un consultant'
+                                            : 'Sélectionner un prestataire'
+                                    "
+                                    :options="
+                                        categorie === 'consultant'
+                                            ? consultants
+                                            : prestataires
+                                    "
                                     :fields="prestataireFields"
-                                    empty-label="Aucun prestataire trouvé"
+                                    :empty-label="
+                                        categorie === 'consultant'
+                                            ? 'Aucun consultant trouvé'
+                                            : 'Aucun prestataire trouvé'
+                                    "
                                     @select="onPrestataireSelect"
                                 >
                                     <template #option="{ option }">

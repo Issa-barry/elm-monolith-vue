@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Depense;
 use App\Models\Employe;
 use App\Models\Livreur;
+use App\Models\Parrain;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +29,7 @@ class ConcerneDetailDepenseController extends Controller
             'employe' => $this->buildEmployeDetail($id, $orgId),
             'prestataire' => $this->buildPrestataireDetail($id, $orgId),
             'client' => $this->buildClientDetail($id, $orgId),
+            'parrain' => $this->buildParrainDetail($id, $orgId),
             default => null,
         };
 
@@ -123,6 +125,22 @@ class ConcerneDetailDepenseController extends Controller
             'type' => 'client',
             'nom' => $client->nom_complet,
             'telephone' => $client->telephone ?? '—',
+            'site' => '—',
+        ];
+    }
+
+    private function buildParrainDetail(string $id, string $orgId): ?array
+    {
+        $parrain = Parrain::with(['personne', 'vehicules:id,parrain_id,nom_vehicule'])->where('organization_id', $orgId)->find($id);
+        if (! $parrain) {
+            return null;
+        }
+
+        return [
+            'type' => 'parrain',
+            'nom' => $parrain->nom_complet ?: '—',
+            'telephone' => $parrain->telephone ?? '—',
+            'vehicules' => $parrain->vehicules->pluck('nom_vehicule')->implode(', ') ?: '—',
             'site' => '—',
         ];
     }

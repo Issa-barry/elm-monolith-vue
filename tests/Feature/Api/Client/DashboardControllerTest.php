@@ -265,7 +265,7 @@ class DashboardControllerTest extends TestCase
         $vehicule = $this->makeVehicule($org, $proprietaire);
 
         // Paiement PARTIEL (5000 sur 15000) : la formule `balance` ne descend
-        // jamais sous 0 (comportement documenté de calculateEarnings()) — un
+        // jamais sous 0 (comportement documenté de totaux()) — un
         // scénario entièrement payé masquerait l'effet des dépenses ici.
         $this->makeVenteCommission($org, $vehicule, $proprietaire, 15000, 5000);
 
@@ -306,11 +306,12 @@ class DashboardControllerTest extends TestCase
         $this->assertEquals(4000.0, $api['depenses_total']);
     }
 
-    public function test_depenses_total_counts_livreur_depenses_without_changing_the_balance(): void
+    public function test_depenses_total_counts_livreur_depenses_deducted_like_his_fiche(): void
     {
         // Régression 02/11 : la carte Dépenses restait à 0 GNF malgré une avance sur salaire
-        // validée. Affichage seul : la règle "jamais imputées à un livreur" reste vraie pour
-        // frais_depenses_total et balance.
+        // validée. Depuis l'ADR 0054 (décision du 03/11/2026), le reste à payer suit la fiche
+        // du livreur, qui déduit ses dépenses validées : l'avance entre dans frais_depenses_total
+        // (sans commission, le reste reste à 0, jamais négatif).
         $org = Organization::factory()->create();
         $user = $this->makeLivreurUser($org);
         $livreurId = $user->livreur->id;
@@ -333,7 +334,7 @@ class DashboardControllerTest extends TestCase
         $api = $this->apiJson($user);
 
         $this->assertEquals(25000.0, $api['depenses_total']);
-        $this->assertEquals(0.0, $api['summary']['frais_depenses_total']);
+        $this->assertEquals(25000.0, $api['summary']['frais_depenses_total']);
         $this->assertEquals(0.0, $api['summary']['balance']);
     }
 

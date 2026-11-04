@@ -173,7 +173,8 @@ function fermer() {
                     Utilisez le modèle Excel pour préparer votre fichier —
                     colonnes obligatoires : <strong>libelle</strong> et
                     <strong>concerne</strong> (véhicule, propriétaire, livreur,
-                    salarié, interne ou prestataire).
+                    salarié, interne, prestataire, client, consultant ou
+                    parrain).
                     <strong>description_facultatif</strong>,
                     <strong>commentaire_obligatoire</strong> et
                     <strong>justificatif_obligatoire</strong> (Oui/Non) et

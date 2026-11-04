@@ -317,6 +317,8 @@ class PlanComptableBootstrapService
             // Dépense imputée à un tiers (avance récupérable, jamais une charge)
             ['depense_avance_tiers_validee', 'avance_tiers_proprietaire', null, '467130', null],
             ['depense_avance_tiers_validee', 'avance_tiers_livreur', null, '467140', null],
+            // PARRAIN-026 : soldée par la ligne avance_tiers_parrain de la fiche Parrain validée.
+            ['depense_avance_tiers_validee', 'avance_tiers_parrain', null, '467220', null],
             ['depense_avance_tiers_validee', 'tresorerie', null, '571000', 'CA'],
 
             // Paiement de salaire (jambe trésorerie uniquement, cf. EvenementComptable::PAIEMENT_SALAIRE

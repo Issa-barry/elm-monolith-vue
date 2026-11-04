@@ -80,10 +80,16 @@ rester léger.
     "organization_id": "...",
     "client_id": null,
     "proprietaire_id": "...",
-    "livreur_id": null
+    "livreur_id": null,
+    "parrain_id": null,
+    "consultant_ids": []
   }
 }
 ```
+
+`parrain_id` et `consultant_ids` (ADR 0050, 0054) suivent uniquement le rattachement posé au
+back-office, jamais le téléphone. `consultant_ids` liste les consultants (prestataires) dont le compte
+perçoit les commissions ; ce n'est pas `prestataire_id`, réservé à un futur espace « prestations ».
 
 `roles` liste **tous** les rôles du compte (jamais un seul "rôle principal") —
 un frontend doit toujours vérifier `roles.some(r => ['client','proprietaire','livreur'].includes(r))`
@@ -364,6 +370,53 @@ Liste des véhicules du proprietaire (les siens) ou du livreur (ceux de son
   backend dédiée (elle n'existe pas).
 - `capacite` est un champ hérité (nombre unique, packs) — la capacité réelle
   multi-catégorie vit ailleurs (non exposée ici).
+- Contrat de l'application mobile, **inchangé** par l'ADR 0054 : les véhicules parrainés n'y figurent
+  pas (voir ci-dessous).
+
+### `GET /v1/mobile/vehicules/rattaches` (ADR 0054)
+
+Tous les véhicules rattachés au compte, **un par ligne, jamais dupliqué**, quel que soit le lien. Utilisé
+par la page « Mes véhicules » de l'espace client Nuxt. **Lecture seule.**
+
+```json
+[
+  {
+    "id": "...", "nom": "KALOUM", "immatriculation": "BE8120", "type": "Camion",
+    "statut": "actif", "is_active": true, "photo_url": null,
+    "liens": ["proprietaire", "livreur"], "lecture_restreinte": false,
+    "en_livraison": false, "role": "proprietaire",
+    "proprietaire": { "id": "...", "nom_complet": "Hassane DIALLO", "telephone": "+224..." },
+    "equipe": [ ... ], "capacites": [ ... ], "remuneration_parrain": []
+  },
+  {
+    "id": "...", "nom": "MATOTO", "immatriculation": "BE7955", "type": "Minibus",
+    "statut": "actif", "is_active": true, "photo_url": null,
+    "liens": ["parrain"], "lecture_restreinte": true,
+    "en_livraison": null, "role": "parrain",
+    "proprietaire": { "id": null, "nom_complet": "Mamadou BAH", "telephone": null },
+    "equipe": [], "capacites": [],
+    "remuneration_parrain": [
+      { "processus_label": "Ventes", "categorie_nom": "Sachet eau", "montant": 200, "a_definir": false, "depuis": "2026-10-01" }
+    ]
+  }
+]
+```
+
+| Lien | Source | Le compte voit |
+|---|---|---|
+| `proprietaire` | `vehicules.proprietaire_id` | tout, comme `vehicules/mine` |
+| `livreur` | membre de l'**équipe actuelle** du véhicule | tout, comme `vehicules/mine` |
+| `parrain` | `vehicules.parrain_id` | identité du véhicule, **nom** du propriétaire, sa rémunération de parrain |
+
+- `lecture_restreinte` = véhicule **seulement** parrainé (décision D1 du 03/11/2026). Le backend n'en
+  renvoie ni l'identifiant ni le téléphone du propriétaire (ni aucune autre coordonnée), ni l'équipe,
+  ni les capacités, ni l'état de livraison (`en_livraison` à `null`). Ses ventes
+  (`/v1/mobile/activite`) et ses dépenses (`vehicules/{id}/frais`) restent fermées (vide / 404).
+- Un véhicule également possédé ou livré par le compte n'est pas restreint : les droits du lien le plus
+  large s'appliquent, `liens` les cite tous.
+- Un consultant n'a aucun véhicule rattaché (affectation par organisation) : ses véhicules ne
+  figurent que sur ses lignes de commission (`GET /v1/mobile/commissions`).
+- Un véhicule quitté (équipe, parrainage retiré) sort de la liste ; ses commissions restent lisibles.
 
 ### `GET /v1/mobile/vehicules/{vehiculeId}/commissions`
 
@@ -417,6 +470,8 @@ Query params (tous optionnels) :
 | `depense_type_id` | Filtre par type de dépense (catégorie) |
 | `statut` | Valeur de `StatutDepense` : `brouillon`, `soumis`, `valide`, `rejete`, `annule` — **aucun filtre par défaut**, contrairement au calcul du dashboard qui ne compte que `valide` |
 | `date_debut`, `date_fin` | Filtre par `date_depense` — **aucune période par défaut** (liste complète si non fourni) |
+| `annee`, `mois`, `quinzaine` | Période comptable sur `date_depense` : `quinzaine` vaut `P1` (du 1er au 15), `P2` (du 16 à la fin du mois) ou `TOUT` (omise = le mois) ; `mois` omis = l'année. Bornes calculées par le serveur, renvoyées dans `filters`. Exclut `date_debut`/`date_fin` et `periode` (422). Voir [filtre-periode-comptable.md](filtre-periode-comptable.md) |
+| `periode` | Période rapide sur `date_depense`, mêmes clés que le dashboard : `aujourd_hui`, `hier`, `cette_semaine`, `semaine_precedente`, `ce_mois`, `mois_precedent`, `cette_annee`, `annee_precedente`, `tout` (sans borne). Bornes calculées par le serveur (`SituationPeriode`, semaine du lundi au dimanche, période en cours jusqu'à sa fin), renvoyées dans `filters`. Exclut `date_debut`/`date_fin` (422) |
 | `per_page` | 1 à 100, défaut 20 |
 
 ```json
@@ -432,7 +487,7 @@ Query params (tous optionnels) :
   ],
   "links": { "first": "...", "last": "...", "prev": null, "next": null },
   "meta": { "current_page": 1, "last_page": 3, "per_page": 20, "total": 42 },
-  "filters": { "vehicule_id": null, "depense_type_id": null, "statut": null, "date_debut": null, "date_fin": null },
+  "filters": { "vehicule_id": null, "depense_type_id": null, "statut": null, "annee": null, "mois": null, "quinzaine": null, "date_debut": null, "date_fin": null },
   "total_valide": 81100
 }
 ```
@@ -485,7 +540,8 @@ connecté (tous statuts, 20 dernières) — pas de pagination pour l'instant
 
 ### `GET /v1/mobile/dashboard`
 
-Dashboard financier consolidé (vente + logistique + dépenses + solde) — **même
+Dashboard financier consolidé (vente + logistique + dépenses + solde), **toutes les activités du compte**
+(propriétaire, livreur, parrain, consultant — ADR 0054) — **même
 moteur** que l'espace client Inertia (`App\Services\Client\ClientEarningsService`,
 extrait le 26/08/2026 de `ClientDashboardController`) : backoffice web et cette
 route renvoient garanti les mêmes montants pour les mêmes filtres (couvert par
@@ -499,17 +555,28 @@ Query params (tous optionnels) :
 |---|---|---|---|
 | `period` | `7j`, `30j`, `ce_mois`, `mois_passe`, `custom` | `ce_mois` | Raccourci de période ; `custom` utilise `date_debut`/`date_fin` tels quels |
 | `date_debut`, `date_fin` | date ISO | — | Utilisés seulement si `period=custom` |
+| `periode` | `aujourd_hui`, `hier`, `cette_semaine`, `semaine_precedente`, `ce_mois`, `mois_precedent`, `cette_annee`, `annee_precedente`, `tout` | — | Filtre de l'accueil : période rapide résolue par le serveur (`tout` = aucune borne). Exclut `period`, `date_debut`/`date_fin` et la période comptable (422) |
+| `annee`, `mois`, `quinzaine` | `quinzaine` : `P1`, `P2`, `TOUT` | — | Période comptable : P1 du 1er au 15, P2 du 16 à la fin du mois, `TOUT` ou omise = le mois ; `mois` omis = l'année. Exclut `period`, `periode`, `date_debut`/`date_fin` (422) |
+
+Avec `periode` ou la période comptable, `filters.period` vaut `custom`, `filters` renvoie les bornes
+calculées, et les parts logistiques sont datées par leur date de gain (`earned_at`, comme les fiches de
+paiement) au lieu de `created_at`. Voir [filtre-periode-comptable.md](filtre-periode-comptable.md).
 | `vehicule_id` | ULID d'un véhicule accessible | — | Restreint le **calcul** des montants à ce véhicule (voir note ci-dessous) |
 | `statut` | valeur de `StatutCommission` (`impaye`, `partiel`, `paye`...) | — | Filtre les commissions par statut |
 
 ```json
 {
-  "filters": { "period": "ce_mois", "date_debut": "2026-08-01", "date_fin": "2026-08-26", "vehicule_id": null, "statut": null },
+  "filters": { "period": "ce_mois", "date_debut": "2026-08-01", "date_fin": "2026-08-26", "vehicule_id": null, "statut": null, "periode": null, "annee": null, "mois": null, "quinzaine": null },
   "summary": {
-    "total_earned": 23000, "total_paid": 11000,
+    "total_earned": 23000, "total_paid": 11000, "en_attente_validation": 0,
     "frais_depenses_total": 4000, "balance": 8000,
     "operations_count": 2
   },
+  "par_activite": [
+    { "activite": "proprietaire", "libelle": "Propriétaire", "total_earned": 23000, "total_paid": 11000,
+      "en_attente_validation": 0, "frais_depenses_total": 4000, "balance": 8000, "operations_count": 2 }
+  ],
+  "depenses_total": 4000,
   "summary_evolution": {
     "total_earned": { "previous_value": 20000, "percent": 15.0, "direction": "up", "comparable": true },
     "total_paid": { "previous_value": 5000, "percent": 120.0, "direction": "up", "comparable": true },
@@ -520,26 +587,35 @@ Query params (tous optionnels) :
   "comparison_period": { "date_debut": "2026-07-01", "date_fin": "2026-07-31" },
   "par_vehicule": [
     { "vehicule_id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859",
-      "frais_depenses": 4000, "total_earned": 23000, "total_paid": 11000, "balance": 8000 }
+      "frais_depenses": 4000, "total_earned": 23000, "total_paid": 11000, "balance": 8000,
+      "liens": ["proprietaire"], "par_activite": [{ "activite": "proprietaire", "total_earned": 23000 }] }
   ],
   "vehicules": [
-    { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" }
+    { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859", "liens": ["proprietaire"] }
   ]
 }
 ```
 
 - `summary` : totaux agrégés, mêmes clés que l'espace client Inertia
-  (`earnings`) — noms de champs du moteur réel, pas une reformulation.
-  `balance` ne descend jamais sous 0 (un solde négatif n'est jamais affiché
-  comme dette du propriétaire, comportement du moteur, pas de cet endpoint).
-- `depenses_total` (ajouté le 02/11/2026, hors `summary`, affichage seul) :
-  `frais_depenses_total` + dépenses validées rattachées directement au livreur
-  sur la période (ex. avance sur salaire), sauf filtre `vehicule_id`. C'est le
-  montant de la carte KPI « Dépenses » sur desktop, comparée à `mois_passe` ; sur
-  mobile, la carte reprend `total_valide` de `GET /v1/mobile/depenses/mine` (§4).
-  **Jamais déduit de `balance`** :
-  `frais_depenses_total` reste réservé aux frais de véhicule d'un propriétaire,
-  et l'espace client Inertia n'expose pas ce champ.
+  (`earnings`) — noms de champs du moteur réel, pas une reformulation. Depuis l'ADR 0054 :
+  - toutes les activités du compte, chaque part comptée **une seule fois**, dans l'activité de son
+    bénéficiaire (la part du parrain est déjà prise sur l'enveloppe Livreur : aucune enveloppe n'est
+    additionnée) ;
+  - une commission **annulée** n'entre dans aucun montant ;
+  - `en_attente_validation` : part de `total_earned` encore « Créée » (période pas encore validée) ;
+  - `frais_depenses_total` : dépenses validées que les fiches de paiement déduisent sur la période —
+    dépenses imputées à chaque bénéficiaire du compte (avance du livreur, dépense du propriétaire, du
+    parrain, du consultant) et dépenses des véhicules du propriétaire. Filtré sur un véhicule : seules
+    les dépenses de ce véhicule ;
+  - `balance` (« reste à payer », règle des fiches) : par activité
+    `total_earned - en_attente_validation - frais_depenses_total - total_paid`, jamais sous 0, puis
+    additionné (les retenues d'une activité ne compensent pas les gains d'une autre).
+- `par_activite` (ADR 0054) : les mêmes champs pour chaque activité du compte (`proprietaire`,
+  `livreur`, `parrain`, `consultant`), toutes ses activités même à 0 ; leur somme donne `summary`.
+- `depenses_total` (hors `summary`) : égal à `frais_depenses_total` depuis l'ADR 0054 (avant :
+  frais de véhicule + dépenses du livreur, sans déduction). C'est le montant de la carte KPI
+  « Dépenses » sur desktop ; sur mobile, la carte reprend `total_valide` de
+  `GET /v1/mobile/depenses/mine` (§4).
 - `summary_evolution` (ajouté le 27/08/2026, champ **additif** — `summary`
   lui-même ne change pas) : évolution de chacun des 5 champs de `summary`.
   **Le pourcentage compare la période sélectionnée à la période
@@ -560,7 +636,9 @@ Query params (tous optionnels) :
   dégénéré `period=custom` sans `date_debut`/`date_fin`.
 - `comparison_period` : bornes exactes de la période précédente utilisée par
   `summary_evolution`, pour affichage (ex. "vs 01/07 - 31/07").
-- `par_vehicule` : **liste toujours l'intégralité du parc accessible**, même
+- `par_vehicule` : **liste toujours l'intégralité des véhicules rattachés** (propriétaire, livreur de
+  l'équipe actuelle, parrain — ADR 0054), plus tout véhicule portant une part du compte sur la période
+  (équipe quittée, commission de consultant, `liens` vide), même
   quand `vehicule_id` est fourni — seul le **calcul** des montants est
   restreint au véhicule filtré (les autres véhicules apparaissent avec des
   montants à 0). Même comportement que le dashboard Inertia ; ne pas
@@ -569,8 +647,55 @@ Query params (tous optionnels) :
   global était la priorité, une évolution par véhicule nécessiterait de
   faire évoluer `VehiculeEarningsRow` (constructeur + 2 points d'appel) pour
   un bénéfice non demandé par l'écran actuel.
-- `vehicules` : parc accessible complet (identité seulement, pour peupler un
-  sélecteur de véhicule côté frontend).
+  `liens` : nature du rattachement ; `par_activite` : gains du compte sur ce véhicule, par activité.
+- `vehicules` : véhicules rattachés puis véhicules portant une part du compte (toutes périodes), avec
+  `liens` (identité seulement, pour peupler un sélecteur de véhicule côté frontend). C'est la liste
+  acceptée par `vehicule_id` (ignoré sinon).
+
+### `GET /v1/mobile/commissions` (ADR 0054)
+
+Détail des commissions du compte, **toutes activités**, une ligne par part dont le compte est le
+bénéficiaire — jamais la part d'un autre bénéficiaire de la même opération. Paginé (`per_page` 1-100,
+20 par défaut, `page`), de la plus récente à la plus ancienne (date de gain).
+
+| Param | Effet |
+|---|---|
+| `periode` | période rapide, mêmes clés que le dashboard (`tout` = sans borne) |
+| `annee`, `mois`, `quinzaine` | période comptable, mêmes règles que le dashboard |
+| `date_debut`, `date_fin` | dates libres |
+| `vehicule_id` | parts de ce véhicule (liste vide si le compte n'en a aucune) |
+| `activite` | `proprietaire`, `livreur`, `parrain`, `consultant` |
+| `statut` | valeur de `StatutCommission`, `annulee` comprise |
+| `recherche` | référence de l'opération, nom ou immatriculation du véhicule (100 caractères max.) |
+
+Les trois formes de période s'excluent (422). 422 aussi pour une activité ou un statut inconnu.
+
+```json
+{
+  "data": [
+    {
+      "id": "...", "activite": "parrain", "activite_label": "Parrain", "beneficiaire_libelle": null,
+      "operation": "vente", "operation_label": "Ventes", "reference": "VTE-031126-001",
+      "vehicule": { "id": "...", "nom_vehicule": "MATOTO", "immatriculation": "BE7955" },
+      "date": "2026-11-03", "montant_a_payer": 25000, "montant_verse": 0, "montant_restant": 25000,
+      "statut": "impaye", "statut_label": "Impayée"
+    }
+  ],
+  "links": { ... }, "meta": { "current_page": 1, "last_page": 1, "per_page": 20, "total": 1 },
+  "resume": { "summary": { ... }, "par_activite": [ ... ] },
+  "filters": { "periode": null, "annee": 2026, "mois": 11, "quinzaine": null, "date_debut": "2026-11-01", "date_fin": "2026-11-30", "vehicule_id": null, "activite": null, "statut": null, "recherche": null }
+}
+```
+
+- `activite` vient du **type de bénéficiaire de la part enregistrée** (`beneficiaire_type`), jamais des
+  rôles du compte. `beneficiaire_libelle` : entreprise (ou personne) d'un consultant, `null` sinon.
+- `operation` : `vente` ou `logistique` (transfert) ; `operation_label` : processus de la commission.
+- Une commission **annulée** reste listée avec son statut, mais sort de `resume`.
+- `resume` : mêmes champs que `summary` et `par_activite` du dashboard, sur les mêmes filtres et
+  toutes les pages (la recherche et le filtre `activite` s'y appliquent). Sans recherche ni statut,
+  `resume` est identique au dashboard de la même période.
+- Les parts du moteur logistique historique (`commission_logistique_parts`, avant le 03/09/2026, 0 ligne
+  en production) ne sont pas listées.
 - Rôle requis : `client|proprietaire|livreur` (comme le reste de cette
   section). Un compte staff pur reçoit `403`.
 
@@ -665,15 +790,46 @@ Query params (tous optionnels) :
 | `type` | `vente` ou `logistique` — omis = les deux mélangés, triés par date décroissante |
 | `statut` | **Exige `type`** (422 sinon, avec message explicite) — les deux modèles ont des vocabulaires de statut différents (`StatutCommandeVente` vs `StatutTransfert`), aucune correspondance n'est inventée entre les deux |
 | `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles) |
-| `date_debut`, `date_fin` | Filtre sur `validated_at` (vente) ou `date_depart_reelle` (logistique) |
+| `periode` | Période rapide : `aujourd_hui`, `hier`, `cette_semaine`, `semaine_precedente`, `ce_mois`, `mois_precedent` ou `cette_annee`. Bornes résolues par le serveur (`SituationPeriode`, fuseau de l'application, semaine du lundi au dimanche) ; une période en cours s'arrête à l'instant présent. **Exclut** `date_debut` et `date_fin` |
+| `date_debut`, `date_fin` | Jours entiers, bornes incluses, sur la date de référence décrite ci-dessous |
+| `annee`, `mois`, `quinzaine` | Période comptable : `quinzaine` vaut `P1` (du 1er au 15), `P2` (du 16 à la fin du mois) ou `TOUT` (omise = le mois) ; `mois` omis = l'année. Sur la même date de référence. **Exclut** `periode` et `date_debut`/`date_fin`. Voir [filtre-periode-comptable.md](filtre-periode-comptable.md) |
 | `per_page` | 1 à 100, défaut 20 |
+| `page` | Entier ≥ 1, défaut 1 |
+
+Tous les filtres se combinent (`periode` + `type` + `statut` + `vehicule_id`), et toujours à
+l'intérieur du périmètre de l'utilisateur connecté.
+
+Erreurs de validation (`422`, clé dans `errors`) :
+
+| Cas | Clé |
+|---|---|
+| `statut` sans `type`, ou statut inconnu pour ce type | `statut` |
+| `periode` inconnue | `periode` |
+| `periode` envoyée avec `date_debut` ou `date_fin` | `periode` |
+| `annee` future ou avant 2000, `mois` hors 1-12, `quinzaine` inconnue | le champ concerné |
+| `mois` sans `annee`, `quinzaine` sans `mois` | le champ manquant |
+| période comptable envoyée avec `periode`, `date_debut` ou `date_fin` | `annee` |
+| `date_debut` ou `date_fin` qui n'est pas une date | le champ concerné |
+| `date_fin` antérieure à `date_debut` | `date_fin` |
+| `per_page` hors de 1 à 100, `page` inférieure à 1 | le champ concerné |
+
+**Date de référence** (la même pour le filtre, le tri et le champ `date` de la réponse) :
+
+- vente : `validated_at`, à défaut `created_at` ;
+- logistique : `date_depart_reelle`, à défaut `created_at`.
+
+Conséquence : une vente est classée à sa date de validation, **pas à sa date de livraison**
+(`livree_at`). Validée le 01/11 et livrée le 02/11, elle sort sous « Hier » le 02/11. Cet écran ne
+répond donc pas à la question « qu'est-ce qui a été livré aujourd'hui ? ». Il ne suit pas non plus la
+date de vente d'une précommande, qui est celle de sa réalisation (ADR 0007 §3, ADR 0019).
 
 ```json
 {
   "data": [
     {
       "id": "...", "type": "vente", "reference": "CMD-2847",
-      "statut": "livraison_en_cours", "statut_label": "Livraison en cours",
+      "statut": "livree", "statut_label": "Livrée",
+      "statut_paiement": "partiel", "statut_paiement_label": "Partiellement payée",
       "site_source": "Siège de Matoto", "site_destination": "Client X",
       "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" },
       "date": "2026-08-20", "nb_packs": 12
@@ -681,6 +837,7 @@ Query params (tous optionnels) :
     {
       "id": "...", "type": "logistique", "reference": "TR-00042-XYZ",
       "statut": "cloture", "statut_label": "Clôturé",
+      "statut_paiement": null, "statut_paiement_label": null,
       "site_source": "Siège de Matoto", "site_destination": "Dépôt Kindia",
       "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" },
       "date": "2026-08-18", "nb_packs": 40
@@ -688,17 +845,27 @@ Query params (tous optionnels) :
   ],
   "links": { "first": "...", "last": "...", "prev": null, "next": null },
   "meta": { "current_page": 1, "last_page": 2, "per_page": 20, "total": 27 },
-  "filters": { "type": null, "statut": null, "vehicule_id": null, "date_debut": null, "date_fin": null }
+  "filters": { "type": null, "statut": null, "vehicule_id": null, "periode": "cette_semaine", "annee": null, "mois": null, "quinzaine": null, "date_debut": "2026-11-02", "date_fin": "2026-11-02" }
 }
 ```
 
-⚠️ **Pagination calculée côté backend en mémoire**, pas par une requête SQL
-unique : les deux modèles (`CommandeVente`, `TransfertLogistique`) sont
-interrogés séparément (chacun filtré et borné à 200 lignes), fusionnés puis
-triés par date avant découpage en pages. Le volume réel reste borné à
-l'activité d'un seul propriétaire — jamais un souci de performance en usage
-normal, mais à garder en tête si un jour un compte cumule plusieurs milliers
-d'opérations sur une seule période demandée.
+`filters.date_debut` et `filters.date_fin` renvoient les bornes effectives, y compris celles résolues
+depuis `periode`.
+
+**Statut affiché d'une vente** (depuis le 03/11/2026) : `statut` reste la valeur brute du workflow
+(celle du filtre `statut`), mais `statut_label` est le libellé du back-office
+(`CommandeVente::statutAffichage()`) : « Commissions à verser » pour une facture soldée en attente des
+commissions, « Retirée » pour une précommande retirée. `statut_paiement` / `statut_paiement_label`
+reprennent le statut de la facture (`StatutFactureVente` : `creee`, `impayee`, `partiel`, `payee`,
+`annulee`) — une vente « Livrée » peut être « Partiellement payée », comme sur la fiche back-office.
+`null` pour une vente sans facture et pour tout transfert logistique.
+
+**Pagination sans requête SQL unique** : les deux modèles (`CommandeVente`, `TransfertLogistique`)
+sont filtrés et comptés en base, puis seules les `page × per_page` premières lignes de chacun sont
+chargées, fusionnées et triées par date décroissante (puis `id`, pour un ordre stable d'une page à
+l'autre). `meta.total` compte tout le résultat filtré, sans plafond ; le plafond de 200 lignes par
+modèle a été retiré le 02/11/2026. Le coût d'une requête croît avec le numéro de page, pas avec le
+volume total du compte.
 
 ### `GET /v1/mobile/livraisons/scan/{reference}`
 
