@@ -17,6 +17,7 @@ use App\Models\Personne;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Observers\BusinessProfileRoleObserver;
 use App\Observers\DepenseObserver;
 use App\Observers\RattachementAutomatiqueObserver;
@@ -126,7 +127,7 @@ class AppServiceProvider extends ServiceProvider
         Livreur::observe(BusinessProfileRoleObserver::class);
 
         // Rattachement automatique d'une fiche au compte de la même personne (ADR 0056).
-        foreach ([User::class, Livreur::class, Proprietaire::class, Parrain::class, Prestataire::class, EntrepriseInterlocuteur::class] as $modele) {
+        foreach ([User::class, UserAuthIdentity::class, Personne::class, Livreur::class, Proprietaire::class, Parrain::class, Prestataire::class, EntrepriseInterlocuteur::class] as $modele) {
             $modele::observe(RattachementAutomatiqueObserver::class);
         }
 

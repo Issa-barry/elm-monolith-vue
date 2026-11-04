@@ -26,16 +26,23 @@ vérification.
    autre fiche déjà reliée au compte dans l'organisation (livreur, propriétaire, parrain, consultant,
    interlocuteur). Choix de l'utilisateur parmi trois options (même Personne, même Personne sauf
    entreprises, lien posé par un humain seulement).
-2. **Jamais sur un téléphone seul.** Un numéro identique sans Personne commune ne relie rien : le cas reste
-   au rattachement manuel, comme avant.
+2. **Parrain : le numéro de téléphone suffit** (décision de l'utilisateur du 04/11/2026, qui remplace
+   « jamais sur un téléphone seul »). Une fiche parrain dont la Personne porte le numéro d'un compte lui est
+   reliée, sans vérification de la possession du numéro et sans OTP, pour qu'il voie ses commissions de
+   parrain sur Nuxt dès son inscription. L'audit l'indique : `meta.preuve` = « Même numéro de téléphone que
+   le compte (numéro non vérifié) ». Pour un consultant ou un interlocuteur seul, un numéro identique ne
+   relie rien : le cas reste au manuel.
 3. **Cas laissés au manuel** : plusieurs comptes pour la même Personne, compte désactivé ou d'une autre
    organisation, refus de l'ADR 0050 (compte déjà parrain, déjà consultant, déjà interlocuteur de
    l'entreprise, fiche désactivée...), compte déjà relié à une autre fiche livreur ou propriétaire, et
    compte qu'un responsable a détaché de cette fiche. Un détachement n'est jamais annulé automatiquement.
+   S'y ajoute, pour le numéro seul : un compte sans organisation dont le numéro figure sur des fiches parrain
+   de plusieurs organisations.
 4. **Dans les deux sens, au fil de l'eau** (`RattachementAutomatiqueObserver`, après validation de la
-   transaction) : fiche créée ou dont la Personne change, compte qui reçoit une fiche Personne (inscription,
-   compte créé au back-office), activité nouvellement reliée dont la Personne porte d'autres fiches. Un échec
-   n'annule jamais l'opération d'origine ; la fiche reste au manuel.
+   transaction) : fiche créée ou dont la Personne ou le numéro change ; compte créé, activé (validation de
+   l'e-mail), ou qui reçoit une fiche Personne ou un numéro ; activité nouvellement reliée dont la Personne
+   porte d'autres fiches. Une fiche parrain reliée par numéro entraîne donc les autres fiches de la même
+   Personne. Un échec n'annule jamais l'opération d'origine ; la fiche reste au manuel.
 5. **Fiches concernées** : livreur, propriétaire (y compris entreprise, par son contact), parrain,
    consultant personne physique, interlocuteur d'entreprise. Une entreprise consultante n'est jamais reliée
    directement ; ses interlocuteurs le sont, et les commissions restent celles de l'entreprise.
@@ -69,18 +76,24 @@ d'un agent porte déjà sa Personne, et l'inscription relie elle aussi par numé
 du numéro le fermerait, dans un chantier dédié. Le rattachement à la connexion reste limité à l'organisation
 du compte quand elle est connue.
 
+Décision 2 (04/11/2026) : le risque est assumé aussi pour un parrain sans autre activité. Quelqu'un qui
+s'inscrit avec le numéro d'un parrain voit ses commissions, sans intervention d'un responsable. Aucun contrôle
+de possession du numéro ne bloque ce fonctionnement. L'OTP sera un chantier distinct, qui renforcera cette
+vérification ; `meta.preuve` permet de retrouver les liens qui ne reposent que sur le numéro. Les contrôles de
+cohérence et de séparation entre comptes restent (décision 3).
+
 ## Limite connue
 
-Une personne qui n'est que parrain, consultant ou interlocuteur et qui s'inscrit ensuite n'est pas reliée
-automatiquement : l'inscription lui crée une fiche Personne neuve (seules les fiches livreur et propriétaire
-sont reprises par le numéro), et le seul lien restant est un numéro non vérifié. La fiche reste au
-rattachement manuel. Pour l'automatiser, il faudrait une preuve de possession du numéro (code OTP qui
-pose `verified_at`) : hors périmètre, l'inscription et l'OTP ne changent pas.
+Une personne qui n'est que consultant ou interlocuteur et qui s'inscrit ensuite n'est pas reliée
+automatiquement : la décision du 04/11/2026 ne vise que le parrain, et le seul lien restant est un numéro
+identique. La fiche reste au rattachement manuel, sauf si la même Personne porte une fiche déjà reliée au compte.
 
 ## Options écartées
 
 - **Lien posé par un humain seulement** (rattachement manuel, compte créé au back-office, téléphone
   vérifié) : aucun cas réel n'aurait été relié, le téléphone n'étant jamais vérifié aujourd'hui.
+- **Exiger un OTP avant de relier un parrain par son numéro** : écartée pour le moment par l'utilisateur,
+  chantier ultérieur.
 - **Même Personne sauf interlocuteurs d'entreprise** : écartée par l'utilisateur, la même règle vaut pour
   toutes les activités.
 - **Résolution dynamique à chaque requête** (sans écrire `user_id`) : un détachement serait aussitôt annulé,

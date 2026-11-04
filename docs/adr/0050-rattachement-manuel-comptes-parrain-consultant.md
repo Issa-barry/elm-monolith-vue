@@ -4,7 +4,7 @@
 - **Statut** : accepté (décisions de l'utilisateur du 02/11/2026) ; décision 7 révisée par
   l'[ADR 0055](0055-compte-unique-back-office-espace-client.md) le 04/11/2026 ; décisions 2 et 6 et option
   « déduire le lien de `users.personne_id` » révisées par l'[ADR 0056](0056-rattachement-automatique-meme-personne.md)
-  le 04/11/2026 (rattachement automatique quand la fiche partage la Personne du compte)
+  le 04/11/2026 (rattachement automatique quand la fiche partage la Personne du compte, et sur le numéro du compte pour un parrain)
 - **Périmètre** : parrains, consultants, interlocuteurs d'entreprise, futurs espaces Nuxt — cf.
   [rattachement-comptes.md](../rattachement-comptes.md), [parrainage-vehicule.md](../parrainage-vehicule.md),
   [identite-client-personne.md](../identite-client-personne.md)

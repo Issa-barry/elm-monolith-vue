@@ -6,11 +6,14 @@ use App\Enums\AuditEvent;
 use App\Enums\FicheRattachable;
 use App\Enums\StatutCorrespondanceCompte;
 use App\Models\AuditLog;
+use App\Models\Parrain;
+use App\Models\Personne;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\Comptes\Data\CorrespondanceCompte;
 use App\Support\Auth\AccountEligibility;
 use App\Support\Auth\AccountStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,12 +21,17 @@ use Illuminate\Support\Facades\DB;
 /**
  * Rattachement automatique d'une fiche (livreur, propriétaire, parrain, consultant, interlocuteur) au
  * compte de la même personne (ADR 0056). L'identité est établie quand la fiche porte la fiche
- * Personne du compte, ou celle d'une autre activité déjà reliée à ce compte. Un téléphone identique
- * seul ne relie jamais rien : le cas reste au rattachement manuel (RattachementCompteService), comme
- * plusieurs comptes possibles, un détachement fait par un responsable ou un motif de refus.
+ * Personne du compte, ou celle d'une autre activité déjà reliée à ce compte. Pour un parrain, le numéro
+ * de téléphone du compte suffit aussi, sans vérification de sa possession (décision métier en
+ * attendant l'OTP). Restent au rattachement manuel (RattachementCompteService) : un numéro identique
+ * pour les autres fiches, plusieurs comptes possibles, un détachement fait par un responsable, un motif
+ * de refus.
  */
 class RattachementAutomatiqueService
 {
+    /** Dit dans l'audit que ce lien ne repose que sur le numéro, à réexaminer quand l'OTP existera. */
+    private const PREUVE_TELEPHONE = 'Même numéro de téléphone que le compte (numéro non vérifié).';
+
     /** Source imposée aux rattachements entraînés par l'observer pendant une opération (régularisation). */
     private static ?string $sourceImposee = null;
 
@@ -45,12 +53,7 @@ class RattachementAutomatiqueService
             : collect();
 
         if ($preuves->isEmpty()) {
-            $parTelephone = $this->rattachement->compteParTelephone($fiche->personne?->telephone);
-
-            return $parTelephone === null
-                ? new CorrespondanceCompte($type, $fiche, StatutCorrespondanceCompte::AUCUNE)
-                : new CorrespondanceCompte($type, $fiche, StatutCorrespondanceCompte::AMBIGUE, $parTelephone,
-                    motif: 'Seul le numéro de téléphone correspond, il n\'est pas vérifié.');
+            return $this->analyserParTelephone($type, $fiche);
         }
 
         if ($preuves->count() > 1) {
@@ -64,6 +67,32 @@ class RattachementAutomatiqueService
             return new CorrespondanceCompte($type, $fiche, StatutCorrespondanceCompte::AUCUNE);
         }
 
+        return $this->decider($type, $fiche, $compte, $preuves->first());
+    }
+
+    private function analyserParTelephone(FicheRattachable $type, Model $fiche): CorrespondanceCompte
+    {
+        $compte = $this->rattachement->compteParTelephone($fiche->personne?->telephone);
+
+        if ($compte === null) {
+            return new CorrespondanceCompte($type, $fiche, StatutCorrespondanceCompte::AUCUNE);
+        }
+
+        if ($type !== FicheRattachable::PARRAIN) {
+            return new CorrespondanceCompte($type, $fiche, StatutCorrespondanceCompte::AMBIGUE, $compte,
+                motif: 'Seul le numéro de téléphone correspond.');
+        }
+
+        if ($compte->organization_id === null && $this->numeroParrainDansUneAutreOrganisation($fiche)) {
+            return new CorrespondanceCompte($type, $fiche, StatutCorrespondanceCompte::AMBIGUE, $compte,
+                motif: 'Ce numéro figure sur des fiches parrain de plusieurs organisations.');
+        }
+
+        return $this->decider($type, $fiche, $compte, self::PREUVE_TELEPHONE);
+    }
+
+    private function decider(FicheRattachable $type, Model $fiche, User $compte, string $preuve): CorrespondanceCompte
+    {
         $motif = $this->detacheParUnResponsable($fiche, $compte)
             ? 'Un responsable a détaché ce compte de la fiche.'
             : $this->motifRefus($type, $fiche, $compte);
@@ -74,8 +103,17 @@ class RattachementAutomatiqueService
             $motif === null ? StatutCorrespondanceCompte::CERTAINE : StatutCorrespondanceCompte::AMBIGUE,
             $compte,
             motif: $motif,
-            preuve: $preuves->first(),
+            preuve: $preuve,
         );
+    }
+
+    /** Un compte sans organisation ne se voit jamais attribuer l'une d'elles au hasard. */
+    private function numeroParrainDansUneAutreOrganisation(Model $fiche): bool
+    {
+        return Parrain::query()
+            ->where('organization_id', '!=', $fiche->organization_id)
+            ->whereHas('personne', fn (Builder $q) => $q->where('telephone_normalise', $fiche->personne?->telephone_normalise))
+            ->exists();
     }
 
     /**
@@ -151,20 +189,46 @@ class RattachementAutomatiqueService
     /** Relie toutes les fiches encore libres de cette personne dont la correspondance est certaine. */
     public function rattacherPersonne(string $personneId, string $source): int
     {
-        $source = self::$sourceImposee ?? $source;
         $rattachees = 0;
 
         foreach (FicheRattachable::cases() as $type) {
-            $fiches = $type->requete()->with('personne')->where('personne_id', $personneId)->whereNull('user_id')->get();
-
-            foreach ($fiches as $fiche) {
-                if ($this->appliquer($this->analyser($fiche), $source)) {
-                    $rattachees++;
-                }
-            }
+            $rattachees += $this->relier(
+                $type->requete()->with('personne')->where('personne_id', $personneId)->whereNull('user_id')->get(),
+                $source,
+            );
         }
 
         return $rattachees;
+    }
+
+    /** Fiches de la Personne du compte, puis fiches parrain portant son numéro. */
+    public function rattacherCompte(User $compte, string $source): int
+    {
+        $rattachees = $compte->personne_id !== null ? $this->rattacherPersonne((string) $compte->personne_id, $source) : 0;
+        $telephone = $compte->telephone;
+
+        if (blank($telephone)) {
+            return $rattachees;
+        }
+
+        $normalise = Personne::normaliserTelephone($telephone);
+
+        return $rattachees + $this->relier(
+            FicheRattachable::PARRAIN->requete()
+                ->with('personne')
+                ->whereNull('user_id')
+                ->whereHas('personne', fn (Builder $q) => $q->where('telephone_normalise', $normalise))
+                ->get(),
+            $source,
+        );
+    }
+
+    /** @param  Collection<int, Model>  $fiches */
+    private function relier(Collection $fiches, string $source): int
+    {
+        $source = self::$sourceImposee ?? $source;
+
+        return $fiches->filter(fn (Model $fiche) => $this->appliquer($this->analyser($fiche), $source))->count();
     }
 
     /**

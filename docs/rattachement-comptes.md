@@ -13,8 +13,7 @@ identifiants habituels, et le rattachement lui donne les données de la fiche.
 ## Règles métier (IDs)
 
 - **COMPTE-001 — Rattachement manuel.** Un responsable relie un compte à une fiche depuis le back-office
-  quand le rattachement automatique (COMPTE-023) ne s'applique pas. Un numéro identique seul ne relie
-  jamais un parrain, un consultant ou un interlocuteur.
+  quand le rattachement automatique (COMPTE-023) ne s'applique pas.
 - **COMPTE-002 — Vérification avant confirmation.** Le numéro n'étant pas vérifié à l'inscription, le
   compte proposé peut appartenir à quelqu'un d'autre. Le responsable contrôle le nom saisi, le numéro, la
   date d'inscription et les rôles, et confirme l'identité auprès de la personne.
@@ -113,15 +112,19 @@ déclenché par `RattachementAutomatiqueObserver`.
 
 - **COMPTE-023 — Même Personne.** Une fiche livreur, propriétaire, parrain, consultant personne physique ou
   interlocuteur sans compte est reliée automatiquement au compte dont l'identité recouvre sa Personne : la fiche
-  Personne du compte, ou celle d'une autre fiche déjà reliée au compte dans l'organisation.
-- **COMPTE-024 — Moments.** À la création d'une fiche ou au changement de sa Personne, quand un compte reçoit une
-  fiche Personne (inscription, compte créé au back-office), et quand une activité est reliée au compte : les autres
-  fiches de la même Personne suivent. Après validation de la transaction ; un échec laisse la fiche au manuel.
-- **COMPTE-025 — Restent au manuel.** Téléphone identique sans Personne commune, plusieurs comptes pour la même
-  Personne, refus de COMPTE-003, compte déjà relié à une autre fiche livreur ou propriétaire, et compte qu'un
+  Personne du compte, ou celle d'une autre fiche déjà reliée au compte dans l'organisation. Pour un parrain, le
+  numéro de téléphone du compte suffit aussi, sans vérification de sa possession (OTP : chantier ultérieur).
+- **COMPTE-024 — Moments.** À la création d'une fiche ou au changement de sa Personne ou de son numéro ; quand un
+  compte est créé, activé (validation de l'e-mail), ou reçoit une fiche Personne ou un numéro ; quand une activité
+  est reliée au compte : les autres fiches de la même Personne suivent. Après validation de la transaction ; un échec
+  laisse la fiche au manuel.
+- **COMPTE-025 — Restent au manuel.** Numéro identique pour un consultant ou un interlocuteur seul, plusieurs comptes
+  pour la même Personne, compte sans organisation dont le numéro figure sur des fiches parrain de plusieurs
+  organisations, refus de COMPTE-003, compte déjà relié à une autre fiche livreur ou propriétaire, et compte qu'un
   responsable a détaché de cette fiche : un détachement n'est jamais annulé automatiquement.
 - **COMPTE-026 — Trace.** `compte_rattache` sans auteur, avec `meta.automatique`, `meta.source` (`fiche`, `compte`,
-  `activite_reliee`, `regularisation`) et `meta.preuve`. La fiche parrain l'affiche « Rattachement automatique ».
+  `activite_reliee`, `regularisation`) et `meta.preuve` (Personne commune, ou numéro non vérifié). La fiche parrain
+  l'affiche « Rattachement automatique ».
 - **COMPTE-027 — Régularisation.** `php artisan comptes:regulariser-rattachements` : simulation par défaut (bilan par
   activité et détail nominatif, `--csv=fichier` pour l'export, `--organization=` pour restreindre). `--apply` relie
   les seules correspondances certaines après confirmation (`--force` pour la passer), chacune re-vérifiée dans sa

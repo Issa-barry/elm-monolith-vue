@@ -18,9 +18,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Rattachement manuel d'un compte à une fiche parrain, consultant ou interlocuteur (ADR 0050), pour les
- * cas que RattachementAutomatiqueService ne relie pas (ADR 0056 : il faut une fiche Personne commune).
- * L'inscription ne prouve pas la possession du numéro : un téléphone identique sert à proposer un
- * compte, jamais à le relier.
+ * cas que RattachementAutomatiqueService ne relie pas (ADR 0056). Ici, un téléphone identique sert à
+ * proposer un compte : c'est le responsable qui confirme.
  * Aucune fiche Personne ni aucun compte n'est fusionné ou supprimé.
  *
  * Le compte d'un agent du back-office se rattache comme les autres (ADR 0055) : le rattachement

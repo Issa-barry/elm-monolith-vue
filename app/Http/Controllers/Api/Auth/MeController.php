@@ -21,8 +21,8 @@ class MeController extends Controller
             .'vient de `context` (activités du compte) ; tous ses ids à `null` et `consultant_ids` vide = '
             .'compte sans activité, accueil neutre. `context` est résolu exclusivement via '
             .'`ClientIdentityResolver` à partir du compte authentifié, jamais un paramètre client. '
-            .'`context.parrain_id` et `context.consultant_ids` suivent uniquement le rattachement posé au '
-            .'back-office (ADR 0050).',
+            .'`context.parrain_id` et `context.consultant_ids` suivent le rattachement posé sur la fiche, '
+            .'automatique ou manuel (ADR 0050, ADR 0056).',
     )]
     public function __invoke(Request $request, ClientIdentityResolver $identityResolver, QrPayloadResolver $qrPayloadResolver, ActivitesCompteResolver $activites): JsonResponse
     {

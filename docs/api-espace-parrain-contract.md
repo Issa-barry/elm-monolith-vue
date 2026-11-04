@@ -17,7 +17,8 @@ Pour la session Nuxt et tout client de l'espace client. Le schéma exact est dan
   rattaché au compte décide de l'accès : sans lui, `404`. Un agent du back-office rattaché à un parrain y accède.
 - **Aucune route ne reçoit d'identifiant de parrain** : il vient du compte authentifié, recalculé à chaque
   requête. Un paramètre `parrain_id` envoyé est ignoré.
-- Un numéro identique ne donne aucun accès : seul un rattachement posé au back-office compte.
+- L'accès suit le rattachement posé sur la fiche (`user_id`) : automatique, y compris sur le numéro du compte, ou
+  manuel au back-office (ADR 0056).
 - Toutes les réponses sont en lecture seule. Aucune écriture n'existe dans cet espace.
 
 ## Détecter l'activité

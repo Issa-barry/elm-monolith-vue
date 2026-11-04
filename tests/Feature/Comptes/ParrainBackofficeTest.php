@@ -108,7 +108,7 @@ class ParrainBackofficeTest extends TestCase
     public function test_la_fiche_sans_compte_explique_pourquoi_le_rattachement_automatique_n_a_pas_eu_lieu(): void
     {
         $sansCompte = $this->parrain();
-        $this->compte('+224620000777');
+        $this->compte('+224620000777', ['organization_id' => Organization::factory()->create()->id]);
         $memeNumero = $this->parrain(['telephone' => '+224620000777']);
 
         $this->actingAs($this->user)->get(route('parrains.show', $sansCompte))
@@ -120,7 +120,7 @@ class ParrainBackofficeTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('compte', null)
                 ->where('rattachement_automatique.statut', 'ambigue')
-                ->where('rattachement_automatique.motif', "Seul le numéro de téléphone correspond, il n'est pas vérifié."));
+                ->where('rattachement_automatique.motif', 'Ce compte appartient à une autre organisation.'));
     }
 
     public function test_un_rattachement_automatique_apparait_dans_l_historique_sans_auteur_humain(): void
