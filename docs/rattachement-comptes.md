@@ -6,16 +6,18 @@ propres données. Décision : [ADR 0050](adr/0050-rattachement-manuel-comptes-pa
 L'inscription, la connexion et le code OTP ne changent pas. Les livreurs, les propriétaires et les clients
 gardent leur reconnaissance actuelle.
 
+Compte unique ([ADR 0055](adr/0055-compte-unique-back-office-espace-client.md)) : le compte d'un agent du
+back-office se rattache comme les autres. Il garde ses rôles ; l'espace client lui est ouvert avec ses
+identifiants habituels, et le rattachement lui donne les données de la fiche.
+
 ## Règles métier (IDs)
 
-- **COMPTE-001 — Rattachement manuel.** Seul un responsable relie un compte à une fiche, depuis le
-  back-office. L'inscription et la connexion ne relient jamais un parrain, un consultant ou un
-  interlocuteur, même avec un numéro identique.
+- **COMPTE-001 — Rattachement manuel.** Un responsable relie un compte à une fiche depuis le back-office
+  quand le rattachement automatique (COMPTE-023) ne s'applique pas.
 - **COMPTE-002 — Vérification avant confirmation.** Le numéro n'étant pas vérifié à l'inscription, le
   compte proposé peut appartenir à quelqu'un d'autre. Le responsable contrôle le nom saisi, le numéro, la
   date d'inscription et les rôles, et confirme l'identité auprès de la personne.
-- **COMPTE-003 — Refus.** Compte désactivé ou non activé, autre organisation, sans accès à l'espace client ;
-  fiche désactivée ou reliée à un autre compte ; compte déjà relié à un autre parrain ou à un autre
+- **COMPTE-003 — Refus.** Compte désactivé ou non activé, autre organisation ; fiche désactivée ou reliée à un autre compte ; compte déjà relié à un autre parrain ou à un autre
   consultant, ou déjà interlocuteur de la même entreprise ; prestataire qui n'est pas consultant ; entreprise
   rattachée directement ou désactivée.
 - **COMPTE-004 — Cumul.** Un compte peut être parrain, consultant, propriétaire et interlocuteur de plusieurs
@@ -42,7 +44,8 @@ gardent leur reconnaissance actuelle.
 | `parrains.user_id` | Compte du parrain |
 | `prestataires.user_id` | Compte d'un consultant personne physique, toujours vide pour une entreprise |
 | `entreprise_interlocuteurs` | Entreprise, `personne_id`, `user_id`, `acces_commissions`, `is_active` ; unique par entreprise et personne ; jamais supprimé, désactivé |
-| `RattachementCompteService` | Seul point qui écrit `user_id` : `compteParTelephone()`, `apercu()`, `motifRefus()`, `rattacher()`, `detacher()` |
+| `RattachementCompteService` | Rattachement manuel : `compteParTelephone()`, `apercu()`, `motifRefus()`, `rattacher()`, `detacher()` |
+| `RattachementAutomatiqueService` | Rattachement automatique d'une fiche à la même Personne (COMPTE-023) : `analyser()`, `appliquer()`, `rattacherPersonne()` |
 | `ActivitesCompteResolver` | Parrain et consultants accessibles à un compte, source unique des contrôles d'accès |
 
 `user_id` n'est pas mass-assignable sur ces trois modèles.
@@ -85,8 +88,9 @@ Contacts → Parrains (module Véhicules).
 Contrat d'API : [api-espace-parrain-contract.md](api-espace-parrain-contract.md). Écrans Nuxt sous
 `/espace-client/parrain` : accueil, véhicules, commissions, paiements.
 
-- **COMPTE-017 — Accès.** Le rôle ouvre l'espace client, le rattachement décide de l'accès à chaque requête. Sans
-  parrain rattaché, l'API répond `404`. Aucun paramètre ne désigne un parrain.
+- **COMPTE-017 — Accès.** L'espace client est ouvert à tout compte actif (ADR 0055) ; le rattachement décide de
+  l'accès aux données parrain à chaque requête. Sans parrain rattaché, l'API répond `404`. Aucun
+  paramètre ne désigne un parrain.
 - **COMPTE-018 — Lecture seule et périmètre.** Le parrain ne voit que ses propres parts et versements, sur toutes
   les agences. Jamais le client, le montant de la commande, la part des autres bénéficiaires, l'équipe ni la trésorerie.
 - **COMPTE-019 — Montants.** Totaux issus de `CommissionKpiBuckets` et `calculerResume()`, sans calcul propre ni
@@ -100,6 +104,36 @@ Contrat d'API : [api-espace-parrain-contract.md](api-espace-parrain-contract.md)
   barre mobile propose le retour. Sur ordinateur, le menu latéral affiche une section Espace parrain.
 - **COMPTE-022 — Détachement en cours de session.** Les écrans indiquent que le compte n'est plus rattaché et les
   menus sont recalculés, sans déconnexion.
+
+## Rattachement automatique
+
+Décision : [ADR 0056](adr/0056-rattachement-automatique-meme-personne.md). `RattachementAutomatiqueService`,
+déclenché par `RattachementAutomatiqueObserver`.
+
+- **COMPTE-023 — Même Personne.** Une fiche livreur, propriétaire, parrain, consultant personne physique ou
+  interlocuteur sans compte est reliée automatiquement au compte dont l'identité recouvre sa Personne : la fiche
+  Personne du compte, ou celle d'une autre fiche déjà reliée au compte dans l'organisation. Pour un parrain, le
+  numéro de téléphone du compte suffit aussi, sans vérification de sa possession (OTP : chantier ultérieur).
+- **COMPTE-024 — Moments.** À la création d'une fiche ou au changement de sa Personne ou de son numéro ; quand un
+  compte est créé, activé (validation de l'e-mail), ou reçoit une fiche Personne ou un numéro ; quand une activité
+  est reliée au compte : les autres fiches de la même Personne suivent. Après validation de la transaction ; un échec
+  laisse la fiche au manuel.
+- **COMPTE-025 — Restent au manuel.** Numéro identique pour un consultant ou un interlocuteur seul, plusieurs comptes
+  pour la même Personne, compte sans organisation dont le numéro figure sur des fiches parrain de plusieurs
+  organisations, refus de COMPTE-003, compte déjà relié à une autre fiche livreur ou propriétaire, et compte qu'un
+  responsable a détaché de cette fiche : un détachement n'est jamais annulé automatiquement.
+- **COMPTE-026 — Trace.** `compte_rattache` sans auteur, avec `meta.automatique`, `meta.source` (`fiche`, `compte`,
+  `activite_reliee`, `regularisation`) et `meta.preuve` (Personne commune, ou numéro non vérifié). La fiche parrain
+  l'affiche « Rattachement automatique ».
+- **COMPTE-027 — Régularisation.** `php artisan comptes:regulariser-rattachements` : simulation par défaut (bilan par
+  activité et détail nominatif, `--csv=fichier` pour l'export, `--organization=` pour restreindre). `--apply` relie
+  les seules correspondances certaines après confirmation (`--force` pour la passer), chacune re-vérifiée dans sa
+  transaction. Relancée, la commande ne refait rien. Sauvegarder la base avant `--apply`.
+- **COMPTE-028 — Correction exceptionnelle.** Le rattachement manuel (COMPTE-014) n'est plus le parcours normal : le
+  bouton « Rattacher manuellement », secondaire, reste réservé à `rattachements-comptes.gerer` pour les cas laissés au
+  manuel. Une fiche parrain sans compte affiche pourquoi : aucun compte pour cette personne (la fiche sera reliée dès
+  que son compte sera connu), ou « Rattachement automatique impossible » avec le motif de COMPTE-025, sans jamais
+  l'identité du compte trouvé.
 
 ## Avancement
 

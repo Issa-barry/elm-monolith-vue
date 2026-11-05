@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Activités parrain et consultant d'un compte (ADR 0050). Lit uniquement les rattachements posés
- * au back-office (`user_id`), jamais le téléphone : contrairement à ClientIdentityResolver, un
- * numéro identique ne donne aucun accès. Recalculé à chaque requête : une désactivation ou un
+ * (`user_id`, au back-office ou automatiquement pour la même Personne, ADR 0056), jamais le
+ * téléphone : contrairement à ClientIdentityResolver, un numéro identique ne donne aucun accès. Recalculé à chaque requête : une désactivation ou un
  * détachement coupe l'accès immédiatement.
  *
  * Un parrain ou un consultant désactivé garde l'accès à son historique, sans nouvelle opération :

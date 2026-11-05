@@ -34,9 +34,8 @@ pas encore.
   (défini dans `routes/api.php`, monté sous `/api` par Laravel).
 - **Guard unique** : `auth:sanctum` sur toutes les routes de ce document sauf
   mention contraire. Un token valide **et non expiré** est nécessaire ; en plus,
-  la plupart des routes "métier" exigent le rôle Spatie `client`, `proprietaire`
-  ou `livreur` (`role:client|proprietaire|livreur` — un token valide seul ne
-  suffit pas, cf. §2).
+  aucune garde par rôle ni par activité : tout compte actif accède à ces routes,
+  qui ne lui renvoient que les données de ses activités (cf. §2).
 - **Isolation** : chaque endpoint dérive l'organisation/le profil métier
   exclusivement de `$request->user()` via `App\Services\Client\
   ClientIdentityResolver` — jamais d'un paramètre envoyé par le client. Un
@@ -91,9 +90,13 @@ rester léger.
 back-office, jamais le téléphone. `consultant_ids` liste les consultants (prestataires) dont le compte
 perçoit les commissions ; ce n'est pas `prestataire_id`, réservé à un futur espace « prestations ».
 
-`roles` liste **tous** les rôles du compte (jamais un seul "rôle principal") —
-un frontend doit toujours vérifier `roles.some(r => ['client','proprietaire','livreur'].includes(r))`
-pour décider de l'accès à l'espace client, jamais `roles[0]` ni une égalité stricte.
+Tout compte actif accède à l'espace client (ADR 0055, §2) : un frontend ne décide jamais l'accès sur les
+rôles. `context` dit quoi afficher ; tous ses ids à `null` et `consultant_ids` vide = compte sans activité
+(accueil neutre).
+
+`roles` liste **tous** les rôles du compte (jamais un seul "rôle principal"), jamais `roles[0]` ni une
+égalité stricte. Ce sont des noms de rôles, jamais des permissions : aucune permission back-office
+n'est exposée à l'espace client.
 
 ### `POST /api/auth/logout` (auth:sanctum)
 
@@ -219,13 +222,25 @@ ailleurs dans l'app suite à une simple connexion OTP réussie.
 
 ---
 
-## 2. Garde de rôle sur les routes métier
+## 2. Front ouvert à tous et compte unique (ADR 0055)
 
-Les routes ci-dessous (§3 à §7, sauf mention contraire) exigent, **en plus**
-de `auth:sanctum`, le rôle Spatie `client`, `proprietaire` ou `livreur`
-(`role:client|proprietaire|livreur`). Un compte purement staff (ex: `["super_admin"]`
-sans profil métier lié) reçoit **403** sur ces routes, même avec un token valide.
-Un compte cumulant staff + un rôle métier est accepté normalement.
+« Le front Nuxt est un espace ouvert à tous les utilisateurs. Toute personne peut le consulter. Tout
+utilisateur disposant d'un compte actif peut s'y connecter avec son identité EAU LA MAMAN existante, quels
+que soient ses rôles et ses activités métier. L'absence d'activité n'est jamais un motif de refus d'accès
+au front. Seules les données et fonctionnalités métier restent conditionnées par les rattachements et
+autorisations propres à chaque utilisateur. »
+
+Les routes ci-dessous (§3 à §7) n'ont **aucune garde globale** par rôle ni par activité : `auth:sanctum`
+et le filet `EnsureApiAccountIsActive` (compte désactivé = `403`) suffisent. Chaque endpoint lit ses
+données depuis les activités du compte (`ClientIdentityResolver`, `ActivitesCompteResolver`) :
+
+- compte sans activité (agent du back-office, super administrateur...) : `200` avec listes et totaux
+  vides, ou `404` pour une ressource rattachée (modification du profil, espace parrain, commande ou frais
+  d'un véhicule) ; jamais la donnée d'un autre compte ;
+- les rôles back-office ne donnent aucun droit ici et ne sont jamais modifiés ; aucune permission n'est
+  exposée ;
+- un ancien livreur garde ses commissions (lues par bénéficiaire) sans retrouver le véhicule ni l'équipe
+  quittés (lus par l'appartenance actuelle à une équipe).
 
 ---
 
@@ -696,8 +711,7 @@ Les trois formes de période s'excluent (422). 422 aussi pour une activité ou u
   `resume` est identique au dashboard de la même période.
 - Les parts du moteur logistique historique (`commission_logistique_parts`, avant le 03/09/2026, 0 ligne
   en production) ne sont pas listées.
-- Rôle requis : `client|proprietaire|livreur` (comme le reste de cette
-  section). Un compte staff pur reçoit `403`.
+- Accès : tout compte actif (§2). Un compte sans activité reçoit une liste vide.
 
 ### `GET /gains/mine`
 

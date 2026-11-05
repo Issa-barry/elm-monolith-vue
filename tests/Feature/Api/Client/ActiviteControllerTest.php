@@ -618,8 +618,9 @@ class ActiviteControllerTest extends TestCase
         $this->getJson(route('client.activite.mine'))->assertOk()->assertJsonCount(0, 'data');
     }
 
-    public function test_forbidden_for_staff_only_account(): void
+    public function test_staff_only_account_is_accepted_without_data(): void
     {
+        // ADR 0055 : l'espace client est ouvert à tout compte actif ; sans activité, aucune donnée.
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
@@ -627,7 +628,7 @@ class ActiviteControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.activite.mine'))->assertStatus(403);
+        $this->getJson(route('client.activite.mine'))->assertOk()->assertJsonCount(0, 'data');
     }
 
     public function test_vente_expose_le_statut_de_paiement_de_sa_facture(): void

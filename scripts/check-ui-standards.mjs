@@ -17,6 +17,13 @@
  *  4. Icône de copie (presse-papiers) autre que `pi pi-clipboard`,
  *     `pi pi-clipboard` utilisée ailleurs que pour une copie, ou bouton de
  *     copie sans infobulle title="Cliquez pour copier …".
+ *  5. Filtre de période hors standard (ADR 0057) : champ `type: 'date-range'`
+ *     au lieu de `type: 'period'`, ou liste de périodes rapides codée en dur
+ *     (`value: 'ce_mois'`, `value: 'last_week'`…) au lieu des choix fournis par
+ *     le serveur (`page.props.periodes`, Periode::options()). Les bornes ne sont
+ *     jamais calculées dans le navigateur. Seule dérogation : un commentaire
+ *     `periode-standard-ignore: <raison>` (raison obligatoire) ;
+ *     `ui-standard-ignore-file` ne la désactive pas.
  *
  * Pourquoi un script dédié plutôt qu'une règle ESLint custom : ESLint analyse
  * du JS/TS, pas des classes Tailwind dans un template Vue. Une règle AST
@@ -249,6 +256,31 @@ function checkColoredBadge(lines) {
     return hits;
 }
 
+// Filtre de période (ADR 0057) : un seul champ `period`, résolu côté serveur.
+const DATE_RANGE_FIELD_RE = /type:\s*['"]date-range['"]/g;
+const PERIODE_LITERAL_RE =
+    /value:\s*['"](?:aujourd_hui|hier|cette_semaine|semaine_precedente|semaine_derniere|ce_mois|mois_precedent|mois_dernier|cette_annee|annee_precedente|today|yesterday|week|last_week|month|last_month|year|last_year|last_3_months|last_6_months)['"]/g;
+const PERIODE_IGNORE_RE = /periode-standard-ignore:\s*\S+/;
+
+function checkPeriodFilters(content) {
+    if (PERIODE_IGNORE_RE.test(content)) return [];
+    const hits = [];
+    const lineAt = (index) => content.slice(0, index).split('\n').length;
+    for (const match of content.matchAll(DATE_RANGE_FIELD_RE)) {
+        hits.push({
+            line: lineAt(match.index),
+            detail: "Filtre de dates hors standard : utilise un champ type: 'period' (raccourcis + Du/Au résolus par Periode côté serveur, ADR 0057, docs/periodes.md) au lieu de type: 'date-range'.",
+        });
+    }
+    for (const match of content.matchAll(PERIODE_LITERAL_RE)) {
+        hits.push({
+            line: lineAt(match.index),
+            detail: 'Liste de périodes codée en dur : les choix viennent du serveur (page.props.periodes, Periode::options() ou optionsAvecBornes()) et le navigateur ne calcule jamais leurs bornes (ADR 0057).',
+        });
+    }
+    return hits;
+}
+
 function checkHomemadeFilters(content, lines) {
     if (DATAFILTERS_IMPORT_RE.test(content)) return null;
     const names = [...content.matchAll(FILTER_REF_RE)].map((m) => m[1]);
@@ -330,6 +362,15 @@ function main() {
                 });
             }
 
+            for (const hit of checkPeriodFilters(content)) {
+                violations.push({
+                    file: relPath,
+                    line: hit.line,
+                    type: 'periode',
+                    detail: hit.detail,
+                });
+            }
+
             if (IGNORE_FILE_RE.test(content)) continue;
 
             const lines = content.split('\n');
@@ -386,7 +427,7 @@ function main() {
 
     if (violations.length === 0) {
         console.log(
-            '✓ Standards UI (StatusDot / DataFilters / ListPageActions / Toast top-right / icône de copie) respectés.',
+            '✓ Standards UI (StatusDot / DataFilters / ListPageActions / Toast top-right / icône de copie / filtre de période) respectés.',
         );
         return;
     }

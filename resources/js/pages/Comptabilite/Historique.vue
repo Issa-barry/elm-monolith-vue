@@ -44,8 +44,9 @@ interface Paginator<T> {
 const props = defineProps<{
     logs: Paginator<LogRow>;
     filters: {
-        dateDebut: string;
-        dateFin: string;
+        periode: string;
+        date_debut: string | null;
+        date_fin: string | null;
         module: string;
         eventCode: string;
         actorId: string;
@@ -101,13 +102,7 @@ const filterFields: FilterField[] = [
             label: s.label,
         })),
     },
-    {
-        key: 'date',
-        label: 'Période',
-        type: 'date-range',
-        startKey: 'date_debut',
-        endKey: 'date_fin',
-    },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
 ];
 
 const historiqueFilters = {
@@ -115,8 +110,9 @@ const historiqueFilters = {
     event_code: props.filters.eventCode ?? '',
     actor_id: props.filters.actorId ?? '',
     site_id: props.filters.siteId ?? '',
-    date_debut: props.filters.dateDebut ?? '',
-    date_fin: props.filters.dateFin ?? '',
+    periode: props.filters.periode ?? 'tout',
+    date_debut: props.filters.date_debut ?? '',
+    date_fin: props.filters.date_fin ?? '',
 };
 
 const selectedLog = ref<LogRow | null>(null);

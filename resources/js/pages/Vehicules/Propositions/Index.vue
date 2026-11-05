@@ -33,6 +33,7 @@ const props = defineProps<{
     statuts: StatutOption[];
     filters: {
         statut: string | null;
+        periode: string;
         date_debut: string | null;
         date_fin: string | null;
     };
@@ -57,13 +58,7 @@ const filterFields: FilterField[] = [
         options: props.statuts.map((s) => ({ value: s.value, label: s.label })),
         placeholder: 'Tous',
     },
-    {
-        key: 'date',
-        label: 'Date',
-        type: 'date-range',
-        startKey: 'date_debut',
-        endKey: 'date_fin',
-    },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
 ];
 
 const colorClasses: Record<string, string> = {

@@ -13,8 +13,8 @@ use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\Rapports\RapportActiviteService;
+use App\Support\Periodes\Periode;
 use App\Support\Rapports\RapportPerimetre;
-use App\Support\Vehicules\SituationPeriode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -132,7 +132,7 @@ class FicheAgentTest extends TestCase
             organizationId: $this->org->id,
             siteIds: $siteIds,
             agentId: $this->agent->id,
-            periode: SituationPeriode::depuisRequete(Request::create('/', 'GET', $query)),
+            periode: Periode::depuisRequete(Request::create('/', 'GET', $query), null, 'situation_periode'),
             maSituation: false,
         );
     }
@@ -238,7 +238,7 @@ class FicheAgentTest extends TestCase
         $this->assertSame('tout', $props['situation_periode']['cle']);
         $this->assertSame(2, $props['situation']['ventes']['kpis']['nb_ventes']);
         $this->assertEquals(30000, $props['situation']['ventes']['kpis']['ca_vendu']);
-        // Le rapport ne propose pas « Toute la période » : pas de lien vers un autre périmètre.
+        // Le rapport ne propose pas « Toutes les périodes » : pas de lien vers un autre périmètre.
         $this->assertNull($props['lien_rapport']);
     }
 
@@ -247,7 +247,7 @@ class FicheAgentTest extends TestCase
         $props = $this->fiche($this->user, $this->agent, ['situation_periode' => 'ce_mois']);
 
         $this->assertSame(
-            route('rapports.activite', ['date_from' => '2026-09-01', 'date_to' => '2026-09-30', 'agent_id' => $this->agent->id], false),
+            route('rapports.activite', ['date_debut' => '2026-09-01', 'date_fin' => '2026-09-30', 'agent_id' => $this->agent->id], false),
             $props['lien_rapport'],
         );
     }
@@ -292,7 +292,7 @@ class FicheAgentTest extends TestCase
 
         $this->assertEquals(100000, $props['situation']['ventes']['kpis']['ca_vendu']);
         $this->assertSame(
-            route('ma-situation', ['date_from' => '2026-09-01', 'date_to' => '2026-09-30'], false),
+            route('ma-situation', ['date_debut' => '2026-09-01', 'date_fin' => '2026-09-30'], false),
             $props['lien_rapport'],
         );
     }

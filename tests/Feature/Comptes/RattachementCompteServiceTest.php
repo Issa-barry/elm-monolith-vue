@@ -207,9 +207,17 @@ class RattachementCompteServiceTest extends TestCase
         );
     }
 
-    public function test_refuse_un_compte_sans_acces_a_l_espace_client(): void
+    // ADR 0055 : remplace l'ancien refus du compte staff (ADR 0050, règle 7) — un compte unique.
+    public function test_rattache_le_compte_d_un_agent_du_back_office_sans_toucher_a_ses_roles(): void
     {
-        $this->assertRefuse($this->parrain(), $this->compte([], ['manager']), "Ce compte n'a pas accès à l'espace client.");
+        $parrain = $this->parrain();
+        $agent = $this->compte(['organization_id' => $this->org->id], ['comptable']);
+
+        $this->service->rattacher($parrain, $agent, $this->acteur);
+
+        $this->assertSame($agent->id, $parrain->fresh()->user_id);
+        $this->assertSame(['comptable'], $agent->fresh()->getRoleNames()->all());
+        $this->assertNull($this->service->motifRefus($this->consultantPhysique(['is_active' => true]), $agent->fresh()));
     }
 
     public function test_refuse_une_fiche_desactivee(): void
@@ -315,18 +323,20 @@ class RattachementCompteServiceTest extends TestCase
 
     // ── Vérification par le responsable ───────────────────────────────────────
 
+    /** Sur un consultant : un parrain au même numéro est relié automatiquement (ADR 0056). */
     public function test_le_compte_propose_par_telephone_est_seulement_montre_jamais_relie(): void
     {
         $telephone = '+224620000321';
-        $parrain = $this->parrain(['telephone' => $telephone]);
+        $personne = Personne::factory()->create(['organization_id' => $this->org->id, 'telephone' => $telephone]);
+        $consultant = $this->consultantPhysique(['personne_id' => $personne->id]);
         $compte = $this->compte(['telephone' => $telephone]);
 
-        $propose = $this->service->compteParTelephone($parrain->telephone);
+        $propose = $this->service->compteParTelephone($telephone);
 
         $this->assertSame($compte->id, $propose?->id);
-        $this->assertNull($parrain->fresh()->user_id);
+        $this->assertNull($consultant->fresh()->user_id);
 
-        $apercu = $this->service->apercu($parrain, $propose);
+        $apercu = $this->service->apercu($consultant->fresh(), $propose);
         $this->assertSame($telephone, $apercu['telephone']);
         $this->assertSame(['client'], $apercu['roles']);
         $this->assertNotNull($apercu['inscrit_le']);

@@ -31,7 +31,7 @@ Les filtres avancés sont appliqués uniquement au clic sur **Appliquer les filt
 | Prop | Type | Défaut | Description |
 |------|------|--------|-------------|
 | `url` | `string` | — | Si fourni, déclenche `router.get(url, params)` à l'application |
-| `baseParams` | `Record<string, string \| string[]>` | `{}` | Params toujours inclus (ex: `{ periode: 'all' }`) |
+| `baseParams` | `Record<string, string \| string[]>` | `{}` | Params toujours inclus (ex: `{ livreur_id }`) |
 | `values` | `Record<string, unknown>` | `{}` | Valeurs courantes des filtres (issues des props Inertia) |
 | `sites` | `Array<{ id: string; nom: string }>` | `[]` | Liste des sites pour le filtre admin |
 | `isAdmin` | `boolean` | `false` | Affiche le multi-select Agence/Site dans la barre principale |
@@ -123,23 +123,25 @@ Champ texte libre.
 ```
 
 ### `date-range`
-Deux champs date (début / fin) affichés côte à côte.  
-Par défaut, génère les params `${key}_debut` et `${key}_fin`. Surchargeables via `startKey`/`endKey`.
-```typescript
-{ key: 'date', label: 'Période', type: 'date-range', startKey: 'date_debut', endKey: 'date_fin' }
-```
+**Interdit pour une période** (ADR 0057, `lint:standards`) : utiliser `period`. Le type reste dans
+le composant pour un intervalle qui n'est pas une période de filtrage.
 
 ### `period`
-Raccourcis de période (Aujourd'hui, Hier, Cette semaine, Ce mois…) **résolus côté serveur**, plus
-« Période personnalisée » qui affiche deux dates. Les `options` viennent du backend
-(`SituationPeriode::pourFront()`), jamais calculées dans le navigateur (fuseau et début de semaine
-restent ceux de l'application). Un raccourci envoie `key=<valeur>` ; `personnalisee` envoie
-`startKey`/`endKey` (défaut `date_from`/`date_to`) ; `defaultValue` n'est pas envoyé et ne compte pas
-comme filtre actif. Utilisé par le rapport d'activité (cf. [rapports.md](rapports.md)).
+Seul filtre de période du back-office (convention : [periodes.md](periodes.md)). Raccourcis
+(Aujourd'hui, Hier, Cette semaine, Semaine dernière, Ce mois, Mois dernier, Cette année, Année
+dernière, Toutes les périodes) **résolus côté serveur** par `App\Support\Periodes\Periode`, plus
+« Période personnalisée » qui affiche « Du » / « Au ». Sans `options`, le champ reprend les choix
+standard partagés par le serveur (`page.props.periodes`). Un raccourci envoie `periode=<clé>` ;
+`personnalisee` envoie `startKey`/`endKey` (défaut `date_debut`/`date_fin`), jamais les deux à la
+fois. « Appliquer » reste grisé tant que les deux dates ne sont pas valides et ordonnées ; une
+erreur renvoyée par le serveur (`errors.date_fin`…) s'affiche sous le champ. `defaultValue` n'est
+pas envoyé et ne compte pas comme filtre actif.
 ```typescript
-{ key: 'periode', label: 'Période', type: 'period', inline: true, defaultValue: 'aujourd_hui',
-  startKey: 'date_from', endKey: 'date_to', options: periode.options }
+{ key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' }
 ```
+Côté contrôleur : `$periode = Periode::depuisRequeteValidee($request)`,
+`$periode->appliquer($query, 'created_at')`, et `...$periode->valeursFiltre()` dans les `filters`
+renvoyés à la page.
 
 ### `date`
 Champ date unique.
@@ -189,7 +191,7 @@ import DataFilters, { type FilterField } from '@/components/filters/DataFilters.
 
 const props = defineProps<{
     commandes: Commande[]
-    filters: { statuts?: string[]; date_debut?: string; date_fin?: string }
+    filters: { statuts?: string[]; periode?: string; date_debut?: string; date_fin?: string }
     sites: { id: string; nom: string }[]
     is_admin: boolean
 }>()
@@ -204,6 +206,7 @@ const commandesFiltrees = computed(() => {
 
 const filterValues = computed(() => ({
     statuts: props.filters.statuts ?? [],
+    periode: props.filters.periode ?? 'tout',
     date_debut: props.filters.date_debut ?? '',
     date_fin: props.filters.date_fin ?? '',
 }))
@@ -211,7 +214,7 @@ const filterValues = computed(() => ({
 const filterFields: FilterField[] = [
     { key: 'statuts', label: 'Statut', type: 'multi-select',
       options: [{ value: 'en_cours', label: 'En cours' }, { value: 'terminee', label: 'Terminée' }] },
-    { key: 'date', label: 'Période', type: 'date-range', startKey: 'date_debut', endKey: 'date_fin' },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
 ]
 </script>
 
@@ -434,7 +437,7 @@ panneau.
 
 <div class="overflow-hidden rounded-xl border bg-card">
     <QuickFilters url="/backoffice/ventes" :fields="champsBarreRapide" search-key="recherche"
-        :values="filterValues" :base-params="{ periode: 'all' }" saved-filter-scope="ventes" />
+        :values="filterValues" saved-filter-scope="ventes" />
     <DataTable … />
 </div>
 ```
@@ -464,7 +467,7 @@ Listes activées :
 | Scope | Page | Critères enregistrables | Partage |
 |---|---|---|---|
 | `achats` | `/backoffice/achats` | `statut`, `recherche`, `reference`, `fournisseur_id`, `a_valider_par_moi`, `site_ids`, `site_scope` | `achats.update` |
-| `precommandes` | `/backoffice/precommandes` | `statuts`, `en_retard`, `statut_facture`, `statut_commission`, `date_debut`, `date_fin`, `vehicule`, `proprietaire`, `livreur`, `client`, `numero_commande`, `site_ids`, `site_scope` | `ventes.update` |
+| `precommandes` | `/backoffice/precommandes` | `statuts`, `en_retard`, `statut_facture`, `statut_commission`, `periode`, `date_debut`, `date_fin`, `vehicule`, `proprietaire`, `livreur`, `client`, `numero_commande`, `site_ids`, `site_scope` | `ventes.update` |
 | `produits` | `/backoffice/produits` | `search`, `produit_type_id`, `statut`, `categorie_id`, `stock`, `site_ids`, `site_scope` | `produits.update` |
 | `stock` | `/backoffice/produits/stock` | `search`, `categorie_id`, `stock_statut`, `site_ids`, `site_scope` | `produits.update` |
 | `ventes` | `/backoffice/ventes` | `periode`, `statuts`, `statut_facture`, `statut_commission`, `date_debut`, `date_fin`, `vehicule`, `proprietaire`, `livreur`, `client`, `numero_commande`, `recherche`, `site_ids`, `site_scope` | `ventes.update` |
@@ -519,7 +522,9 @@ une carte repart des filtres effectifs renvoyés par le serveur (vue comprise) e
 Les filtres des véhicules sont appliqués côté serveur par `VehiculeIndexFilters` ; les compteurs
 restent globaux. Le type et l'agence du propriétaire sont enregistrés par identifiant, tandis
 que `site_ids[]` désigne l'agence du véhicule. Sur Factures, une vue sans période conserve le
-mois courant et `periode=tout` permet de voir toutes les dates.
+mois courant (`ce_mois`) et `periode=tout` permet de voir toutes les dates. Le critère `periode` des
+vues accepte les clés de `Periode::clesAcceptees()` (anciennes clés `today`, `week`, `month`, `all`
+comprises) ; Achats, Cashback et Mouvements de fonds l'acceptent aussi.
 
 Les listes comptables utilisent également ce moteur via la prop `savedFilterScope` de
 `CommissionIndexLayout.vue` : `commissions-livreurs`, `commissions-proprietaires`,

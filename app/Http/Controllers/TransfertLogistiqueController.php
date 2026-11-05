@@ -25,6 +25,8 @@ use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\TransfertActiviteService;
 use App\Services\TransfertLogistiqueService;
 use App\Services\VehiculeCapaciteService;
+use App\Support\Periodes\Periode;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -177,8 +179,7 @@ class TransfertLogistiqueController extends Controller
         if ($vue === 'receptions') {
             $clotureQuery = TransfertLogistique::where('organization_id', $orgId)
                 ->where('statut', StatutTransfert::CLOTURE->value)
-                ->whereYear('updated_at', now()->year)
-                ->whereMonth('updated_at', now()->month);
+                ->tap(fn ($q) => Periode::rapide('ce_mois', CarbonImmutable::now())->appliquer($q, 'updated_at'));
             if (! $toutesAgences && $siteIds->isNotEmpty()) {
                 $clotureQuery->whereIn('site_destination_id', $siteIds);
             }
@@ -228,28 +229,19 @@ class TransfertLogistiqueController extends Controller
      * Période = date de création du transfert (celle de sa référence TRF-JJMMAA-NNN).
      * Livreur = membre de l'équipe du transfert, ou à défaut de l'équipe actuelle du véhicule.
      *
-     * @return array{date_debut: ?string, date_fin: ?string, vehicule: ?string, livreur: ?string}
+     * @return array{periode: string, date_debut: ?string, date_fin: ?string, vehicule: ?string, livreur: ?string}
      */
     private function appliquerFiltresIndex(Builder $query, Request $request): array
     {
-        $date = fn (string $cle) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $request->input($cle))
-            ? $request->input($cle)
-            : null;
+        $periode = Periode::depuisRequeteValidee($request);
+        $periode->appliquer($query, 'created_at');
         $texte = fn (string $cle) => trim((string) $request->input($cle, '')) ?: null;
 
         $filtres = [
-            'date_debut' => $date('date_debut'),
-            'date_fin' => $date('date_fin'),
+            ...$periode->valeursFiltre(),
             'vehicule' => $texte('vehicule'),
             'livreur' => $texte('livreur'),
         ];
-
-        if ($filtres['date_debut']) {
-            $query->whereDate('created_at', '>=', $filtres['date_debut']);
-        }
-        if ($filtres['date_fin']) {
-            $query->whereDate('created_at', '<=', $filtres['date_fin']);
-        }
 
         if ($vehicule = $filtres['vehicule']) {
             $like = "%{$vehicule}%";

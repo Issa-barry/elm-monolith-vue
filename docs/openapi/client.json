@@ -427,9 +427,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -1194,7 +1191,7 @@
         "/auth/me": {
             "get": {
                 "operationId": "auth.me",
-                "description": "`roles` liste **tous** les r\u00f4les du compte (un compte peut cumuler un r\u00f4le staff ET un r\u00f4le client/proprietaire/livreur, cf. d\u00e9cision multi-r\u00f4le du 26/08/2026) \u2014 **tableau non ordonn\u00e9**, ne jamais utiliser `roles[0]` comme \"r\u00f4le principal\" (bug de conception d\u00e9j\u00e0 rencontr\u00e9 c\u00f4t\u00e9 frontend). Un frontend doit v\u00e9rifier `roles.some(r => ['client','proprietaire','livreur'].includes(r))` pour l'acc\u00e8s espace client, jamais une \u00e9galit\u00e9 stricte. `context` est r\u00e9solu exclusivement via `ClientIdentityResolver` \u00e0 partir du compte authentifi\u00e9, jamais un param\u00e8tre client. `context.parrain_id` et `context.consultant_ids` suivent uniquement le rattachement pos\u00e9 au back-office (ADR 0050).",
+                "description": "`roles` liste **tous** les r\u00f4les du compte (un compte peut cumuler un r\u00f4le staff ET un r\u00f4le client/proprietaire/livreur, cf. d\u00e9cision multi-r\u00f4le du 26/08/2026) \u2014 **tableau non ordonn\u00e9**, ne jamais utiliser `roles[0]` comme \"r\u00f4le principal\" (bug de conception d\u00e9j\u00e0 rencontr\u00e9 c\u00f4t\u00e9 frontend). Les r\u00f4les ne d\u00e9cident jamais de l'acc\u00e8s \u00e0 l'espace client : tout compte actif y entre (compte unique, ADR 0055). Ce qui s'affiche vient de `context` (activit\u00e9s du compte) ; tous ses ids \u00e0 `null` et `consultant_ids` vide = compte sans activit\u00e9, accueil neutre. `context` est r\u00e9solu exclusivement via `ClientIdentityResolver` \u00e0 partir du compte authentifi\u00e9, jamais un param\u00e8tre client. `context.parrain_id` et `context.consultant_ids` suivent le rattachement pos\u00e9 sur la fiche, automatique ou manuel (ADR 0050, ADR 0056).",
                 "tags": [
                     "Authentication"
                 ],
@@ -2038,9 +2035,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -2275,9 +2269,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -2363,9 +2354,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -2467,9 +2455,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -2733,9 +2718,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -2940,9 +2922,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3378,9 +3357,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3484,9 +3460,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3973,9 +3946,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -4635,9 +4605,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -5183,9 +5150,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -5257,9 +5221,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -5285,9 +5246,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             },
@@ -5342,9 +5300,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -5391,9 +5346,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -5428,9 +5380,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             },
@@ -5474,9 +5423,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -5707,9 +5653,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -5778,9 +5721,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -5872,9 +5812,6 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
-                    },
-                    "403": {
-                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -7798,25 +7735,6 @@
             },
             "ModelNotFoundException": {
                 "description": "Not found",
-                "content": {
-                    "application/json": {
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string",
-                                    "description": "Error overview."
-                                }
-                            },
-                            "required": [
-                                "message"
-                            ]
-                        }
-                    }
-                }
-            },
-            "AuthorizationException": {
-                "description": "Authorization error",
                 "content": {
                     "application/json": {
                         "schema": {

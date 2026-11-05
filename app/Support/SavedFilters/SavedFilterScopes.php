@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Support\Commission\CommissionProcessusFilter;
+use App\Support\Periodes\Periode;
 use Illuminate\Validation\Rule;
 
 /**
@@ -43,6 +44,12 @@ final class SavedFilterScopes
         $org = $user->organization_id;
         $search = ['string', 'max:255'];
         $categorie = ['ulid', Rule::exists('categories', 'id')->where('organization_id', $org)];
+        // Filtre « Période » standard (ADR 0057) : mêmes clés que Periode::regles().
+        $periode = [
+            'periode' => [Rule::in(Periode::clesAcceptees())],
+            'date_debut' => ['date_format:Y-m-d'],
+            'date_fin' => ['date_format:Y-m-d'],
+        ];
 
         $commission = [
             'authorize' => fn (User $user): bool => $user->canReadCommissions(),
@@ -70,6 +77,7 @@ final class SavedFilterScopes
                     'site_destination_id' => ['ulid', Rule::exists('sites', 'id')->where('organization_id', $org)],
                     'montant_min' => ['numeric', 'min:0'],
                     'montant_max' => ['numeric', 'min:0'],
+                    ...$periode,
                 ],
             ],
             'tresorerie-supports' => [
@@ -94,6 +102,7 @@ final class SavedFilterScopes
                     'reference' => $search,
                     'fournisseur_id' => ['ulid', Rule::exists('fournisseurs', 'id')->where('organization_id', $org)],
                     'a_valider_par_moi' => ['boolean'],
+                    ...$periode,
                 ],
             ],
             'ventes' => [
@@ -101,12 +110,10 @@ final class SavedFilterScopes
                 'share' => 'ventes.update',
                 'sites' => true,
                 'criteria' => [
-                    'periode' => [Rule::in(['all', 'today', 'week', 'month'])],
+                    ...$periode,
                     'statuts' => ['array', Rule::in(array_column(StatutCommandeVente::cases(), 'value'))],
                     'statut_facture' => [Rule::enum(StatutFactureVente::class)],
                     'statut_commission' => [Rule::enum(StatutCommission::class)],
-                    'date_debut' => ['date_format:Y-m-d'],
-                    'date_fin' => ['date_format:Y-m-d'],
                     'vehicule' => $search,
                     'proprietaire' => $search,
                     'livreur' => $search,
@@ -126,8 +133,7 @@ final class SavedFilterScopes
                     'en_retard' => [Rule::in(['1'])],
                     'statut_facture' => [Rule::enum(StatutFactureVente::class)],
                     'statut_commission' => [Rule::enum(StatutCommission::class)],
-                    'date_debut' => ['date_format:Y-m-d'],
-                    'date_fin' => ['date_format:Y-m-d'],
+                    ...$periode,
                     'vehicule' => $search,
                     'proprietaire' => $search,
                     'livreur' => $search,
@@ -140,7 +146,7 @@ final class SavedFilterScopes
                 'share' => 'ventes.update',
                 'sites' => true,
                 'criteria' => [
-                    'periode' => [Rule::in(['today', 'week', 'month', 'tout'])],
+                    ...$periode,
                     'statut' => [Rule::enum(StatutFactureVente::class)],
                     'livreur_id' => ['ulid', Rule::exists('livreurs', 'id')->where('organization_id', $org)],
                     'vehicule' => $search,
@@ -193,8 +199,7 @@ final class SavedFilterScopes
                 'criteria' => [
                     'statut' => [Rule::in(['en_attente', 'valide', 'partiel', 'verse'])],
                     'client_id' => ['ulid', Rule::exists('clients', 'id')->where('organization_id', $org)],
-                    'date_debut' => ['date_format:Y-m-d'],
-                    'date_fin' => ['date_format:Y-m-d'],
+                    ...$periode,
                 ],
             ],
             'produits' => [

@@ -20,8 +20,14 @@ const props = defineProps<{
 
 const page = usePage();
 
-// Paramètres qui portent la période dans l'URL : toujours remplacés ensemble.
-const PARAMS_PERIODE = ['situation_periode', 'date_from', 'date_to'];
+// Paramètres qui portent la période dans l'URL (et leurs anciens noms) : toujours remplacés ensemble.
+const PARAMS_PERIODE = [
+    'situation_periode',
+    'date_debut',
+    'date_fin',
+    'date_from',
+    'date_to',
+];
 
 const periodeChoisie = ref<SituationPeriodeCle>(props.periode.cle);
 const dateDebut = ref(props.periode.date_debut ?? '');
@@ -92,7 +98,7 @@ function appliquerPersonnalisee(): void {
     ) {
         return;
     }
-    visiter({ date_from: dateDebut.value, date_to: dateFin.value });
+    visiter({ date_debut: dateDebut.value, date_fin: dateFin.value });
 }
 
 watch([dateDebut, dateFin], appliquerPersonnalisee);

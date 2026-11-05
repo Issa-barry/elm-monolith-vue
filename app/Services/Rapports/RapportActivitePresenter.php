@@ -29,8 +29,8 @@ class RapportActivitePresenter
             'export_url' => $baseUrl.'/export',
             'filters' => [
                 'periode' => $p->periode->cle,
-                'date_from' => $p->periode->cle === 'personnalisee' ? $p->debut()->toDateString() : null,
-                'date_to' => $p->periode->cle === 'personnalisee' ? $p->fin()->toDateString() : null,
+                'date_debut' => $p->periode->cle === 'personnalisee' ? $p->debut()->toDateString() : null,
+                'date_fin' => $p->periode->cle === 'personnalisee' ? $p->fin()->toDateString() : null,
                 'site_ids' => $p->maSituation || $p->siteIds === null ? [] : $p->siteIds,
                 'agent_id' => $p->maSituation ? null : $p->agentId,
             ],

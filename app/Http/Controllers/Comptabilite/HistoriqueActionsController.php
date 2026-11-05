@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Site;
 use App\Models\User;
+use App\Support\Periodes\Periode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -34,8 +35,7 @@ class HistoriqueActionsController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $dateDebut = $request->input('date_debut', '');
-        $dateFin = $request->input('date_fin', '');
+        $periode = Periode::depuisRequeteValidee($request);
         $module = $request->input('module', '');
         $eventCode = $request->input('event_code', '');
         $actorId = $request->input('actor_id', '');
@@ -45,12 +45,7 @@ class HistoriqueActionsController extends Controller
         $query = AuditLog::where('organization_id', $orgId)
             ->orderByDesc('created_at');
 
-        if ($dateDebut !== '') {
-            $query->where('created_at', '>=', $dateDebut.' 00:00:00');
-        }
-        if ($dateFin !== '') {
-            $query->where('created_at', '<=', $dateFin.' 23:59:59');
-        }
+        $periode->appliquer($query, 'created_at');
         if ($eventCode !== '') {
             $query->where('event_code', $eventCode);
         }
@@ -98,7 +93,7 @@ class HistoriqueActionsController extends Controller
 
         return Inertia::render('Comptabilite/Historique', [
             'logs' => $logs->through(fn (AuditLog $log) => self::transformLog($log)),
-            'filters' => compact('dateDebut', 'dateFin', 'module', 'eventCode', 'actorId', 'siteId', 'search'),
+            'filters' => [...$periode->valeursFiltre(), ...compact('module', 'eventCode', 'actorId', 'siteId', 'search')],
             'acteurs' => $acteurs,
             'event_codes' => $eventCodes,
             'modules' => $modules,
@@ -120,8 +115,7 @@ class HistoriqueActionsController extends Controller
         $orgId = $user->organization_id;
         $auditableType = $request->input('auditable_type', '');
         $auditableId = $request->input('auditable_id', '');
-        $dateDebut = $request->input('date_debut', '');
-        $dateFin = $request->input('date_fin', '');
+        $periode = Periode::depuisRequeteValidee($request);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         abort_if($auditableType === '' || $auditableId === '', 400);
@@ -135,13 +129,7 @@ class HistoriqueActionsController extends Controller
             $query->whereJsonContains('meta->module', $module);
         }
 
-        if ($dateDebut !== '') {
-            $query->where('created_at', '>=', $dateDebut.' 00:00:00');
-        }
-
-        if ($dateFin !== '') {
-            $query->where('created_at', '<=', $dateFin.' 23:59:59');
-        }
+        $periode->appliquer($query, 'created_at');
 
         if (! empty($siteIds)) {
             $query->where(function ($q) use ($siteIds) {

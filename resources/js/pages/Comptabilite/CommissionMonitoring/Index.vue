@@ -126,8 +126,9 @@ const props = defineProps<{
         cible: string;
         processus: string;
         motif: string;
-        detection_debut: string;
-        detection_fin: string;
+        periode: string;
+        date_debut: string | null;
+        date_fin: string | null;
         tentatives_min: string;
     };
     sites: { id: string; nom: string }[];
@@ -193,9 +194,10 @@ const filterFields = computed((): FilterField[] => [
         options: props.processus_options,
     },
     {
-        key: 'detection',
-        label: 'Détectée entre',
-        type: 'date-range',
+        key: 'periode',
+        label: 'Détectée',
+        type: 'period',
+        defaultValue: 'tout',
     },
     {
         key: 'tentatives_min',

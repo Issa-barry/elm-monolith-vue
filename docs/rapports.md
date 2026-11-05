@@ -46,9 +46,11 @@ Barre de filtres (standard `DataFilters`) : **[Agence] → [Agent] → [Période
 ## Période (RAP-002)
 
 Raccourcis **Aujourd'hui / Hier / Cette semaine / Ce mois** + **Période personnalisée**
-(`date_from`, `date_to`, bornes incluses). Résolus **côté serveur** par `SituationPeriode` (la même
-classe que l'onglet Situation d'un véhicule), fuseau de l'application (`UTC` = heure de Conakry),
-**semaine du lundi au dimanche**. Défaut : Aujourd'hui ; dates invalides ou inversées → Aujourd'hui.
+(`date_debut`, `date_fin`, bornes incluses ; `date_from`/`date_to` encore acceptés). Résolus **côté
+serveur** par `Periode` (ADR 0057, [periodes.md](periodes.md) ; la même classe que l'onglet Situation
+d'un véhicule), fuseau de l'application (`UTC` = heure de Conakry), **semaine du lundi au dimanche**.
+Défaut : Aujourd'hui. Dates invalides ou inversées : **refusées avec un message** (plus de repli sur
+Aujourd'hui). Les autres périodes rapides restent acceptées dans l'URL (liens existants).
 Dans `DataFilters`, c'est le type de champ `period` (paramètre `periode`).
 
 ## Blocs — chacun indépendant (RAP-003)

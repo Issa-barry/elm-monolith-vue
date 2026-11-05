@@ -4,8 +4,8 @@ namespace App\Http\Requests\Api\Client;
 
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutTransfert;
+use App\Support\Periodes\Periode;
 use App\Support\Periodes\PeriodeComptableFiltre;
-use App\Support\Vehicules\SituationPeriode;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -18,7 +18,7 @@ use Illuminate\Validation\Rule;
  * explicitement plutôt que d'inventer une correspondance entre les deux
  * vocabulaires ou d'ignorer silencieusement le filtre.
  *
- * `periode` (périodes rapides, résolues ici par SituationPeriode, jamais par le
+ * `periode` (périodes rapides, résolues ici par Periode, jamais par le
  * navigateur) exclut `date_debut`/`date_fin` : 422 plutôt qu'un choix silencieux
  * entre deux périodes contradictoires. La période en cours s'arrête à maintenant.
  *
@@ -107,7 +107,7 @@ class ActiviteMineRequest extends FormRequest
 
         if ($cle !== null) {
             $maintenant = CarbonImmutable::now();
-            $periode = SituationPeriode::rapide($cle, $maintenant);
+            $periode = Periode::rapide($cle, $maintenant);
 
             return [$periode->debut, $periode->fin->min($maintenant)];
         }

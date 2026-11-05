@@ -109,7 +109,7 @@ des assets, session expirée —, lien copié).
   côté client (`router.replace`, aucune requête serveur, pas d'entrée d'historique ajoutée) ;
   les autres paramètres (`situation_periode`, `processus`) sont conservés.
 - **Filtre de période Situation** : ne modifie que les paramètres de période
-  (`situation_periode`, `date_from`, `date_to`), garde `tab=situation` et les autres paramètres.
+  (`situation_periode`, `date_debut`, `date_fin`), garde `tab=situation` et les autres paramètres.
   Le sélecteur de processus de l'onglet Équipe fait de même (`tab` + période conservés).
 - **Redirections serveur** vers l'URL nue de la fiche (enregistrement d'un parrain ou d'une
   équipe, transfert de livreur vers un autre véhicule) : le composant est conservé, l'onglet
@@ -121,26 +121,27 @@ Règle pour tout nouveau `router.get` sur cette page : fusionner l'URL courante
 ## Période
 
 Une **seule** période est active pour tout l'onglet : elle est résolue une fois par
-`App\Support\Vehicules\SituationPeriode` (depuis la requête) puis transmise à chaque section
+`App\Support\Periodes\Periode` (ADR 0057, [periodes.md](periodes.md)) puis transmise à chaque section
 (`VehiculeSituationVentesService::pourVehicule($vehicule, $periode)` et les futures). Le
 frontend n'applique aucun filtre de dates : il envoie la période et affiche ce que le serveur a
 calculé (prop `situation_periode` : `cle`, `date_debut`, `date_fin`, `options`).
 
 | Choix | URL | Bornes (ventes retenues sur leur date de création) |
 |---|---|---|
-| Toute la période | aucun paramètre | aucune |
+| Toutes les périodes | aucun paramètre | aucune |
 | Aujourd'hui / Hier | `situation_periode=aujourd_hui` / `hier` | la journée |
-| Cette semaine / Semaine précédente | `cette_semaine` / `semaine_precedente` | lundi → dimanche |
-| Ce mois / Mois précédent | `ce_mois` / `mois_precedent` | 1er → dernier jour du mois |
-| Cette année / Année précédente | `cette_annee` / `annee_precedente` | 1er janvier → 31 décembre |
-| Période personnalisée | `date_from=YYYY-MM-DD&date_to=YYYY-MM-DD` | du début de `date_from` à la fin de `date_to` (bornes incluses) |
+| Cette semaine / Semaine dernière | `cette_semaine` / `semaine_precedente` | lundi → dimanche |
+| Ce mois / Mois dernier | `ce_mois` / `mois_precedent` | 1er → dernier jour du mois |
+| Cette année / Année dernière | `cette_annee` / `annee_precedente` | 1er janvier → 31 décembre |
+| Période personnalisée | `date_debut=YYYY-MM-DD&date_fin=YYYY-MM-DD` | du début de `date_debut` à la fin de `date_fin` (bornes incluses) |
 
 - Les périodes rapides sont résolues **côté serveur** (fuseau et locale de l'application) : elles
   restent relatives dans un favori, et « aujourd'hui » ne dépend pas de l'horloge du navigateur.
   `mois_precedent` / `annee_precedente` ne débordent jamais (31 mars → février).
-- Période personnalisée : les **deux** dates sont obligatoires et `date_from` ≤ `date_to` ; toute
-  valeur invalide (une seule date, ordre inversé, format ou date impossible) retombe sur « Toute
-  la période ». Si `date_from`/`date_to` sont présents, ils l'emportent sur `situation_periode`.
+- Période personnalisée : les **deux** dates sont obligatoires et `date_debut` ≤ `date_fin` ; une
+  valeur invalide (une seule date, ordre inversé, format ou date impossible) est **refusée avec un
+  message** (ADR 0057), plus de repli silencieux. Les anciens noms `date_from`/`date_to` restent
+  acceptés pour les liens existants.
 - Côté interface : sélecteur de période (PrimeVue `Select`) ; « Période personnalisée » affiche
   `Du [date] → Au [date]` (champs date natifs, comme `DataFilters`), préremplis avec les bornes
   de la période active. La période s'applique dès que les deux dates sont valides ; sinon un

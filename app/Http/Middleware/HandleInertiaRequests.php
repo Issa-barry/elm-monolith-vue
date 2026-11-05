@@ -19,6 +19,7 @@ use App\Services\StockStatutService;
 use App\Services\ThemePolicyService;
 use App\Services\Tresorerie\ApprovisionnementsAgentService;
 use App\Support\AppVersion;
+use App\Support\Periodes\Periode;
 use App\Support\Permissions\RoleVisibility;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
@@ -454,6 +455,8 @@ class HandleInertiaRequests extends Middleware
             'module_flags' => $this->moduleFlags($request),
             'theme' => $this->theme($request),
             'org_sites' => $this->orgSites($request),
+            // Choix du champ « Période » de DataFilters : une seule liste pour tout le back-office (ADR 0057).
+            'periodes' => fn () => Periode::options(),
             'seoDefaults' => $this->seoDefaults(),
             'flash' => [
                 'success' => $request->session()->get('success'),

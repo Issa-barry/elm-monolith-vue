@@ -9,9 +9,9 @@ use App\Services\Agents\AgentDepensesService;
 use App\Services\Agents\AgentSituationService;
 use App\Services\ModuleService;
 use App\Services\Rapports\RapportPerimetreResolver;
+use App\Support\Periodes\Periode;
 use App\Support\Permissions\RoleVisibility;
 use App\Support\Rapports\RapportPerimetre;
-use App\Support\Vehicules\SituationPeriode;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -41,7 +41,7 @@ class ShowUserController extends Controller
             ? RoleVisibility::query($user->organization_id)->where('name', $role)->value('label')
             : null;
 
-        $periode = SituationPeriode::depuisRequete($request);
+        $periode = Periode::depuisRequeteValidee($request, parametre: 'situation_periode');
         $perimetre = $perimetres->pourFicheAgent($consulteur, $user, $periode);
 
         $peutVoirDepenses = $consulteur->can('depenses.read')
@@ -83,16 +83,16 @@ class ShowUserController extends Controller
 
     /**
      * Détail ligne à ligne des chiffres de la Situation : « Ma situation » pour sa propre fiche,
-     * le rapport d'activité filtré sur l'agent sinon. Le rapport ne propose pas « Toute la
-     * période » : pas de lien dans ce cas plutôt qu'un lien qui afficherait un autre périmètre.
+     * le rapport d'activité filtré sur l'agent sinon. Le rapport ne propose pas « Toutes les
+     * périodes » : pas de lien dans ce cas plutôt qu'un lien qui afficherait un autre périmètre.
      */
-    private function lienRapport(RapportPerimetre $perimetre, SituationPeriode $periode): ?string
+    private function lienRapport(RapportPerimetre $perimetre, Periode $periode): ?string
     {
         if ($periode->debut === null || $periode->fin === null) {
             return null;
         }
 
-        $dates = ['date_from' => $periode->debut->toDateString(), 'date_to' => $periode->fin->toDateString()];
+        $dates = ['date_debut' => $periode->debut->toDateString(), 'date_fin' => $periode->fin->toDateString()];
 
         return $perimetre->maSituation
             ? route('ma-situation', $dates, false)

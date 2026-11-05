@@ -66,7 +66,7 @@ d'affichage du propriétaire, puis nom complet du livreur, du client et de la
 connu. Cette priorité vaut pour l'espace client uniquement : le back-office garde
 `nom_complet` en premier (`Livreur::libelleAffichage()`).
 
-### `GET /v1/mobile/profile` (auth:sanctum + rôle `client|proprietaire|livreur`)
+### `GET /v1/mobile/profile` (auth:sanctum)
 
 Fiche complète du profil métier (adresse/pays/ville comprises) — distinct de
 `/me` qui reste volontairement minimal. Le profil retourné dépend du profil
@@ -105,7 +105,7 @@ existent (sur `Personne` pour proprietaire/livreur, sur `Client` directement) ;
 un quartier doit être saisi dans `adresse` en texte libre, ou une migration
 serait nécessaire pour l'isoler.
 
-### `PATCH /v1/mobile/profile` (auth:sanctum + rôle `client|proprietaire|livreur`)
+### `PATCH /v1/mobile/profile` (auth:sanctum)
 
 Met à jour uniquement la **localisation** du profil rattaché au compte connecté :
 
@@ -124,7 +124,7 @@ organisation à revalider), `raison_sociale`/`type` (identité légale), `actif`
 `ville`/`adresse` est silencieusement ignoré par la validation. Ces champs
 restent réservés au backoffice (`ProprietaireController`, `UpdateClientController`).
 
-### `PATCH /v1/mobile/profile/notification-preferences` (auth:sanctum + rôle `client|proprietaire|livreur`)
+### `PATCH /v1/mobile/profile/notification-preferences` (auth:sanctum)
 
 ```json
 // Requête
@@ -145,7 +145,7 @@ Distinct de la permission système du navigateur/téléphone pour les push
 jeton technique `expo_push_token` (déjà existant, sert à *router* le push, pas
 à décider si l'utilisateur en veut).
 
-### `GET /v1/mobile/vehicules/mine` (auth:sanctum + rôle `client|proprietaire|livreur`)
+### `GET /v1/mobile/vehicules/mine` (auth:sanctum)
 
 Champ `conducteur` (string|null) ajouté le 26/08/2026 : nom du membre de
 l'équipe ayant le rôle `chauffeur` sur ce véhicule (`null` si aucune équipe ou
@@ -212,10 +212,26 @@ contre le faux-positif par téléphone : un profil déjà réclamé par un autre
 (`user_id` non null) ne peut jamais être apparié pour un second utilisateur par
 simple coïncidence de numéro de téléphone.
 
-Les routes `gains/mine`, `vehicules/mine`, `vehicules/{id}/commissions` et
-`vehicules/{id}/frais` exigent en plus explicitement le rôle
-`client|proprietaire|livreur` (`role:client|proprietaire|livreur`) — un token
-`auth:sanctum` valide seul ne suffit pas.
+Les routes de l'espace client (`gains/mine`, `vehicules/mine`, `vehicules/{id}/commissions`,
+`vehicules/{id}/frais`, `v1/mobile/commissions`, `v1/mobile/parrain/*`...) n'ont aucune garde par rôle :
+`auth:sanctum` et le filet `EnsureApiAccountIsActive` suffisent. Chaque contrôleur limite ses données aux
+activités du compte.
+
+## Front ouvert à tous et compte unique (ADR 0055)
+
+« Le front Nuxt est un espace ouvert à tous les utilisateurs. Toute personne peut le consulter. Tout
+utilisateur disposant d'un compte actif peut s'y connecter avec son identité EAU LA MAMAN existante, quels
+que soient ses rôles et ses activités métier. L'absence d'activité n'est jamais un motif de refus d'accès
+au front. Seules les données et fonctionnalités métier restent conditionnées par les rattachements et
+autorisations propres à chaque utilisateur. »
+
+- `POST /api/auth/login` et la connexion OTP authentifient tout compte actif, quels que soient ses rôles
+  (comportement inchangé). Aucun compte n'est créé à la connexion.
+- Un compte sans activité (agent du back-office, par exemple) reçoit des listes et totaux vides, ou `404`
+  pour une ressource rattachée (profil à modifier, espace parrain, commande, frais d'un véhicule) — jamais
+  un `403`, jamais la donnée d'un autre compte.
+- Les rôles back-office ne donnent aucun droit dans l'espace client et ne sont jamais modifiés pour
+  l'ouvrir. Aucune permission n'est exposée par l'API de l'espace client.
 
 ## Prêt pour SPA directe ?
 

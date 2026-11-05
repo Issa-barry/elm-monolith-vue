@@ -1,10 +1,11 @@
 # Standards UI — à respecter impérativement
 
-Les règles 1, 2 et 4 ci-dessous sont contrôlées automatiquement par
+Les règles 1, 2, 4 et 6 (partie front) ci-dessous sont contrôlées automatiquement par
 `node scripts/check-ui-standards.mjs`, exécuté dans le CI (`.github/workflows/lint.yml`, job
 `quality`, step "Check UI standards"). Une PR qui les viole échoue le check **avant merge**.
 Lance `npm run lint:standards` en local pour vérifier avant de pousser. La règle 3 n'est pas
-(encore) couverte par ce script — à vérifier manuellement en revue de code.
+(encore) couverte par ce script — à vérifier manuellement en revue de code. La règle 6 est aussi
+contrôlée par PHPUnit (registre des écrans et test d'architecture).
 
 ## 1. Badge de statut : point coloré, jamais de fond coloré
 
@@ -114,6 +115,35 @@ nouveau document de ce type) utilise le modèle officiel décrit dans `docs/docu
   l'original du fournisseur » : facture d'achat uniquement).
 - Tout nouveau type est ajouté à `tests/Feature/Documents/ModeleDocumentPdfTest.php` (même modèle,
   propagation du bloc partagé). Cette règle n'est pas couverte par `lint:standards`.
+
+## 6. Filtres de période : un seul moteur, côté serveur
+
+Règle stricte (ADR 0057, `docs/periodes.md`) : aucun développeur ni agent IA ne crée, modifie ou
+maintient un filtre temporel en dehors du système centralisé des périodes.
+
+```php
+$periode = Periode::depuisRequeteValidee($request);   // App\Support\Periodes\Periode
+$periode->appliquer($query, 'created_at');
+```
+
+```ts
+{ key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' }
+```
+
+- Deux modes seulement : `periode=<clé>` (aujourd_hui, hier, cette_semaine, semaine_precedente,
+  ce_mois, mois_precedent, cette_annee, annee_precedente, tout) ou `date_debut` + `date_fin`
+  (incluses, ensemble, ordonnées). Jamais les deux à la fois.
+- **Interdit** : calculer des bornes dans un contrôleur, un service ou le navigateur (`startOfMonth`,
+  `subMonth`, `whereDate`, `new Date()`…) ; lire `date_debut`/`date_fin` à la main ; un champ
+  `type: 'date-range'` ; une liste de périodes codée en dur côté front.
+- Une période invalide est refusée avec un message (jamais remplacée en silence).
+- Les périodes métier (quinzaines P1/P2, mois comptable, paie) restent à leurs services dédiés : ne
+  pas les remplacer par des périodes calendaires.
+- Nouvel écran filtré par période : l'inscrire dans `tests/Feature/Periodes/RegistreFiltresPeriodeTest.php`.
+- Contrôlé en CI par ce registre, `tests/Unit/Architecture/PeriodesArchitectureTest.php` et
+  `npm run lint:standards`. Dérogation : commentaire `periode-standard-ignore: <raison>` côté front,
+  exception justifiée dans `PeriodesArchitectureTest` côté backend, et ligne dans `docs/periodes.md`
+  (« Dérogations »).
 
 ## Échappatoire
 

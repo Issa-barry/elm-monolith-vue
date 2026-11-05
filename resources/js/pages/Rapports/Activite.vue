@@ -42,8 +42,8 @@ const props = defineProps<{
     export_url: string;
     filters: {
         periode: string;
-        date_from: string | null;
-        date_to: string | null;
+        date_debut: string | null;
+        date_fin: string | null;
         site_ids: string[];
         agent_id: string | null;
     };
@@ -262,14 +262,14 @@ const filterFields = computed<FilterField[]>(() => [
 ]);
 
 const periodeChoisie = ref(props.filters.periode);
-const dateDebut = ref(props.filters.date_from ?? props.periode.date_debut);
-const dateFin = ref(props.filters.date_to ?? props.periode.date_fin);
+const dateDebut = ref(props.filters.date_debut ?? props.periode.date_debut);
+const dateFin = ref(props.filters.date_fin ?? props.periode.date_fin);
 const periodeEnCours = ref(false);
 
 function synchroniserPeriode() {
     periodeChoisie.value = props.filters.periode;
-    dateDebut.value = props.filters.date_from ?? props.periode.date_debut;
-    dateFin.value = props.filters.date_to ?? props.periode.date_fin;
+    dateDebut.value = props.filters.date_debut ?? props.periode.date_debut;
+    dateFin.value = props.filters.date_fin ?? props.periode.date_fin;
 }
 watch(() => [props.filters, props.periode], synchroniserPeriode);
 
@@ -280,8 +280,8 @@ function parametresPeriode(
 ): Record<string, string> {
     if (choix === 'personnalisee') {
         return {
-            ...(debut ? { date_from: debut } : {}),
-            ...(fin ? { date_to: fin } : {}),
+            ...(debut ? { date_debut: debut } : {}),
+            ...(fin ? { date_fin: fin } : {}),
         };
     }
     return choix === 'aujourd_hui' ? {} : { periode: choix };
@@ -292,8 +292,8 @@ const parametresFiltres = computed(() => ({
     tab: onglet.value,
     ...parametresPeriode(
         props.filters.periode,
-        props.filters.date_from,
-        props.filters.date_to,
+        props.filters.date_debut,
+        props.filters.date_fin,
     ),
 }));
 

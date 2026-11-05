@@ -47,12 +47,12 @@ datés par `date_encaissement`, quelle que soit la vente (résumé `RapportActiv
 montant, nombre, répartition par moyen (Espèces, Mobile Money par opérateur, Virement, Chèque) avec la
 part du montant calculée côté serveur. À ne pas confondre avec l'« Encaissé sur ses ventes ».
 
-**Période** : une seule pour l'onglet (`SituationPeriode`, mêmes choix que la fiche véhicule,
-défaut « Toute la période »). « Toute la période » couvre tout l'historique
+**Période** : une seule pour l'onglet (`Periode`, ADR 0057, mêmes choix que la fiche véhicule,
+défaut « Toutes les périodes »). « Toutes les périodes » couvre tout l'historique
 (`RapportPerimetre::debut()/fin()`) ; le rapport d'activité, lui, ne la propose pas.
 
 **Voir le détail** : lien vers « Ma situation » (sa propre fiche) ou vers le rapport d'activité
-filtré sur l'agent, avec les mêmes dates. Absent pour « Toute la période » (le rapport afficherait
+filtré sur l'agent, avec les mêmes dates (`date_debut`, `date_fin`). Absent pour « Toutes les périodes » (le rapport afficherait
 un autre périmètre).
 
 ### Droits de la Situation

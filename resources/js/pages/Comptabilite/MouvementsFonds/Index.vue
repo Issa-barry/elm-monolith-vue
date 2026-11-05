@@ -97,6 +97,9 @@ const props = defineProps<{
         caisse_role: string;
         montant_min: string;
         montant_max: string;
+        periode: string;
+        date_debut: string | null;
+        date_fin: string | null;
     };
     statut_options: { value: string; label: string }[];
     nature_options: { value: string; label: string }[];
@@ -179,6 +182,7 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'number',
         placeholder: '0',
     },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
 ]);
 
 // Versement (caisse d'agent → caisse de l'agence), approvisionnement (sens inverse, ADR 0018) et

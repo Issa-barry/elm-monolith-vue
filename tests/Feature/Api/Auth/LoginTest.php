@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\Auth;
 
+use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\User;
@@ -167,5 +168,33 @@ class LoginTest extends TestCase
         $this->assertTrue($proprietaire->fresh()->user_id === $user->id);
         $this->assertTrue($user->fresh()->hasRole('proprietaire'));
         $this->assertTrue($user->fresh()->hasRole('super_admin'), 'le rôle staff existant doit être conservé');
+    }
+
+    public function test_login_ne_relie_jamais_une_fiche_d_une_autre_organisation(): void
+    {
+        $org = Organization::factory()->create();
+        $autreOrganisation = Organization::factory()->create();
+        $user = User::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000100',
+            'password' => 'Password@123',
+        ]);
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $autreOrganisation->id,
+            'user_id' => null,
+            'telephone' => '+224620000100',
+        ]);
+        $livreur = Livreur::factory()->create([
+            'organization_id' => Organization::factory()->create()->id,
+            'user_id' => null,
+            'telephone' => '+224620000100',
+        ]);
+
+        $this->login()->assertOk();
+
+        $this->assertNull($proprietaire->fresh()->user_id);
+        $this->assertNull($livreur->fresh()->user_id);
+        $this->assertFalse($user->fresh()->hasRole('proprietaire'));
+        $this->assertFalse($user->fresh()->hasRole('livreur'));
     }
 }

@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\Commission\PartParrainService;
 use App\Services\CommissionStatusResolver;
+use App\Services\Comptes\RattachementAutomatiqueService;
 use App\Services\ModuleService;
 use App\Support\Auth\AccountEligibility;
 use App\Support\Auth\AccountStatus;
@@ -75,6 +76,7 @@ final class FicheParrainData
         return [
             'parrain' => $this->identite($parrain),
             'compte' => $this->compte($parrain),
+            'rattachement_automatique' => $this->rattachementAutomatique($parrain),
             'historique_compte' => $this->historiqueCompte($parrain),
             'vehicules' => $this->vehicules($parrain, $user),
             'commissions' => $this->peutVoirCommissions($user) ? $this->commissions($parrain, $user) : null,
@@ -98,6 +100,24 @@ final class FicheParrainData
             'is_active' => (bool) $parrain->is_active,
             'cree_le' => $parrain->created_at?->format('d/m/Y'),
         ];
+    }
+
+    /**
+     * Pourquoi une fiche sans compte n'a pas été reliée automatiquement (ADR 0056) : aucun compte pour
+     * cette personne, ou un cas laissé au rattachement manuel, avec son motif. Jamais l'identité d'un
+     * compte trouvé.
+     *
+     * @return array{statut: string, motif: ?string}|null
+     */
+    private function rattachementAutomatique(Parrain $parrain): ?array
+    {
+        if ($parrain->user !== null) {
+            return null;
+        }
+
+        $analyse = app(RattachementAutomatiqueService::class)->analyser($parrain);
+
+        return ['statut' => $analyse->statut->value, 'motif' => $analyse->motif];
     }
 
     /** @return array<string, mixed>|null */
@@ -134,7 +154,8 @@ final class FicheParrainData
                 'id' => $log->id,
                 'evenement' => $log->event_label,
                 'date' => $log->created_at?->format('d/m/Y H:i'),
-                'auteur' => $log->actor_name_snapshot,
+                'auteur' => $log->actor_name_snapshot
+                    ?? (($log->meta['automatique'] ?? false) ? 'Rattachement automatique' : null),
                 'compte_nom' => $log->meta['compte_nom'] ?? null,
                 'compte_telephone' => $log->meta['compte_telephone'] ?? null,
             ])

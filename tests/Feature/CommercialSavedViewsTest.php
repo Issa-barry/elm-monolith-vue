@@ -79,7 +79,7 @@ class CommercialSavedViewsTest extends TestCase
         }
         $id = $this->save('factures', ['reference' => 'FAC-'], true);
         $this->get('/backoffice/factures?saved_view='.$id)->assertOk()->assertInertia(fn (Assert $p) => $p
-            ->where('saved_view.id', $id)->where('statut', 'tous')->where('periode', 'month')->has('factures', 1));
+            ->where('saved_view.id', $id)->where('statut', 'tous')->where('periode', 'ce_mois')->has('factures', 1));
         $this->get('/backoffice/factures')->assertInertia(fn (Assert $p) => $p->where('saved_view.id', $id));
         $this->get('/backoffice/factures?all=1')->assertInertia(fn (Assert $p) => $p->where('saved_view', null));
         $all = $this->postJson(route('saved-filters.store', 'factures'), [
