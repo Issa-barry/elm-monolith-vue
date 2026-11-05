@@ -241,6 +241,26 @@ class GainsMultiActivitesTest extends TestCase
         }
     }
 
+    public function test_toute_depense_deduite_du_reste_a_payer_figure_dans_mes_depenses(): void
+    {
+        // 05/11 : la liste n'avait ni les dépenses directes du propriétaire, ni celles du parrain
+        // ou du consultant, alors que le reste à payer les déduisait.
+        $this->depense('proprietaire', $this->proprietaire->id, 200, '2026-10-23');
+        $this->depense('prestataire', $this->consultant->id, 150, '2026-10-24');
+        $this->depense('proprietaire', $this->makeProprietaireUser($this->org)->proprietaire->id, 70000, '2026-10-24');
+
+        $octobre = ['annee' => 2026, 'mois' => 10];
+        $activites = $this->parActivite($this->appel('client.dashboard.mine', $octobre));
+        $this->assertEquals(
+            ['proprietaire' => 700, 'livreur' => 1000, 'parrain' => 300, 'consultant' => 150],
+            array_map(fn (array $a) => $a['frais_depenses_total'], $activites),
+        );
+
+        $liste = $this->appel('client.depenses.mine', $octobre);
+        $this->assertEqualsCanonicalizing([1000, 500, 300, 200, 150], array_column($liste['data'], 'montant'));
+        $this->assertEquals(array_sum(array_column($activites, 'frais_depenses_total')), $liste['total_valide']);
+    }
+
     public function test_p1_et_p2_redonnent_le_mois(): void
     {
         $mois = $this->appel('client.dashboard.mine', ['annee' => 2026, 'mois' => 10]);

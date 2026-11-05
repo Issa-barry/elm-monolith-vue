@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api\Client;
 
-use App\Enums\ActiviteCompte;
 use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Client\DepensesMineRequest;
@@ -24,9 +23,10 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  * VehiculeFraisController, dont c'est la version consolidée) — volontairement
  * PLUS LARGE que ClientEarningsService::fraisDepensesParVehicule() (qui, lui,
  * est proprietaire-only car il nourrit un calcul de solde à payer, pas une
- * simple consultation). Un livreur, un parrain ou un consultant voit aussi les dépenses
- * rattachées directement à lui (ex. avance sur salaire, `vehicule` vaut alors null), sauf
- * filtre véhicule : ce sont les dépenses que ses fiches retiennent (ADR 0054).
+ * simple consultation). Chaque activité du compte (propriétaire, livreur, parrain,
+ * consultant) voit aussi les dépenses rattachées directement à elle (ex. avance sur salaire,
+ * `vehicule` vaut alors null), sauf filtre véhicule : toute dépense que le reste à payer
+ * déduit (ClientEarningsService::deductionsParActivite()) figure donc dans cette liste.
  *
  * `total_valide` : somme des dépenses validées correspondant aux filtres, toutes
  * pages confondues. C'est le montant de la carte « Dépenses » de l'accueil mobile.
@@ -68,11 +68,7 @@ class DepensesController extends Controller
                     );
 
                 if ($filters['vehicule_id'] === null) {
-                    foreach ([ActiviteCompte::LIVREUR, ActiviteCompte::PARRAIN, ActiviteCompte::CONSULTANT] as $activite) {
-                        $q->orWhere(fn ($sq) => $sq
-                            ->where('beneficiaire_type', $activite->beneficiaireType())
-                            ->whereIn('beneficiaire_id', $beneficiaires->idsPour($activite)));
-                    }
+                    $q->orWhere(fn ($sq) => $beneficiaires->restreindreParts($sq));
                 }
             })
             ->when($filters['depense_type_id'], fn ($q) => $q->where('depense_type_id', $filters['depense_type_id']))

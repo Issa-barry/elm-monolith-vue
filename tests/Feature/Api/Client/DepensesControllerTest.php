@@ -502,6 +502,64 @@ class DepensesControllerTest extends TestCase
             ->assertJsonPath('total_valide', 4000);
     }
 
+    public function test_proprietaire_sees_depense_attached_directly_to_them(): void
+    {
+        // 05/11 : une dépense « Propriétaire » validée était retenue sur sa fiche et notifiée,
+        // mais absente de la liste.
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $this->makeDepenseRattachee($org, 'proprietaire', $user->proprietaire->id, 6000);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.vehicule', null)
+            ->assertJsonPath('total_valide', 6000);
+    }
+
+    public function test_never_shows_another_proprietaires_direct_depense(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $this->makeDepenseRattachee($org, 'proprietaire', $this->makeProprietaireUser($org)->proprietaire->id, 6000);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine'))
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('total_valide', 0);
+    }
+
+    public function test_proprietaire_direct_depense_of_another_organization_is_hidden(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $this->makeDepenseRattachee(Organization::factory()->create(), 'proprietaire', $user->proprietaire->id);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine'))->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_vehicule_filter_excludes_proprietaire_direct_depense(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $vehicule = $this->makeVehicule($org, $user->proprietaire->id);
+        $this->makeDepense($org, $vehicule, ['montant' => 4000]);
+        $this->makeDepenseRattachee($org, 'proprietaire', $user->proprietaire->id);
+
+        Sanctum::actingAs($user, ['*']);
+
+        $this->getJson(route('client.depenses.mine', ['vehicule_id' => $vehicule->id]))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('total_valide', 4000);
+    }
+
     public function test_isolates_another_proprietaires_depenses(): void
     {
         $org = Organization::factory()->create();

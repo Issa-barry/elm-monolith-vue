@@ -471,21 +471,27 @@ Accessible au proprietaire **et** au livreur (même périmètre que
 large que le calcul de solde du dashboard (`GET /v1/mobile/dashboard`, §5) qui,
 lui, ignore les dépenses côté livreur.
 
-Un livreur, un parrain ou un consultant voit aussi les dépenses rattachées
-**directement à lui** (`beneficiaire_type` = `livreur`, `parrain` ou `prestataire`,
-ex. avance sur salaire) : `vehicule` vaut alors `null`. Parrain et consultant
-ajoutés le 05/11/2026 : ces dépenses étaient déjà retenues sur leurs fiches
-(`deductionsParActivite`, ADR 0054) sans apparaître dans la liste. Un compte ne
-voit jamais celles d'un autre bénéficiaire, et un propriétaire ne voit pas celles
-des livreurs. Un parrain ne voit pas les dépenses du véhicule qu'il parraine
-(ADR 0054). Les dépenses rattachées directement à un propriétaire ne sont pas
-listées ici.
+Règle (05/11/2026) : **toute dépense que le reste à payer déduit figure dans
+cette liste**, pour le bénéficiaire concerné. Chaque activité du compte voit donc
+aussi les dépenses rattachées **directement à elle** (`beneficiaire_type` =
+`proprietaire`, `livreur`, `parrain` ou `prestataire` pour un consultant, ex.
+avance sur salaire) : `vehicule` vaut alors `null`. Jusqu'au 05/11, seules celles
+du livreur l'étaient ; celles du propriétaire, du parrain et du consultant étaient
+déduites (`deductionsParActivite`, ADR 0054) sans apparaître (la phrase « les
+dépenses rattachées directement à un propriétaire ne sont pas listées » est
+remplacée par cette règle).
+
+Limites : un compte ne voit jamais les dépenses d'un autre bénéficiaire ni d'une
+autre organisation ; un propriétaire ne voit pas celles des livreurs ; un parrain
+ne voit pas les dépenses du véhicule qu'il parraine (ADR 0054). La liste reste plus
+large que la déduction sur un point, voulu : un livreur voit les frais des
+véhicules de son équipe, qui sont retenus au propriétaire, pas à lui.
 
 Query params (tous optionnels) :
 
 | Param | Effet |
 |---|---|
-| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles — sinon liste vide) ; exclut les dépenses rattachées directement au livreur, au parrain ou au consultant |
+| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles — sinon liste vide) ; exclut les dépenses rattachées directement au compte (propriétaire, livreur, parrain, consultant) |
 | `depense_type_id` | Filtre par type de dépense (catégorie) |
 | `statut` | Valeur de `StatutDepense` : `brouillon`, `soumis`, `valide`, `rejete`, `annule` — **aucun filtre par défaut**, contrairement au calcul du dashboard qui ne compte que `valide` |
 | `date_debut`, `date_fin` | Filtre par `date_depense` — **aucune période par défaut** (liste complète si non fourni) |

@@ -41,6 +41,14 @@ référentiel du bénéficiaire, imputation, message d'impact) ; colonne `depens
   concerné » trouvent aussi les parrains ; l'export Excel reprend le nom et le téléphone du parrain.
 - Import de types de dépense : la colonne `concerne` accepte « Consultant » et « Parrain ».
 
+## Visibilité dans l'espace client (05/11/2026)
+
+Une dépense validée qui diminue le reste à payer d'un bénéficiaire est consultable par lui dans
+l'espace client (page Dépenses, carte Dépenses de l'accueil, `GET /v1/mobile/depenses/mine`) :
+Véhicule et Propriétaire pour le propriétaire, Livreur, Parrain, Consultant/Prestataire pour le
+consultant rattaché. Salarié et Client n'ont pas de liste de dépenses dans l'espace client. Cf.
+[api-espace-client-contract.md](api-espace-client-contract.md).
+
 ## Dépense validée après la validation de la période
 
 Une dépense validée après la validation d'une période de paiement rouvre cette période si son
