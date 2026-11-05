@@ -174,7 +174,7 @@ Route::post('v1/backoffice/auth/login', BackofficeLoginController::class)
 // ── Routes back-office mobile ─────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice.')->group(function () {
     Route::get('me', App\Http\Controllers\Api\Backoffice\MeController::class)->name('me');
-    Route::get('stats', StatsController::class)->name('stats');
+    Route::get('stats', StatsController::class)->middleware('backoffice.autoriser:factures.read')->name('stats');
 
     Route::apiResource('produits', ProduitController::class);
     Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
@@ -189,22 +189,31 @@ Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice
 Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice.')->group(function () {
     Route::prefix('logistique')->name('logistique.')->group(function () {
         Route::get('ressources', RessourcesController::class)
+            ->middleware('backoffice.autoriser:logistique.create')
             ->name('ressources');
         Route::get('transferts', [TransfertsController::class, 'index'])
+            ->middleware('backoffice.autoriser:logistique.read')
             ->name('transferts.index');
         Route::post('transferts', [TransfertsController::class, 'store'])
+            ->middleware('backoffice.autoriser:logistique.create')
             ->name('transferts.store');
         Route::get('transferts/{transfert}', [TransfertsController::class, 'show'])
+            ->middleware('backoffice.autoriser:view')
             ->name('transferts.show');
         Route::put('transferts/{transfert}/reception', SaisirReceptionController::class)
+            ->middleware('backoffice.autoriser:validerReception')
             ->name('transferts.reception');
         Route::post('transferts/{transfert}/valider-reception', ValiderReceptionController::class)
+            ->middleware('backoffice.autoriser:validerReception')
             ->name('transferts.valider-reception');
         Route::post('transferts/{transfert}/validation-admin', ValidationAdminController::class)
+            ->middleware('backoffice.autoriser:deciderReceptionAdmin')
             ->name('transferts.validation-admin');
         Route::get('commissions', [CommissionsController::class, 'index'])
+            ->middleware('backoffice.autoriser:logistique.read')
             ->name('commissions.index');
         Route::get('commissions/{commission}', [CommissionsController::class, 'show'])
+            ->middleware('backoffice.autoriser:logistique.read')
             ->name('commissions.show');
     });
 });

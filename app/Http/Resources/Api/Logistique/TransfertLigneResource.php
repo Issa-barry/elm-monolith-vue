@@ -9,7 +9,9 @@ class TransfertLigneResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $variante = $this->whenLoaded('variante');
+        // Les listes chargent les lignes sans leur variante : whenLoaded() renverrait alors un
+        // MissingValue, sur lequel relationLoaded() plante (500 dès qu'un transfert a une ligne).
+        $variante = $this->resource->relationLoaded('variante') ? $this->resource->variante : null;
         $produit = $variante?->relationLoaded('produit') ? $variante->produit : null;
 
         return [

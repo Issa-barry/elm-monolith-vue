@@ -20,7 +20,7 @@ class RessourcesController extends Controller
             ?? $user->sites()->first();
 
         $sites = Site::query()
-            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
+            ->where('organization_id', $user->organization_id)
             ->orderBy('nom')
             ->get();
 
@@ -29,7 +29,7 @@ class RessourcesController extends Controller
         // — un véhicule vente-only (ou sans aucun usage, cf. import flotte) n'a pas sa place
         // dans ce sélecteur mobile.
         $vehicules = Vehicule::query()
-            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
+            ->where('organization_id', $user->organization_id)
             ->where('is_active', true)
             ->livraisonLogistique()
             ->orderBy('nom_vehicule')

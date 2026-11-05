@@ -151,8 +151,17 @@ class TransfertLogistiquePolicy
 
     public function validerReceptionAdmin(User $user, TransfertLogistique $transfert): bool
     {
+        return $transfert->isReception()
+            && $this->deciderReceptionAdmin($user, $transfert);
+    }
+
+    /**
+     * Droit de décider, indépendamment du statut : l'API mobile répond sur le statut par son propre
+     * message (422), qu'un refus d'autorisation masquerait.
+     */
+    public function deciderReceptionAdmin(User $user, TransfertLogistique $transfert): bool
+    {
         return $this->sameOrganization($user, $transfert)
-            && $transfert->isReception()
             && $user->hasAnyRole(['super_admin', 'admin_entreprise']);
     }
 

@@ -19,22 +19,16 @@ class CommissionsController extends Controller
 
         $commissions = CommissionLogistique::query()
             ->with(['parts', 'transfert:id,reference'])
-            ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
+            ->where('organization_id', $user->organization_id)
+            ->when(! $user->voitToutesLesAgences(), fn (Builder $q) => $q->whereHas('transfert', fn (Builder $t) => $t->dansAgencesDe($user)))
             ->orderByDesc('created_at')
             ->get();
 
         return response()->json(CommissionResource::collection($commissions));
     }
 
-    public function show(Request $request, CommissionLogistique $commission): JsonResponse
+    public function show(CommissionLogistique $commission): JsonResponse
     {
-        /** @var User $user */
-        $user = $request->user();
-
-        if ($user->organization_id && $commission->organization_id !== $user->organization_id) {
-            return response()->json(['message' => 'Accès non autorisé.'], 403);
-        }
-
         $commission->load(['parts', 'transfert:id,reference,statut']);
 
         return response()->json(new CommissionResource($commission));

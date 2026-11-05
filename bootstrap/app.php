@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Pwa\ShowManifestPwaController;
+use App\Http\Middleware\AutoriserBackofficeMobile;
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureApiAccountIsActive;
 use App\Http\Middleware\EnsureIsStaffAccount;
@@ -81,6 +82,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'account.active' => EnsureAccountIsActive::class,
             'password.not-expired' => EnsurePasswordIsNotExpired::class,
             'vitrine.token' => VerifyVitrineServiceToken::class,
+            'backoffice.autoriser' => AutoriserBackofficeMobile::class,
         ]);
 
         $middleware->redirectUsersTo(function (Request $request): string {

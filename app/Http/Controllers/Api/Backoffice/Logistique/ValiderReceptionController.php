@@ -26,10 +26,6 @@ class ValiderReceptionController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->organization_id && $transfert->organization_id !== $user->organization_id) {
-            return response()->json(['message' => 'Accès non autorisé.'], 403);
-        }
-
         if ($transfert->statut !== StatutTransfert::TRANSIT) {
             return response()->json(['message' => 'Seul un transfert en transit peut être réceptionné.'], 422);
         }
