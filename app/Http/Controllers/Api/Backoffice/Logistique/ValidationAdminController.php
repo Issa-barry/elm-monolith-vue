@@ -22,10 +22,6 @@ class ValidationAdminController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        if ($user->organization_id && $transfert->organization_id !== $user->organization_id) {
-            return response()->json(['message' => 'Accès non autorisé.'], 403);
-        }
-
         if ($transfert->statut !== StatutTransfert::RECEPTION) {
             return response()->json(['message' => 'Seul un transfert réceptionné peut être validé.'], 422);
         }

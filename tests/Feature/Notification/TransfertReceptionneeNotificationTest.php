@@ -38,7 +38,7 @@ class TransfertReceptionneeNotificationTest extends TestCase
         parent::setUp();
 
         $this->org = Organization::factory()->create();
-        Permission::firstOrCreate(['name' => 'logistique.valider_reception', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'logistique.update', 'guard_name' => 'web']);
 
         $site = Site::create([
             'organization_id' => $this->org->id,
@@ -47,7 +47,7 @@ class TransfertReceptionneeNotificationTest extends TestCase
             'localisation' => 'Conakry',
         ]);
         $this->staff = User::factory()->create(['organization_id' => $this->org->id]);
-        $this->staff->givePermissionTo('logistique.valider_reception');
+        $this->staff->givePermissionTo('logistique.update');
         $this->staff->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
     }
 
@@ -81,6 +81,8 @@ class TransfertReceptionneeNotificationTest extends TestCase
             'type' => 'depot',
             'localisation' => 'Kindia',
         ]);
+        // La réception se valide depuis le site destination (TransfertLogistiquePolicy::validerReception).
+        $this->staff->sites()->attach($siteDest->id, ['role' => 'employe', 'is_default' => false]);
 
         $transfert = TransfertLogistique::create([
             'organization_id' => $this->org->id,

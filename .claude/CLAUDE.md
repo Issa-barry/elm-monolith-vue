@@ -182,6 +182,9 @@ impayé + dérogation valide + commande autorisée
 
 Réutiliser les composants partagés et les styles existants avant d'en créer de nouveaux.
 
+Ne jamais ajouter une carte ou un autre bloc à un écran sans demande explicite de l'utilisateur, même si
+le besoin semble évident. Proposer l'ajout dans le rapport et attendre sa réponse.
+
 ## 11. Sécurité et multi-tenant
 
 Pour toute fonctionnalité manipulant des données métier :

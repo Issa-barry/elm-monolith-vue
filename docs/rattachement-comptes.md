@@ -100,8 +100,9 @@ Contrat d'API : [api-espace-parrain-contract.md](api-espace-parrain-contract.md)
 - **COMPTE-020 — Véhicules.** Seuls les véhicules parrainés actuellement sont listés. Un parrain remplacé garde ses
   commissions, sans le véhicule (PARRAIN-012).
 - **COMPTE-021 — Navigation.** Un parrain seul arrive sur l'accueil parrain et sa barre mobile reste celle de cet
-  espace. Avec une autre activité, le menu habituel ne change pas : une carte de l'accueil ouvre l'espace parrain, et sa
-  barre mobile propose le retour. Sur ordinateur, le menu latéral affiche une section Espace parrain.
+  espace. Avec une autre activité, le menu habituel ne change pas et l'accueil n'affiche aucune carte vers l'espace
+  parrain (retirée à la demande de l'utilisateur, 05/11/2026). Sur ordinateur, le menu latéral affiche une section Espace
+  parrain. Sur mobile, ce compte n'a pour l'instant aucun lien vers cet espace ; une fois dedans, sa barre propose le retour.
 - **COMPTE-022 — Détachement en cours de session.** Les écrans indiquent que le compte n'est plus rattaché et les
   menus sont recalculés, sans déconnexion.
 

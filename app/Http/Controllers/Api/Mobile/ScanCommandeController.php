@@ -5,8 +5,19 @@ namespace App\Http\Controllers\Api\Mobile;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeVente;
 use App\Models\TransfertLogistique;
+use App\Models\User;
+use App\Services\Client\ClientIdentity;
+use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\Operations\OperationsCompte;
+use App\Services\Client\Operations\PresentationOperation;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 
+/**
+ * Scan d'une référence : réservé au personnel habilité sur l'agence et aux comptes réellement liés à
+ * l'opération (docs/api-espace-client-contract.md). Les références sont séquentielles : tout refus
+ * répond exactement comme une référence inconnue, pour ne pas confirmer qu'une opération existe.
+ */
 class ScanCommandeController extends Controller
 {
     /**
@@ -18,27 +29,37 @@ class ScanCommandeController extends Controller
     /** TRF- = nouveaux transferts ; TR- = référence émise avant le 31/08/2026. */
     private const TRANSFERT_PREFIXES = ['TRF-', 'TR-'];
 
+    public function __construct(private readonly ClientIdentityResolver $identityResolver) {}
+
     public function __invoke(string $reference): JsonResponse
     {
         $ref = strtoupper(trim($reference));
-        // Depuis le chantier "références par processus" (31/08/2026), la séquence de
-        // ReferenceNumeroService est scopée par organisation : deux organisations peuvent
-        // légitimement porter EXACTEMENT la même référence (ex: VTE-310826-001 pour l'une ET
-        // l'autre). Une recherche par reference seule n'est donc plus seulement une faille
-        // multi-tenant — elle devient fonctionnellement ambiguë et peut retourner la commande
-        // de la mauvaise organisation. Toujours filtrer par organization_id de l'utilisateur
-        // authentifié, sur les deux générations de préfixes (legacy comprise).
-        $organizationId = auth()->user()->organization_id;
+
+        /** @var User $user */
+        $user = auth()->user();
+
+        // Jamais d'organisation déduite du téléphone ici : le repli de ClientIdentityResolver ouvrirait
+        // à un compte sans organisation, et au super admin via Gate::before, celle d'une fiche non réclamée.
+        if ($user->organization_id === null) {
+            return $this->introuvable();
+        }
+
+        $identity = $this->identityResolver->resolve($user);
 
         if ($this->startsWithAny($ref, self::COMMANDE_PREFIXES)) {
-            return $this->scanCommande($ref, $organizationId);
+            return $this->scanCommande($ref, $user, $identity);
         }
 
         if ($this->startsWithAny($ref, self::TRANSFERT_PREFIXES)) {
-            return $this->scanTransfert($ref, $organizationId);
+            return $this->scanTransfert($ref, $user, $identity);
         }
 
-        return response()->json(['message' => 'Référence non reconnue.'], 404);
+        return $this->introuvable();
+    }
+
+    private function introuvable(): JsonResponse
+    {
+        return response()->json(['message' => 'Référence introuvable.'], 404);
     }
 
     /** @param  list<string>  $prefixes */
@@ -53,22 +74,47 @@ class ScanCommandeController extends Controller
         return false;
     }
 
-    private function scanCommande(string $reference, string $organizationId): JsonResponse
+    /**
+     * La permission de lecture ne suffit pas : un agent ne lit que les opérations de ses agences, sauf
+     * vision 360° (ADR 0025).
+     *
+     * @param  list<string|null>  $siteIds
+     */
+    private function couvreUneAgence(User $user, array $siteIds): bool
     {
+        if ($user->voitToutesLesAgences()) {
+            return true;
+        }
+
+        return $user->sites()->whereIn('sites.id', array_filter($siteIds))->exists();
+    }
+
+    private function scanCommande(string $reference, User $user, ClientIdentity $identity): JsonResponse
+    {
+        // La numérotation est scopée par organisation : la même référence peut exister ailleurs, toujours
+        // filtrer sur l'organisation du compte, préfixes historiques compris.
         $commande = CommandeVente::with([
             'site:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
             'vehicule.equipe:id,vehicule_id',
-            'client:id,nom,prenom,telephone,adresse,quartier,ville',
+            'client:id,nom,prenom,telephone,adresse,ville',
             'lignes:id,commande_vente_id,quantite_demandee',
-        ])->where('reference', $reference)->where('organization_id', $organizationId)->first();
+        ])->where('reference', $reference)->where('organization_id', $identity->organizationId)->first();
 
         if (! $commande) {
-            return response()->json(['message' => 'Commande introuvable.'], 404);
+            return $this->introuvable();
         }
 
+        $personnel = $user->can('view', $commande) && $this->couvreUneAgence($user, [$commande->site_id]);
+        $operations = new OperationsCompte($identity);
+
+        if (! $personnel && ! $operations->ventes()->whereKey($commande->id)->exists()) {
+            return $this->introuvable();
+        }
+
+        $liens = $personnel ? [] : $operations->liensVentes(new Collection([$commande]))[$commande->id];
         $client = $commande->client;
-        $clientNom = $client?->nom_complet ?? 'Vente directe';
+        $voitContact = $personnel || PresentationOperation::voitLeContact($commande, $liens);
 
         return response()->json([
             'type' => 'commande',
@@ -76,13 +122,9 @@ class ScanCommandeController extends Controller
             'statut' => $commande->statut?->value ?? '—',
             'statut_label' => $commande->statut?->label() ?? '—',
             'site_source' => $commande->site?->nom ?? '—',
-            'client_nom' => $clientNom,
-            'client_telephone' => $client?->telephone,
-            'client_adresse' => implode(', ', array_filter([
-                $client?->adresse,
-                $client?->quartier,
-                $client?->ville,
-            ])) ?: null,
+            'client_nom' => $client?->nom_complet ?? 'Vente directe',
+            'client_telephone' => $voitContact ? $client?->telephone : null,
+            'client_adresse' => $voitContact ? PresentationOperation::adresse($client) : null,
             'vehicule' => $commande->vehicule ? [
                 'nom' => $commande->vehicule->nom_vehicule,
                 'immatriculation' => $commande->vehicule->immatriculation,
@@ -90,11 +132,11 @@ class ScanCommandeController extends Controller
             'equipe_nom' => $commande->vehicule?->nom_vehicule ?? '—',
             'date_commande' => $commande->validated_at?->toDateString(),
             'nb_packs' => (int) $commande->lignes->sum('quantite_demandee'),
-            'total' => (float) $commande->total_commande,
+            'total' => $personnel || PresentationOperation::voitLesPrix($liens) ? (float) $commande->total_commande : null,
         ]);
     }
 
-    private function scanTransfert(string $reference, string $organizationId): JsonResponse
+    private function scanTransfert(string $reference, User $user, ClientIdentity $identity): JsonResponse
     {
         $transfert = TransfertLogistique::with([
             'siteSource:id,nom',
@@ -102,10 +144,17 @@ class ScanCommandeController extends Controller
             'vehicule:id,nom_vehicule,immatriculation',
             'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
             'lignes',
-        ])->where('reference', $reference)->where('organization_id', $organizationId)->first();
+        ])->where('reference', $reference)->where('organization_id', $identity->organizationId)->first();
 
         if (! $transfert) {
-            return response()->json(['message' => 'Transfert introuvable.'], 404);
+            return $this->introuvable();
+        }
+
+        $personnel = $user->can('view', $transfert)
+            && $this->couvreUneAgence($user, [$transfert->site_source_id, $transfert->site_destination_id]);
+
+        if (! $personnel && ! (new OperationsCompte($identity))->transferts()->whereKey($transfert->id)->exists()) {
+            return $this->introuvable();
         }
 
         return response()->json([
