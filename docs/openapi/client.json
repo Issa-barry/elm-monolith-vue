@@ -4014,7 +4014,16 @@
                                                 },
                                                 "statut_label": {
                                                     "type": "string",
-                                                    "const": "Livraison en cours"
+                                                    "enum": [
+                                                        "Brouillon",
+                                                        "En chargement",
+                                                        "Livraison en cours",
+                                                        "R\u00e9ceptionn\u00e9",
+                                                        "Cl\u00f4tur\u00e9",
+                                                        "Annul\u00e9",
+                                                        "Retourn\u00e9",
+                                                        "\u2014"
+                                                    ]
                                                 },
                                                 "site_source": {
                                                     "type": "string"

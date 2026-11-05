@@ -23,6 +23,7 @@ use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
@@ -322,6 +323,113 @@ class ScanPerimetreContratTest extends TestCase
             'type', 'reference', 'statut', 'statut_label', 'site_source', 'client_nom', 'client_telephone',
             'client_adresse', 'vehicule', 'equipe_nom', 'date_commande', 'nb_packs', 'total',
         ]);
+    }
+
+    // ── Formats de QR : le format ne change jamais les droits ─────────────────
+
+    /** @return array<string, array{0: string}> */
+    public static function referencesVenteProvider(): array
+    {
+        return [
+            'vente' => ['VTE-051126-002'],
+            'distribution' => ['DST-051126-002'],
+            'ancienne commande' => ['CMD-010125-002'],
+            'ancienne vente' => ['VT-00042-K7X'],
+        ];
+    }
+
+    #[DataProvider('referencesVenteProvider')]
+    public function test_chaque_prefixe_ouvre_la_bonne_vente_et_garde_les_droits(string $reference): void
+    {
+        $this->vente(['reference' => $reference]);
+        $agent = $this->agent(['ventes.read'], $this->agence);
+
+        $this->scanner($agent, $reference)->assertOk()
+            ->assertJsonPath('type', 'commande')
+            ->assertJsonPath('reference', $reference);
+        $this->scanner($this->compte(), $reference)->assertNotFound();
+    }
+
+    public function test_le_ticket_de_vente_ouvre_la_vente_par_son_identifiant(): void
+    {
+        $vente = $this->vente();
+        $agent = $this->agent(['ventes.read'], $this->agence);
+
+        $this->scanner($agent, $vente->id)->assertOk()
+            ->assertJsonPath('type', 'commande')
+            ->assertJsonPath('reference', self::REFERENCE_VENTE);
+        $this->scanner($agent, strtoupper($vente->id))->assertOk()
+            ->assertJsonPath('reference', self::REFERENCE_VENTE);
+    }
+
+    public function test_le_ticket_applique_le_filtrage_du_profil(): void
+    {
+        $vente = $this->vente();
+        $compte = $this->compte();
+        Proprietaire::whereKey($this->proprietaire->id)->update(['user_id' => $compte->id]);
+
+        $reponse = $this->scanner($compte, $vente->id)->assertOk();
+
+        $this->assertNull($reponse->json('client_telephone'));
+        $this->assertNull($reponse->json('total'));
+    }
+
+    public function test_le_ticket_ne_contourne_aucun_refus(): void
+    {
+        $vente = $this->vente();
+        $autre = Organization::factory()->create();
+        $superAdminAutre = User::factory()->create(['organization_id' => $autre->id]);
+        $superAdminAutre->assignRole('super_admin');
+        $sansOrganisation = User::factory()->create(['organization_id' => null]);
+        $sansOrganisation->assignRole('super_admin');
+
+        $attendu = $this->scanner($this->compte(), '01jc2r8m5t7v9wxyz0abcd1234')->assertNotFound()->json();
+
+        foreach ([
+            $this->compte(),
+            $this->agent(['ventes.read'], $this->autreAgence),
+            $this->agent([], $this->agence),
+            $superAdminAutre,
+            $sansOrganisation,
+        ] as $refuse) {
+            $this->assertSame($attendu, $this->scanner($refuse, $vente->id)->assertNotFound()->json());
+        }
+    }
+
+    public function test_l_identifiant_d_un_transfert_n_est_pas_un_ticket(): void
+    {
+        $transfert = $this->transfert();
+        $superAdmin = $this->compte();
+        $superAdmin->assignRole('super_admin');
+
+        $this->scanner($superAdmin, $transfert->id)->assertNotFound();
+    }
+
+    /** @return array<string, array{0: string}> */
+    public static function referencesTransfertProvider(): array
+    {
+        return ['actuelle' => ['TRF-051126-002'], 'ancienne' => ['TR-00042-K7X']];
+    }
+
+    #[DataProvider('referencesTransfertProvider')]
+    public function test_un_transfert_affiche_son_statut_reel(string $reference): void
+    {
+        $transfert = $this->transfert();
+        TransfertLogistique::whereKey($transfert->id)->update(['reference' => $reference, 'statut' => StatutTransfert::CLOTURE->value]);
+        $agent = $this->agent(['logistique.read'], $this->agence);
+
+        $this->scanner($agent, $reference)->assertOk()
+            ->assertJsonPath('type', 'transfert')
+            ->assertJsonPath('reference', $reference)
+            ->assertJsonPath('statut', StatutTransfert::CLOTURE->value)
+            ->assertJsonPath('statut_label', StatutTransfert::CLOTURE->label());
+    }
+
+    public function test_un_texte_inconnu_recoit_la_meme_reponse(): void
+    {
+        $agent = $this->agent(['ventes.read'], $this->agence);
+
+        $this->scanner($agent, 'XYZ-000000-001')->assertNotFound()->assertExactJson(['message' => 'Référence introuvable.']);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

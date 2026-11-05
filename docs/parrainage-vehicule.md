@@ -246,7 +246,8 @@ Distribution.
   commission sur la quinzaine n'a pas de fiche, la dépense attend. Une dépense validée après la
   validation automatique de la période la rouvre (ADR 0008 révisé le 03/11/2026) ; si la fiche est
   déjà payée, la retenue va sur une fiche complémentaire et le négatif est reporté (ADR 0010).
-  L'espace parrain (API `/v1/parrain`) n'affiche pas encore ces retenues. Mapping comptable posé
+  Ces dépenses apparaissent dans l'espace client (`GET /v1/mobile/depenses/mine`, page Dépenses et
+  carte de l'accueil) ; l'API `/v1/parrain` n'affiche pas encore ces retenues. Mapping comptable posé
   pour les organisations existantes par `2026_11_03_100000_bootstrap_mapping_depense_parrain`.
   Cf. [depenses-concernes.md](depenses-concernes.md).
 - **PARRAIN-020 — Prévision de trésorerie.** Colonnes « Parrains P1 » / « Parrains P2 » du

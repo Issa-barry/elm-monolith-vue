@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Api\Client;
 
+use App\Enums\ActiviteCompte;
 use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Client\DepensesMineRequest;
 use App\Http\Resources\Api\Client\DepenseResource;
 use App\Models\Depense;
 use App\Models\User;
+use App\Services\Client\BeneficiairesCompteResolver;
 use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -22,8 +24,9 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  * VehiculeFraisController, dont c'est la version consolidée) — volontairement
  * PLUS LARGE que ClientEarningsService::fraisDepensesParVehicule() (qui, lui,
  * est proprietaire-only car il nourrit un calcul de solde à payer, pas une
- * simple consultation). Un livreur voit aussi les dépenses rattachées directement
- * à lui (ex. avance sur salaire, `vehicule` vaut alors null), sauf filtre véhicule.
+ * simple consultation). Un livreur, un parrain ou un consultant voit aussi les dépenses
+ * rattachées directement à lui (ex. avance sur salaire, `vehicule` vaut alors null), sauf
+ * filtre véhicule : ce sont les dépenses que ses fiches retiennent (ADR 0054).
  *
  * `total_valide` : somme des dépenses validées correspondant aux filtres, toutes
  * pages confondues. C'est le montant de la carte « Dépenses » de l'accueil mobile.
@@ -32,6 +35,7 @@ class DepensesController extends Controller
 {
     public function __construct(
         private readonly ClientIdentityResolver $identityResolver,
+        private readonly BeneficiairesCompteResolver $beneficiairesResolver,
         private readonly ClientEarningsService $earningsService,
     ) {}
 
@@ -40,7 +44,7 @@ class DepensesController extends Controller
         /** @var User $user */
         $user = $request->user();
         $identity = $this->identityResolver->resolve($user);
-        $livreur = $identity->livreur;
+        $beneficiaires = $this->beneficiairesResolver->depuisIdentite($user, $identity);
 
         $filters = $request->filters();
 
@@ -55,7 +59,7 @@ class DepensesController extends Controller
                 'vehiculeBeneficiaire:id,nom_vehicule,immatriculation',
             ])
             ->where('organization_id', $identity->organizationId)
-            ->where(function ($q) use ($filters, $vehiculeIds, $livreur) {
+            ->where(function ($q) use ($filters, $vehiculeIds, $beneficiaires) {
                 $q->where('beneficiaire_type', 'vehicule')
                     ->when(
                         $filters['vehicule_id'] !== null,
@@ -63,8 +67,12 @@ class DepensesController extends Controller
                         fn ($sq) => $sq->whereIn('beneficiaire_id', $vehiculeIds)
                     );
 
-                if ($livreur !== null && $filters['vehicule_id'] === null) {
-                    $q->orWhere(fn ($sq) => $sq->where('beneficiaire_type', 'livreur')->where('beneficiaire_id', $livreur->id));
+                if ($filters['vehicule_id'] === null) {
+                    foreach ([ActiviteCompte::LIVREUR, ActiviteCompte::PARRAIN, ActiviteCompte::CONSULTANT] as $activite) {
+                        $q->orWhere(fn ($sq) => $sq
+                            ->where('beneficiaire_type', $activite->beneficiaireType())
+                            ->whereIn('beneficiaire_id', $beneficiaires->idsPour($activite)));
+                    }
                 }
             })
             ->when($filters['depense_type_id'], fn ($q) => $q->where('depense_type_id', $filters['depense_type_id']))
