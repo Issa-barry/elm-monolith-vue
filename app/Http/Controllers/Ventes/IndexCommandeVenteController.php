@@ -12,9 +12,9 @@ use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SavedFilterService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
+use App\Support\Periodes\Periode;
 use App\Support\Ventes\PrecommandeSuivi;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -48,13 +48,11 @@ class IndexCommandeVenteController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        $periode = $request->input('periode') ?? 'all';
+        $periode = Periode::depuisRequeteValidee($request);
         $statuts = array_values(array_filter((array) $request->input('statuts', [])));
         $statutFacture = $request->input('statut_facture');
         $statutCommission = $request->input('statut_commission');
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
-        $dateDebut = $request->input('date_debut');
-        $dateFin = $request->input('date_fin');
         $vehicule = $request->input('vehicule');
         $proprietaire = $request->input('proprietaire');
         $livreur = $request->input('livreur');
@@ -84,21 +82,7 @@ class IndexCommandeVenteController extends Controller
             }
         }
 
-        if ($dateDebut || $dateFin) {
-            if ($dateDebut) {
-                $query->whereDate('created_at', '>=', $dateDebut);
-            }
-            if ($dateFin) {
-                $query->whereDate('created_at', '<=', $dateFin);
-            }
-        } else {
-            match ($periode) {
-                'today' => $query->whereDate('created_at', Carbon::today()),
-                'week' => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
-                'month' => $query->whereYear('created_at', Carbon::now()->year)->whereMonth('created_at', Carbon::now()->month),
-                default => null,
-            };
-        }
+        $periode->appliquer($query, 'created_at');
 
         if ($statutFacture) {
             $query->whereHas('facture', fn ($q) => $q->where('statut_facture', $statutFacture));
@@ -330,7 +314,7 @@ class IndexCommandeVenteController extends Controller
             'can_precommander' => $user->can('precommander', CommandeVente::class),
             'raison_blocage_precommande' => $raisonBlocagePrecommande,
             'can_creer_precommande' => $userSiteId !== null && $raisonBlocagePrecommande === null,
-            'periode' => $periode,
+            'periode' => $periode->cle,
             'statuts_actifs' => $statuts,
             'statuts' => StatutCommandeVente::options(),
             'sites' => $sites,
@@ -340,8 +324,7 @@ class IndexCommandeVenteController extends Controller
             'raison_blocage_commande' => $raisonBlocageCommande,
             'filters' => [
                 'site_ids' => $siteIds,
-                'date_debut' => $dateDebut,
-                'date_fin' => $dateFin,
+                ...$periode->valeursFiltre(),
                 'statut_facture' => $statutFacture,
                 'statut_commission' => $statutCommission,
                 'vehicule' => $vehicule,

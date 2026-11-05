@@ -6,6 +6,7 @@ use App\Enums\NatureOperation;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeVente;
 use App\Services\Ventes\VenteListExport;
+use App\Support\Periodes\Periode;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel as ExcelFormat;
 use Maatwebsite\Excel\Facades\Excel;
@@ -53,14 +54,8 @@ class ExportCommandeVenteController extends Controller
             $query->whereIn('statut', $statuts);
         }
 
-        // Période : date début seule → jusqu'à aujourd'hui (simple absence de borne haute,
-        // aucune donnée future n'existe) ; aucune date → tout ; les deux → intervalle choisi.
-        if ($dateDebut = $request->input('date_debut')) {
-            $query->whereDate('created_at', '>=', $dateDebut);
-        }
-        if ($dateFin = $request->input('date_fin')) {
-            $query->whereDate('created_at', '<=', $dateFin);
-        }
+        // Même résolution que la liste (ADR 0057) : clé `periode` ou date_debut + date_fin.
+        Periode::depuisRequeteValidee($request)->appliquer($query, 'created_at');
 
         $natureFiltree = $request->route()?->getName() === 'distributions.export'
             ? NatureOperation::DISTRIBUTION_CLIENT

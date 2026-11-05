@@ -118,6 +118,12 @@ const filterFields = computed<FilterField[]>(() => {
                 ...props.fournisseurs,
             ],
         },
+        {
+            key: 'periode',
+            label: 'Période',
+            type: 'period',
+            defaultValue: 'tout',
+        },
     ];
     if (can('achats.valider')) {
         fields.push({

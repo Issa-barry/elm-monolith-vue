@@ -14,6 +14,7 @@ use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\DroitCreationDepenseService;
+use App\Support\Periodes\Periode;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -29,7 +30,8 @@ final class DepenseListingService
         private readonly DroitCreationDepenseService $droitCreationDepense,
     ) {}
 
-    public function query(array $filters, string $orgId, array $siteIds = []): Builder
+    /** @param  ?Periode  $periode  période résolue par le contrôleur (Periode::depuisRequeteValidee) */
+    public function query(array $filters, string $orgId, array $siteIds = [], ?Periode $periode = null): Builder
     {
         $query = Depense::forOrg($orgId)
             ->orderByDesc('date_depense')
@@ -47,12 +49,7 @@ final class DepenseListingService
         if (! empty($siteIds)) {
             $query->whereIn('site_id', $siteIds);
         }
-        if (! empty($filters['date_debut'])) {
-            $query->where('date_depense', '>=', $filters['date_debut']);
-        }
-        if (! empty($filters['date_fin'])) {
-            $query->where('date_depense', '<=', $filters['date_fin']);
-        }
+        $periode?->appliquer($query, 'date_depense', colonneDate: true);
 
         if (! empty($filters['vehicule'])) {
             $likeVeh = '%'.$filters['vehicule'].'%';

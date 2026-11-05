@@ -10,6 +10,7 @@ use App\Models\Fournisseur;
 use App\Models\PieceComptable;
 use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\Comptabilite\FactureFournisseurComptabilisationService;
+use App\Support\Periodes\Periode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -24,8 +25,10 @@ class IndexFactureFournisseurController extends Controller
         $user = $request->user();
         $filters = $request->only(['statut', 'fournisseur_id', 'numero']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
+        $periode = Periode::depuisRequeteValidee($request);
 
         $query = fn () => $perimetre->appliquerFacturesConsultation(FactureFournisseur::query(), $user)
+            ->tap(fn (Builder $q) => $periode->appliquer($q, 'date_facture', colonneDate: true))
             ->when($siteIds !== [], fn (Builder $q) => $q->whereIn('site_id', $siteIds))
             ->when($filters['statut'] ?? null, fn (Builder $q, string $s) => $q->where('statut', $s))
             ->when($filters['fournisseur_id'] ?? null, fn (Builder $q, string $id) => $q->where('fournisseur_id', $id))
@@ -71,7 +74,7 @@ class IndexFactureFournisseurController extends Controller
                 'statut_affichage' => $f->statut?->statutAffichage(),
             ]),
             'dette_totale' => $dette,
-            'filters' => array_merge($filters, ['site_ids' => $siteIds]),
+            'filters' => array_merge($filters, ['site_ids' => $siteIds], $periode->valeursFiltre()),
             'statuts' => StatutFactureFournisseur::options(),
             'fournisseurs' => Fournisseur::where('organization_id', $user->organization_id)
                 ->with(['personne', 'entrepriseTierce'])

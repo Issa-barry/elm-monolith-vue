@@ -58,7 +58,7 @@ import Textarea from 'primevue/textarea';
 import Tooltip from 'primevue/tooltip';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 const vTooltip = Tooltip;
 
@@ -450,13 +450,7 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'select',
         options: filtresStatutCommission,
     },
-    {
-        key: 'date',
-        label: 'Période',
-        type: 'date-range',
-        startKey: 'date_debut',
-        endKey: 'date_fin',
-    },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
     {
         key: 'vehicule',
         label: 'Véhicule',
@@ -546,25 +540,15 @@ const EXPORT_COLUMNS = [
     { key: 'statut', label: 'Statut' },
 ];
 
-// Périodes rapides de la modale d'export — 'custom' seul affiche les deux calendriers Date
-// début/fin librement éditables, toutes les autres calculent date_debut/date_fin côté client
-// (semaine calée sur lundi, cf. firstDayOfWeek: 1 dans app.ts).
-const PERIODE_OPTIONS = [
-    { value: 'today', label: "Aujourd'hui" },
-    { value: 'yesterday', label: 'Hier' },
-    { value: 'week', label: 'Semaine en cours' },
-    { value: 'last_week', label: 'Semaine dernière' },
-    { value: 'month', label: 'Mois en cours' },
-    { value: 'last_month', label: 'Mois dernier' },
-    { value: 'last_3_months', label: '3 derniers mois' },
-    { value: 'last_6_months', label: '6 derniers mois' },
-    { value: 'year', label: 'Année en cours' },
-    { value: 'last_year', label: 'Année dernière' },
-    { value: 'custom', label: 'Choisir une période' },
-];
+// Période de la modale d'export : mêmes choix que le filtre (Periode, ADR 0057). Le navigateur
+// n'envoie que la clé ou les deux dates ; le serveur résout les bornes.
+const periodesExport = computed(
+    () =>
+        (usePage().props.periodes ?? []) as { value: string; label: string }[],
+);
 
 const exportDialogVisible = ref(false);
-const exportPeriode = ref('today');
+const exportPeriode = ref('aujourd_hui');
 const exportDateDebut = ref('');
 const exportDateFin = ref('');
 const exportSiteIds = ref<string[]>([]);
@@ -581,102 +565,13 @@ function toIsoDate(d: Date): string {
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function addDays(d: Date, n: number): Date {
-    const date = new Date(d);
-    date.setDate(date.getDate() + n);
-    return date;
-}
-
-// Lundi de la semaine contenant `d` (getDay() : 0=dimanche..6=samedi).
-function startOfWeekMonday(d: Date): Date {
-    const day = d.getDay();
-    return addDays(d, day === 0 ? -6 : 1 - day);
-}
-
-/** Calcule [date_debut, date_fin] (chaînes ISO) pour une période rapide — 'custom' exclu. */
-function computePeriodeRange(preset: string): { debut: string; fin: string } {
-    const today = new Date();
-
-    switch (preset) {
-        case 'today':
-            return { debut: toIsoDate(today), fin: toIsoDate(today) };
-        case 'yesterday': {
-            const hier = addDays(today, -1);
-            return { debut: toIsoDate(hier), fin: toIsoDate(hier) };
-        }
-        case 'week':
-            return {
-                debut: toIsoDate(startOfWeekMonday(today)),
-                fin: toIsoDate(today),
-            };
-        case 'last_week': {
-            const finDerniere = addDays(startOfWeekMonday(today), -1);
-            const debutDerniere = addDays(finDerniere, -6);
-            return {
-                debut: toIsoDate(debutDerniere),
-                fin: toIsoDate(finDerniere),
-            };
-        }
-        case 'month':
-            return {
-                debut: toIsoDate(
-                    new Date(today.getFullYear(), today.getMonth(), 1),
-                ),
-                fin: toIsoDate(today),
-            };
-        case 'last_month':
-            return {
-                debut: toIsoDate(
-                    new Date(today.getFullYear(), today.getMonth() - 1, 1),
-                ),
-                fin: toIsoDate(
-                    new Date(today.getFullYear(), today.getMonth(), 0),
-                ),
-            };
-        case 'last_3_months':
-            return {
-                debut: toIsoDate(
-                    new Date(
-                        today.getFullYear(),
-                        today.getMonth() - 3,
-                        today.getDate(),
-                    ),
-                ),
-                fin: toIsoDate(today),
-            };
-        case 'last_6_months':
-            return {
-                debut: toIsoDate(
-                    new Date(
-                        today.getFullYear(),
-                        today.getMonth() - 6,
-                        today.getDate(),
-                    ),
-                ),
-                fin: toIsoDate(today),
-            };
-        case 'year':
-            return {
-                debut: toIsoDate(new Date(today.getFullYear(), 0, 1)),
-                fin: toIsoDate(today),
-            };
-        case 'last_year':
-            return {
-                debut: toIsoDate(new Date(today.getFullYear() - 1, 0, 1)),
-                fin: toIsoDate(new Date(today.getFullYear() - 1, 11, 31)),
-            };
-        default:
-            return { debut: '', fin: '' };
-    }
-}
-
-// 'custom' laisse exportDateDebut/exportDateFin tels quels (édition libre via les deux
-// Calendar) ; toute autre valeur recalcule et écrase les deux dates.
-watch(exportPeriode, (preset) => {
-    if (preset === 'custom') return;
-    const { debut, fin } = computePeriodeRange(preset);
-    exportDateDebut.value = debut;
-    exportDateFin.value = fin;
+const exportErreurPeriode = computed<string | null>(() => {
+    if (exportPeriode.value !== 'personnalisee') return null;
+    if (!exportDateDebut.value || !exportDateFin.value)
+        return 'Renseignez la date de début et la date de fin.';
+    return exportDateDebut.value > exportDateFin.value
+        ? 'La date de fin doit être postérieure ou égale à la date de début.'
+        : null;
 });
 
 // Calendar (PrimeVue) travaille en Date, nos refs restent des chaînes ISO (format envoyé au
@@ -718,14 +613,10 @@ const statutFilterOptions = computed(() =>
 );
 
 function openExportDialog() {
-    // Période : toujours "Aujourd'hui" par défaut à l'ouverture — calculé directement ici (pas
-    // seulement via le watcher sur exportPeriode, qui ne se déclenche pas si la valeur ne change
-    // pas d'un ouverture à l'autre). Les autres filtres restent pré-remplis avec ce qui est déjà
-    // appliqué à la page.
-    exportPeriode.value = 'today';
-    const { debut, fin } = computePeriodeRange('today');
-    exportDateDebut.value = debut;
-    exportDateFin.value = fin;
+    // Période : toujours « Aujourd'hui » à l'ouverture ; les autres filtres reprennent ceux de la page.
+    exportPeriode.value = 'aujourd_hui';
+    exportDateDebut.value = '';
+    exportDateFin.value = '';
     exportSiteIds.value = [...(props.filters.site_ids ?? [])];
     exportVehiculeIds.value = [];
     exportStatuts.value = [...props.statuts_actifs];
@@ -735,9 +626,14 @@ function openExportDialog() {
 }
 
 function submitExport() {
+    if (exportErreurPeriode.value) return;
     const params = new URLSearchParams();
-    if (exportDateDebut.value) params.set('date_debut', exportDateDebut.value);
-    if (exportDateFin.value) params.set('date_fin', exportDateFin.value);
+    if (exportPeriode.value === 'personnalisee') {
+        params.set('date_debut', exportDateDebut.value);
+        params.set('date_fin', exportDateFin.value);
+    } else if (exportPeriode.value !== 'tout') {
+        params.set('periode', exportPeriode.value);
+    }
     exportSiteIds.value.forEach((id) => params.append('site_ids[]', id));
     exportVehiculeIds.value.forEach((id) =>
         params.append('vehicule_ids[]', id),
@@ -1003,7 +899,6 @@ function confirmDelete(c: Commande) {
                 :fields="champsBarreRapide"
                 search-key="recherche"
                 :values="filterValues"
-                :base-params="{ periode: 'all' }"
                 :saved-filter-scope="scopeVues"
             >
                 <DataFilters
@@ -1011,7 +906,6 @@ function confirmDelete(c: Commande) {
                     quick-bar
                     :url="urlListe"
                     :saved-filter-scope="scopeVues"
-                    :base-params="{ periode: 'all' }"
                     :values="filterValues"
                     :sites="sites"
                     :result-count="commandesFiltrees.length"
@@ -1039,7 +933,6 @@ function confirmDelete(c: Commande) {
                     trigger-only
                     :url="urlListe"
                     :saved-filter-scope="scopeVues"
-                    :base-params="{ periode: 'all' }"
                     :values="filterValues"
                     :sites="sites"
                     :result-count="commandesFiltrees.length"
@@ -1133,7 +1026,6 @@ function confirmDelete(c: Commande) {
                                 :quick-bar="barreRapide"
                                 :url="urlListe"
                                 :saved-filter-scope="scopeVues"
-                                :base-params="{ periode: 'all' }"
                                 :values="filterValues"
                                 :sites="sites"
                                 :result-count="commandesFiltrees.length"
@@ -1325,7 +1217,6 @@ function confirmDelete(c: Commande) {
                     :fields="champsBarreRapide"
                     search-key="recherche"
                     :values="filterValues"
-                    :base-params="{ periode: 'all' }"
                     :saved-filter-scope="scopeVues"
                 />
                 <DataTable
@@ -2056,21 +1947,21 @@ function confirmDelete(c: Commande) {
                     <Label class="mb-1.5 block text-sm">Période</Label>
                     <Select
                         v-model="exportPeriode"
-                        :options="PERIODE_OPTIONS"
+                        :options="periodesExport"
                         option-label="label"
                         option-value="value"
                         class="w-full"
                         fluid
                     />
                     <div
-                        v-if="exportPeriode === 'custom'"
+                        v-if="exportPeriode === 'personnalisee'"
                         class="mt-2 grid grid-cols-2 gap-2"
                     >
                         <div>
                             <Label
                                 for="export-date-debut"
                                 class="mb-1 block text-xs text-muted-foreground"
-                                >Date de début</Label
+                                >Du</Label
                             >
                             <DatePicker
                                 input-id="export-date-debut"
@@ -2089,7 +1980,7 @@ function confirmDelete(c: Commande) {
                             <Label
                                 for="export-date-fin"
                                 class="mb-1 block text-xs text-muted-foreground"
-                                >Date de fin</Label
+                                >Au</Label
                             >
                             <DatePicker
                                 input-id="export-date-fin"
@@ -2105,6 +1996,14 @@ function confirmDelete(c: Commande) {
                             />
                         </div>
                     </div>
+                    <p
+                        v-if="exportErreurPeriode"
+                        role="alert"
+                        data-testid="export-periode-erreur"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ exportErreurPeriode }}
+                    </p>
                 </div>
 
                 <!-- Agence -->
@@ -2195,7 +2094,9 @@ function confirmDelete(c: Commande) {
                         >Annuler</Button
                     >
                     <Button
-                        :disabled="exportColumns.length === 0"
+                        :disabled="
+                            exportColumns.length === 0 || !!exportErreurPeriode
+                        "
                         @click="submitExport"
                     >
                         <Download class="mr-2 h-4 w-4" />

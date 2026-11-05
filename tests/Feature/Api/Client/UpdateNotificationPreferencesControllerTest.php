@@ -85,8 +85,9 @@ class UpdateNotificationPreferencesControllerTest extends TestCase
         $this->assertTrue($userB->fresh()->notificationPreferences()['activite']);
     }
 
-    public function test_requires_a_client_role(): void
+    public function test_account_without_client_role_manages_its_own_preferences(): void
     {
+        // ADR 0055 : l'espace client est ouvert à tout compte actif ; sans activité, aucune donnée.
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
 
@@ -94,6 +95,6 @@ class UpdateNotificationPreferencesControllerTest extends TestCase
 
         $this->patchJson(route('client.profile.notification-preferences'), [
             'preferences' => ['activite' => false],
-        ])->assertStatus(403);
+        ])->assertOk()->assertJsonPath('notifications.activite', false);
     }
 }

@@ -125,8 +125,9 @@ class ProfileControllerTest extends TestCase
             ->assertJsonPath('profile', null);
     }
 
-    public function test_requires_a_client_role(): void
+    public function test_account_without_role_or_fiche_gets_a_null_profile(): void
     {
+        // ADR 0055 : l'espace client est ouvert à tout compte actif ; sans activité, aucune donnée.
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $this->ensureClientRoles();
@@ -135,6 +136,6 @@ class ProfileControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.profile.mine'))->assertStatus(403);
+        $this->getJson(route('client.profile.mine'))->assertOk()->assertJsonPath('profile', null);
     }
 }

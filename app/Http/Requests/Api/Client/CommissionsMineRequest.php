@@ -4,8 +4,8 @@ namespace App\Http\Requests\Api\Client;
 
 use App\Enums\ActiviteCompte;
 use App\Enums\StatutCommission;
+use App\Support\Periodes\Periode;
 use App\Support\Periodes\PeriodeComptableFiltre;
-use App\Support\Vehicules\SituationPeriode;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -45,7 +45,7 @@ class CommissionsMineRequest extends FormRequest
         $cle = $this->input('periode');
 
         if ($cle !== null) {
-            $periode = SituationPeriode::rapide($cle, CarbonImmutable::now());
+            $periode = Periode::rapide($cle, CarbonImmutable::now());
 
             return [$periode?->debut?->toDateString(), $periode?->fin?->toDateString()];
         }

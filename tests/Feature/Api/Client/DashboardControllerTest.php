@@ -517,8 +517,9 @@ class DashboardControllerTest extends TestCase
         $this->assertSame([], $api['par_vehicule']);
     }
 
-    public function test_forbidden_for_staff_only_account(): void
+    public function test_staff_only_account_is_accepted_without_data(): void
     {
+        // ADR 0055 : l'espace client est ouvert à tout compte actif ; sans activité, aucune donnée.
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
@@ -526,7 +527,7 @@ class DashboardControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.dashboard.mine'))->assertStatus(403);
+        $this->getJson(route('client.dashboard.mine'))->assertOk()->assertJsonCount(0, 'par_vehicule');
     }
 
     public function test_requires_authentication(): void

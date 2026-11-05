@@ -19,9 +19,10 @@ trait IssuesTelephoneLoginToken
 {
     /**
      * Si le téléphone de l'utilisateur correspond à un livreur ou propriétaire
-     * sans user_id, on établit le lien automatiquement. L'attribution du rôle
-     * Spatie correspondant est déléguée à BusinessProfileRoleObserver — d'où le
-     * `->get()->each(->update())` plutôt qu'un update() de masse : seul un
+     * sans user_id, on établit le lien automatiquement. Un compte déjà rattaché
+     * à une organisation ne reçoit jamais la fiche d'une autre. L'attribution du
+     * rôle Spatie correspondant est déléguée à BusinessProfileRoleObserver — d'où
+     * le `->get()->each(->update())` plutôt qu'un update() de masse : seul un
      * update() par INSTANCE déclenche les events Eloquent que l'observer écoute.
      */
     private function lierCompteParTelephone(User $user): void
@@ -34,11 +35,13 @@ trait IssuesTelephoneLoginToken
 
         Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
+            ->when($user->organization_id !== null, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->get()
             ->each(fn (Livreur $livreur) => $livreur->update(['user_id' => $user->id]));
 
         Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
+            ->when($user->organization_id !== null, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->get()
             ->each(fn (Proprietaire $proprietaire) => $proprietaire->update(['user_id' => $user->id]));
     }

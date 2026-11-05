@@ -17,15 +17,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Seul point qui relie un compte à une fiche parrain, consultant ou interlocuteur (ADR 0050).
- * Le rattachement est toujours une décision d'un responsable : l'inscription ne prouve pas la
- * possession du numéro, un téléphone identique sert donc à proposer un compte, jamais à le relier.
+ * Rattachement manuel d'un compte à une fiche parrain, consultant ou interlocuteur (ADR 0050), pour les
+ * cas que RattachementAutomatiqueService ne relie pas (ADR 0056). Ici, un téléphone identique sert à
+ * proposer un compte : c'est le responsable qui confirme.
  * Aucune fiche Personne ni aucun compte n'est fusionné ou supprimé.
+ *
+ * Le compte d'un agent du back-office se rattache comme les autres (ADR 0055) : le rattachement
+ * lui donne les données de la fiche dans l'espace client, sans toucher à ses rôles back-office.
  */
 class RattachementCompteService
 {
-    private const ROLES_ESPACE_CLIENT = ['client', 'proprietaire', 'livreur'];
-
     public function __construct(private readonly AuditLogService $auditLog) {}
 
     /** Compte dont le numéro correspond, à vérifier par le responsable avant tout rattachement. */
@@ -191,10 +192,6 @@ class RattachementCompteService
 
         if ($this->autreOrganisation($fiche, $compte)) {
             return 'Ce compte appartient à une autre organisation.';
-        }
-
-        if (! $compte->hasAnyRole(self::ROLES_ESPACE_CLIENT)) {
-            return "Ce compte n'a pas accès à l'espace client.";
         }
 
         return match (true) {

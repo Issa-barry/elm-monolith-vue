@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Depenses;
 use App\Http\Controllers\Controller;
 use App\Models\Depense;
 use App\Support\Depenses\DepenseListingService;
+use App\Support\Periodes\Periode;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -19,10 +20,11 @@ class ExportCsvDepenseController extends Controller
         $this->authorize('viewAny', Depense::class);
 
         $orgId = auth()->user()->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
+        $periode = Periode::depuisRequeteValidee($request);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
-        $depenses = $this->listing->query($filters, $orgId, $siteIds)
+        $depenses = $this->listing->query($filters, $orgId, $siteIds, $periode)
             ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
             ->get();
 

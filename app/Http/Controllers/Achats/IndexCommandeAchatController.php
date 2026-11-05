@@ -12,6 +12,7 @@ use App\Services\Achats\PerimetreCommandesAchat;
 use App\Services\SavedFilterService;
 use App\Services\Validation\ValidationParPlafondService;
 use App\Support\Achats\JalonsCommandeAchat;
+use App\Support\Periodes\Periode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,7 @@ class IndexCommandeAchatController extends Controller
         $orgId = $user->organization_id;
         $filters = $request->only(['statut', 'fournisseur_id', 'reference', 'recherche', 'a_valider_par_moi']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
+        $periode = Periode::depuisRequeteValidee($request);
 
         $query = $this->perimetre->appliquerConsultation(CommandeAchat::query(), $user)
             ->with(['fournisseur.personne', 'fournisseur.entrepriseTierce', 'site:id,nom', 'sitePayeur:id,nom'])
@@ -68,6 +70,8 @@ class IndexCommandeAchatController extends Controller
                     ->orWhere('nom', 'like', $like)
                     ->orWhere('prenom', 'like', $like)));
         }
+
+        $periode->appliquer($query, 'commandes_achats.created_at');
 
         if (filter_var($filters['a_valider_par_moi'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             $this->restreindreAValiderPar($query, $user);
@@ -119,7 +123,7 @@ class IndexCommandeAchatController extends Controller
                     && $this->service->motifNonValidable($c, $user) === null,
             ]),
             'saved_view' => $savedView,
-            'filters' => array_merge($filters, ['site_ids' => $siteIds]),
+            'filters' => array_merge($filters, ['site_ids' => $siteIds], $periode->valeursFiltre()),
             'statuts' => StatutCommandeAchat::options(),
             'fournisseurs' => $fournisseurs,
             'sites' => $sites->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom])->values(),

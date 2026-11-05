@@ -11,8 +11,8 @@ use App\Models\Livreur;
 use App\Models\Site;
 use App\Services\SavedFilterService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
+use App\Support\Periodes\Periode;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -32,7 +32,7 @@ class IndexFactureVenteController extends Controller
         // Sites auxquels l'utilisateur a accès (vide = tous : administrateur ou vision 360°, ADR 0025)
         $authorizedSiteIds = $toutesAgences ? collect() : $user->sites()->pluck('sites.id');
 
-        $periode = $request->input('periode') ?? 'month';
+        $periode = Periode::depuisRequeteValidee($request, 'ce_mois');
         $statut = $request->input('statut') ?? 'tous';
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $livreurId = $request->input('livreur_id');
@@ -82,16 +82,7 @@ class IndexFactureVenteController extends Controller
             $query->whereHas('commande', fn ($q) => $q->whereIn('site_id', $authorizedSiteIds));
         }
 
-        match ($periode) {
-            'today' => $query->whereDate('created_at', Carbon::today()),
-            'week' => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
-            'month' => $query->whereYear('created_at', Carbon::now()->year)
-                ->whereMonth('created_at', Carbon::now()->month),
-            // 'tout' : jamais 'all' côté frontend (cf. Factures/Index.vue) — DataFilters
-            // traiterait 'all' comme une sentinelle générique et l'omettrait de la requête,
-            // ce qui ferait retomber ce paramètre absent sur le défaut 'month' ci-dessus.
-            default => null,
-        };
+        $periode->appliquer($query, 'created_at');
 
         if ($statut !== 'tous') {
             $query->where('statut_facture', $statut);
@@ -225,7 +216,7 @@ class IndexFactureVenteController extends Controller
             'saved_view' => $savedView,
             'factures' => $factures->values(),
             'totaux' => $totaux,
-            'periode' => $periode,
+            ...$periode->valeursFiltre(),
             'statut' => $statut,
             'site_ids' => $siteIds,
             'sites' => $sites,

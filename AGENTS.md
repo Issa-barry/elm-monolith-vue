@@ -158,6 +158,35 @@ nouveau document de ce type) utilise le modèle officiel décrit dans `docs/docu
 - Tout nouveau type est ajouté à `tests/Feature/Documents/ModeleDocumentPdfTest.php` (même modèle,
   propagation du bloc partagé). Cette règle n'est pas couverte par `lint:standards`.
 
+## 9. Filtres de période : un seul moteur, côté serveur
+
+Règle stricte (ADR 0057, `docs/periodes.md`) : aucun développeur ni agent IA ne crée, modifie ou
+maintient un filtre temporel en dehors du système centralisé des périodes.
+
+```php
+$periode = Periode::depuisRequeteValidee($request);   // App\Support\Periodes\Periode
+$periode->appliquer($query, 'created_at');
+```
+
+```ts
+{ key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' }
+```
+
+- Deux modes seulement : `periode=<clé>` (aujourd_hui, hier, cette_semaine, semaine_precedente,
+  ce_mois, mois_precedent, cette_annee, annee_precedente, tout) ou `date_debut` + `date_fin`
+  (incluses, ensemble, ordonnées). Jamais les deux à la fois.
+- **Interdit** : calculer des bornes dans un contrôleur, un service ou le navigateur (`startOfMonth`,
+  `subMonth`, `whereDate`, `new Date()`…) ; lire `date_debut`/`date_fin` à la main ; un champ
+  `type: 'date-range'` ; une liste de périodes codée en dur côté front.
+- Une période invalide est refusée avec un message (jamais remplacée en silence).
+- Les périodes métier (quinzaines P1/P2, mois comptable, paie) restent à leurs services dédiés : ne
+  pas les remplacer par des périodes calendaires.
+- Nouvel écran filtré par période : l'inscrire dans `tests/Feature/Periodes/RegistreFiltresPeriodeTest.php`.
+- Contrôlé en CI par ce registre, `tests/Unit/Architecture/PeriodesArchitectureTest.php` et
+  `npm run lint:standards`. Dérogation : commentaire `periode-standard-ignore: <raison>` côté front,
+  exception justifiée dans `PeriodesArchitectureTest` côté backend, et ligne dans `docs/periodes.md`
+  (« Dérogations »).
+
 ## Échappatoire
 
 Si un cas est légitimement hors-périmètre (ex: un badge qui ressemble à un statut mais qui est

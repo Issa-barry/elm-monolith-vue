@@ -192,6 +192,12 @@ Pour toute fonctionnalité manipulant des données métier :
 
 Ajouter des tests d'isolation organisationnelle lorsqu'un nouveau point d'entrée sensible est créé.
 
+Front ouvert à tous et compte unique (ADR 0055) : le front Nuxt est ouvert à tous ; tout compte actif
+s'y connecte avec son identité EAU LA MAMAN existante, quels que soient ses rôles et ses activités.
+L'absence d'activité n'est jamais un motif de refus. Les routes API de l'espace client n'ont aucune garde
+globale par rôle : chaque endpoint limite ses données aux activités du compte. Ne jamais créer de second
+compte ni modifier les rôles back-office pour ouvrir l'espace client.
+
 ## 12. Migrations et données
 
 Ne jamais effectuer de migration destructive ou de transformation risquée des données sans confirmation.

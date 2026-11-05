@@ -94,11 +94,13 @@ class BackofficeLoginController extends Controller
 
         Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
+            ->when($user->organization_id !== null, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->get()
             ->each(fn (Livreur $livreur) => $livreur->update(['user_id' => $user->id]));
 
         Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
+            ->when($user->organization_id !== null, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->get()
             ->each(fn (Proprietaire $proprietaire) => $proprietaire->update(['user_id' => $user->id]));
     }

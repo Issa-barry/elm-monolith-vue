@@ -9,12 +9,18 @@ use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Depense;
+use App\Models\EntrepriseInterlocuteur;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Parrain;
 use App\Models\Personne;
+use App\Models\Prestataire;
 use App\Models\Proprietaire;
+use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Observers\BusinessProfileRoleObserver;
 use App\Observers\DepenseObserver;
+use App\Observers\RattachementAutomatiqueObserver;
 use App\Observers\VenteObserver;
 use App\Services\Communications\NullWhatsAppGateway;
 use App\Services\Rh\Paie\DonneesPaieRhService;
@@ -119,6 +125,11 @@ class AppServiceProvider extends ServiceProvider
         Client::observe(BusinessProfileRoleObserver::class);
         Proprietaire::observe(BusinessProfileRoleObserver::class);
         Livreur::observe(BusinessProfileRoleObserver::class);
+
+        // Rattachement automatique d'une fiche au compte de la même personne (ADR 0056).
+        foreach ([User::class, UserAuthIdentity::class, Personne::class, Livreur::class, Proprietaire::class, Parrain::class, Prestataire::class, EntrepriseInterlocuteur::class] as $modele) {
+            $modele::observe(RattachementAutomatiqueObserver::class);
+        }
 
         // Morph map des relations polymorphiques — alias stables en base plutôt que
         // des noms de classe complets (indépendant des renommages de namespace).

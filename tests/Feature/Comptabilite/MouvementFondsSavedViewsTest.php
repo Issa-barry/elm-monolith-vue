@@ -91,7 +91,7 @@ class MouvementFondsSavedViewsTest extends TestCase
             'search' => 'AUTRE',
         ]))->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('saved_view.id', $id)
-            ->where('filters', $filters)
+            ->where('filters', [...$filters, 'periode' => 'tout', 'date_debut' => null, 'date_fin' => null])
             ->has('mouvements.data', 1)
             ->where('mouvements.data.0.reference', 'MVT-CIBLE'));
     }

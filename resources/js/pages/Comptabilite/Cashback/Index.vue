@@ -39,8 +39,9 @@ const props = defineProps<{
     filters: {
         client_id: string;
         statut: string;
-        date_debut: string;
-        date_fin: string;
+        periode: string;
+        date_debut: string | null;
+        date_fin: string | null;
     };
 }>();
 
@@ -74,13 +75,7 @@ const filterFields = computed<FilterField[]>(() => [
             label: client.nom_complet,
         })),
     },
-    {
-        key: 'periode',
-        label: 'Période',
-        type: 'date-range',
-        startKey: 'date_debut',
-        endKey: 'date_fin',
-    },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
 ]);
 
 const summary = computed<CommissionIndexSummary>(() => ({

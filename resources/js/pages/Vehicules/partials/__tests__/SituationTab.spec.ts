@@ -132,7 +132,7 @@ describe('SituationTab — période', () => {
 
     it('remplace une période personnalisée par une période rapide, sans toucher aux autres paramètres', () => {
         etat.url =
-            '/backoffice/vehicules/V1?tab=situation&date_from=2026-09-01&date_to=2026-09-13&processus=vente';
+            '/backoffice/vehicules/V1?tab=situation&date_debut=2026-09-01&date_fin=2026-09-13&processus=vente';
 
         choisir(monter(PERSONNALISEE), 'hier');
 
@@ -210,8 +210,8 @@ describe('SituationTab — période', () => {
             '/backoffice/vehicules/V1',
             {
                 tab: 'situation',
-                date_from: '2026-09-01',
-                date_to: '2026-09-13',
+                date_debut: '2026-09-01',
+                date_fin: '2026-09-13',
             },
             OPTIONS_VISITE,
         );
@@ -222,15 +222,15 @@ describe('SituationTab — période', () => {
 
     it('modifier une date recharge avec la nouvelle période et le même onglet', async () => {
         etat.url =
-            '/backoffice/vehicules/V1?tab=situation&date_from=2026-09-01&date_to=2026-09-13';
+            '/backoffice/vehicules/V1?tab=situation&date_debut=2026-09-01&date_fin=2026-09-13';
         const wrapper = monter(PERSONNALISEE);
 
         await champ(wrapper, 'debut').setValue('2026-09-05');
 
         expect(etat.get.mock.calls[0][1]).toEqual({
             tab: 'situation',
-            date_from: '2026-09-05',
-            date_to: '2026-09-13',
+            date_debut: '2026-09-05',
+            date_fin: '2026-09-13',
         });
     });
 

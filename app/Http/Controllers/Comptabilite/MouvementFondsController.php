@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\SavedFilterService;
 use App\Services\SiteScopeService;
 use App\Services\Tresorerie\MouvementFondsService;
+use App\Support\Periodes\Periode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -46,6 +47,10 @@ class MouvementFondsController extends Controller
                 'expediteur.personne', 'receptionnaire.personne',
                 'lignesReglement.encaissement.facture.commande.client',
             ]);
+
+        // Période : date de création, celle qui ordonne la liste (ADR 0057).
+        $periode = Periode::depuisRequeteValidee($request);
+        $periode->appliquer($query, 'mouvements_fonds.created_at');
 
         if ($statut = $request->input('statut')) {
             $query->where('statut', $statut);
@@ -167,6 +172,7 @@ class MouvementFondsController extends Controller
                 'caisse_role' => $caisseRole,
                 'montant_min' => $montantMin,
                 'montant_max' => $montantMax,
+                ...$periode->valeursFiltre(),
             ],
             'statut_options' => StatutMouvementFonds::options(),
             'nature_options' => NatureMouvementFonds::options(),

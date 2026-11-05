@@ -103,6 +103,7 @@ const props = defineProps<{
     filtre_depart_site_ids: string[];
     filtre_arrivee_site_ids: string[];
     filtres: {
+        periode?: string;
         date_debut: string | null;
         date_fin: string | null;
         vehicule: string | null;
@@ -190,13 +191,7 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'Nom, prénom ou téléphone…',
         inline: true,
     },
-    {
-        key: 'date',
-        label: 'Période',
-        type: 'date-range',
-        startKey: 'date_debut',
-        endKey: 'date_fin',
-    },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
 ]);
 
 const filterValues = computed(() => ({
@@ -209,6 +204,7 @@ const filterValues = computed(() => ({
         !props.is_admin && props.vue === 'receptions'
             ? props.user_site_ids
             : (props.filtre_arrivee_site_ids ?? []),
+    periode: props.filtres?.periode ?? 'tout',
     date_debut: props.filtres?.date_debut ?? '',
     date_fin: props.filtres?.date_fin ?? '',
     vehicule: props.filtres?.vehicule ?? '',

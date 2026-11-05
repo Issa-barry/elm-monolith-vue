@@ -6,6 +6,7 @@ use App\Enums\StatutPropositionVehicule;
 use App\Models\PropositionVehicule;
 use App\Models\Vehicule;
 use App\Services\PropositionConversionService;
+use App\Support\Periodes\Periode;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,13 +21,11 @@ class PropositionVehiculeController extends Controller
 
         $orgId = auth()->user()->organization_id;
         $statut = $request->input('statut');
-        $dateDebut = $request->input('date_debut');
-        $dateFin = $request->input('date_fin');
+        $periode = Periode::depuisRequeteValidee($request);
 
         $propositions = PropositionVehicule::where('organization_id', $orgId)
             ->when($statut, fn ($q) => $q->where('statut', $statut))
-            ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
-            ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
+            ->tap(fn ($q) => $periode->appliquer($q, 'created_at'))
             ->latest()
             ->get()
             ->map(fn (PropositionVehicule $p) => [
@@ -48,8 +47,7 @@ class PropositionVehiculeController extends Controller
             'statuts' => StatutPropositionVehicule::options(),
             'filters' => [
                 'statut' => $statut,
-                'date_debut' => $dateDebut,
-                'date_fin' => $dateFin,
+                ...$periode->valeursFiltre(),
             ],
         ]);
     }

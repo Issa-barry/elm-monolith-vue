@@ -9,6 +9,7 @@ use App\Models\CommissionProcessus;
 use App\Models\Site;
 use App\Services\Commission\CommissionMonitoringService;
 use App\Services\SiteScopeService;
+use App\Support\Periodes\Periode;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -44,12 +45,12 @@ class IndexCommissionMonitoringController extends Controller
             'cible' => $this->texte($request, 'cible'),
             'processus' => $this->texte($request, 'processus'),
             'motif' => $this->texte($request, 'motif'),
-            'detection_debut' => $this->texte($request, 'detection_debut'),
-            'detection_fin' => $this->texte($request, 'detection_fin'),
             'tentatives_min' => $this->texte($request, 'tentatives_min'),
         ];
 
-        $anomalies = $this->filtrer($monitoring->anomalies($orgId, $siteIdsAutorises), $filtres);
+        $periode = Periode::depuisRequeteValidee($request);
+        $anomalies = $this->filtrer($monitoring->anomalies($orgId, $siteIdsAutorises), $filtres, $periode);
+        $filtres = [...$filtres, ...$periode->valeursFiltre()];
 
         $kpis = [
             'non_generees' => $anomalies->where('statut', CommissionAnomalieStatut::NON_GENEREE->value)->count(),
@@ -105,13 +106,11 @@ class IndexCommissionMonitoringController extends Controller
      * @param  array<string, mixed>  $f
      * @return Collection<int, array<string, mixed>>
      */
-    private function filtrer(Collection $anomalies, array $f): Collection
+    private function filtrer(Collection $anomalies, array $f, Periode $periode): Collection
     {
-        $debut = $this->date($f['detection_debut'])?->startOfDay();
-        $fin = $this->date($f['detection_fin'])?->endOfDay();
         $recherche = mb_strtolower($f['reference']);
 
-        return $anomalies->filter(function (array $a) use ($f, $debut, $fin, $recherche) {
+        return $anomalies->filter(function (array $a) use ($f, $periode, $recherche) {
             if ($f['site_ids'] !== [] && ! in_array($a['site_id'], $f['site_ids'], true)) {
                 return false;
             }
@@ -128,11 +127,9 @@ class IndexCommissionMonitoringController extends Controller
             if ($f['motif'] !== '' && ! in_array($f['motif'], array_column($a['erreurs'], 'code'), true)) {
                 return false;
             }
-            if (($debut || $fin) && $a['detectee_le_iso'] !== null) {
-                $detection = Carbon::parse($a['detectee_le_iso']);
-                if (($debut && $detection->lt($debut)) || ($fin && $detection->gt($fin))) {
-                    return false;
-                }
+            // Une anomalie sans date de détection reste visible, quelle que soit la période.
+            if ($a['detectee_le_iso'] !== null && ! $periode->contient(Carbon::parse($a['detectee_le_iso']))) {
+                return false;
             }
 
             return $f['tentatives_min'] === '' || $a['nb_tentatives_echouees'] >= (int) $f['tentatives_min'];
@@ -144,18 +141,5 @@ class IndexCommissionMonitoringController extends Controller
         $valeur = $request->input($cle, '');
 
         return trim(is_array($valeur) ? (string) reset($valeur) : (string) $valeur);
-    }
-
-    private function date(string $valeur): ?Carbon
-    {
-        if ($valeur === '') {
-            return null;
-        }
-
-        try {
-            return Carbon::parse($valeur);
-        } catch (\Throwable) {
-            return null;
-        }
     }
 }

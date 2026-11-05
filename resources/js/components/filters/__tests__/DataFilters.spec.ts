@@ -18,10 +18,26 @@ const auth = vi.hoisted(() => ({
     } as Record<string, unknown>,
 }));
 
+// Props partagées par le serveur : choix standard de période et erreurs de validation.
+const partage = vi.hoisted(() => ({
+    periodes: [
+        { value: 'aujourd_hui', label: "Aujourd'hui" },
+        { value: 'ce_mois', label: 'Ce mois' },
+        { value: 'tout', label: 'Toutes les périodes' },
+        { value: 'personnalisee', label: 'Période personnalisée' },
+    ],
+    errors: {} as Record<string, string>,
+}));
+
 vi.mock('@inertiajs/vue3', () => ({
     router: { get: routerGet },
     usePage: () => ({
-        props: { auth: auth.valeur, org_sites: [] },
+        props: {
+            auth: auth.valeur,
+            org_sites: [],
+            periodes: partage.periodes,
+            errors: partage.errors,
+        },
     }),
 }));
 
@@ -541,6 +557,108 @@ describe('DataFilters — champ période (raccourcis résolus côté serveur)', 
 
         const hier = monterPeriode({ periode: 'hier' });
         expect(hier.find(reinitialiser).exists()).toBe(true);
+    });
+});
+
+describe('DataFilters — période standard (ADR 0057)', () => {
+    const standard: FilterField[] = [
+        {
+            key: 'periode',
+            label: 'Période',
+            type: 'period',
+            inline: true,
+            defaultValue: 'tout',
+        },
+    ];
+
+    const monterStandard = (values: Record<string, unknown> = {}) =>
+        shallowMount(DataFilters, {
+            props: { url: '/liste', values, fields: standard, resultCount: 0 },
+            global: { stubs: { FilterBar: barreComplete } },
+        });
+
+    const choisirPersonnalisee = async (
+        wrapper: ReturnType<typeof monterStandard>,
+    ) => {
+        wrapper
+            .findComponent(Select)
+            .vm.$emit('update:modelValue', 'personnalisee');
+        await nextTick();
+    };
+
+    beforeEach(() => {
+        routerGet.mockClear();
+        for (const cle of Object.keys(partage.errors))
+            delete partage.errors[cle];
+    });
+
+    it('reprend les choix standard partagés par le serveur', () => {
+        // Select est remplacé par un bouchon : ses options arrivent en attributs.
+        const options =
+            monterStandard().findComponent(Select).vm.$attrs.options;
+
+        expect(options).toEqual(partage.periodes);
+    });
+
+    it('envoie date_debut et date_fin pour une période personnalisée', async () => {
+        const wrapper = monterStandard();
+        await choisirPersonnalisee(wrapper);
+        await wrapper
+            .get('[data-testid="filter-inline-periode-debut"]')
+            .setValue('2026-11-01');
+        await wrapper
+            .get('[data-testid="filter-inline-periode-fin"]')
+            .setValue('2026-11-04');
+        await wrapper.get(appliquer).trigger('click');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/liste',
+            { date_debut: '2026-11-01', date_fin: '2026-11-04' },
+            expect.anything(),
+        );
+    });
+
+    it("bloque l'application et explique tant qu'une seule date est saisie", async () => {
+        const wrapper = monterStandard();
+        await choisirPersonnalisee(wrapper);
+        await wrapper
+            .get('[data-testid="filter-inline-periode-debut"]')
+            .setValue('2026-11-01');
+
+        expect(
+            wrapper.get('[data-testid="filter-periode-erreur"]').text(),
+        ).toBe('Renseignez aussi la date de fin.');
+        expect(wrapper.get(appliquer).attributes('disabled')).toBeDefined();
+        await wrapper.get(appliquer).trigger('click');
+        expect(routerGet).not.toHaveBeenCalled();
+    });
+
+    it('refuse une date de fin antérieure à la date de début', async () => {
+        const wrapper = monterStandard();
+        await choisirPersonnalisee(wrapper);
+        await wrapper
+            .get('[data-testid="filter-inline-periode-debut"]')
+            .setValue('2026-11-04');
+        await wrapper
+            .get('[data-testid="filter-inline-periode-fin"]')
+            .setValue('2026-11-01');
+
+        expect(
+            wrapper.get('[data-testid="filter-periode-erreur"]').text(),
+        ).toBe(
+            'La date de fin doit être postérieure ou égale à la date de début.',
+        );
+        expect(wrapper.get(appliquer).attributes('disabled')).toBeDefined();
+    });
+
+    it('affiche l’erreur renvoyée par le serveur sous le champ', () => {
+        partage.errors.date_fin = 'Renseignez aussi la date de fin.';
+
+        const wrapper = monterStandard({ periode: 'tout' });
+
+        expect(
+            wrapper.get('[data-testid="filter-periode-erreur"]').text(),
+        ).toBe('Renseignez aussi la date de fin.');
     });
 });
 

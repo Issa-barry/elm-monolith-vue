@@ -90,16 +90,21 @@ class ActivitesCompteResolverTest extends TestCase
         $this->assertCount(0, $activites->consultants);
     }
 
-    public function test_un_numero_identique_ne_donne_aucun_acces(): void
+    /** Révisé par l'ADR 0056 (décision du 04/11/2026) : le numéro suffit pour un parrain. */
+    public function test_un_numero_identique_donne_acces_au_parrain(): void
     {
         $personne = Personne::factory()->create(['organization_id' => $this->org->id, 'telephone' => '+224620000777']);
-        Parrain::factory()->create(['organization_id' => $this->org->id, 'personne_id' => $personne->id]);
+        $parrain = Parrain::create(['organization_id' => $this->org->id, 'personne_id' => $personne->id, 'is_active' => true]);
+
+        $this->assertSame($parrain->id, $this->resolver->resolve($this->compte)->parrain?->id);
+    }
+
+    public function test_un_numero_identique_ne_donne_pas_acces_a_un_consultant(): void
+    {
+        $personne = Personne::factory()->create(['organization_id' => $this->org->id, 'telephone' => '+224620000777']);
         $this->consultantPhysique(['personne_id' => $personne->id]);
 
-        $activites = $this->resolver->resolve($this->compte);
-
-        $this->assertNull($activites->parrain);
-        $this->assertCount(0, $activites->consultants);
+        $this->assertCount(0, $this->resolver->resolve($this->compte)->consultants);
     }
 
     public function test_un_compte_sans_organisation_n_a_aucune_activite(): void

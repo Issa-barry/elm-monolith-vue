@@ -6,8 +6,8 @@ use App\Enums\StatutCommandeVente;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Vehicule;
+use App\Support\Periodes\Periode;
 use App\Support\Situation\SituationVentesAgregats;
-use App\Support\Vehicules\SituationPeriode;
 use Illuminate\Support\Collection;
 
 /**
@@ -27,11 +27,11 @@ class VehiculeSituationVentesService
 {
     /**
      * Les ventes sont retenues sur leur date de création, dans les bornes de la période commune
-     * de la Situation (SituationPeriode) ; sans bornes = toute la période.
+     * de la Situation (Periode) ; sans bornes = toute la période.
      *
      * @return array{kpis: array, produits: array, paiements: array}
      */
-    public function pourVehicule(Vehicule $vehicule, SituationPeriode $periode): array
+    public function pourVehicule(Vehicule $vehicule, Periode $periode): array
     {
         $query = CommandeVente::where('vehicule_id', $vehicule->id)
             ->whereNotIn('statut', [StatutCommandeVente::BROUILLON->value, StatutCommandeVente::ANNULEE->value, StatutCommandeVente::RETOURNEE->value, StatutCommandeVente::ANNULEE_ERREUR_SAISIE->value, StatutCommandeVente::RESERVEE->value, StatutCommandeVente::A_PREPARER->value, StatutCommandeVente::PREPAREE->value])

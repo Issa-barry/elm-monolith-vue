@@ -85,6 +85,7 @@ const props = defineProps<{
         statut?: string;
         categorie?: string;
         site_ids?: string[];
+        periode?: string;
         date_debut?: string;
         date_fin?: string;
         vehicule?: string;
@@ -117,6 +118,12 @@ function currentParams() {
         type: props.filters.type || undefined,
         statut: props.filters.statut || undefined,
         categorie: props.filters.categorie || undefined,
+        // Clé seule pour une période rapide ; dates seules pour une période personnalisée.
+        periode:
+            props.filters.periode &&
+            !['tout', 'personnalisee'].includes(props.filters.periode)
+                ? props.filters.periode
+                : undefined,
         date_debut: props.filters.date_debut || undefined,
         date_fin: props.filters.date_fin || undefined,
         vehicule: props.filters.vehicule || undefined,
@@ -133,6 +140,7 @@ const filterValues = computed(() => ({
     statut: props.filters.statut ?? '',
     categorie: props.filters.categorie ?? '',
     site_ids: props.filters.site_ids ?? [],
+    periode: props.filters.periode ?? 'tout',
     date_debut: props.filters.date_debut ?? '',
     date_fin: props.filters.date_fin ?? '',
     vehicule: props.filters.vehicule ?? '',
@@ -159,13 +167,7 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'text',
         placeholder: 'Rechercher...',
     },
-    {
-        key: 'date',
-        label: 'Période',
-        type: 'date-range',
-        startKey: 'date_debut',
-        endKey: 'date_fin',
-    },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
     {
         key: 'concerne',
         label: 'Concerné',

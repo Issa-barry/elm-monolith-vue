@@ -18,6 +18,12 @@ export interface ParrainListe extends ParrainIdentite {
     reste_a_payer: number | null;
 }
 
+/** Pourquoi une fiche sans compte n'a pas été reliée automatiquement (ADR 0056). */
+export interface RattachementAutomatique {
+    statut: 'aucune' | 'ambigue' | 'certaine';
+    motif: string | null;
+}
+
 export interface CompteRattache {
     id: string;
     nom: string | null;

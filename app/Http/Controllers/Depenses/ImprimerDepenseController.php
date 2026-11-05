@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Depense;
 use App\Models\Organization;
 use App\Support\Depenses\DepenseListingService;
+use App\Support\Periodes\Periode;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -21,13 +22,14 @@ class ImprimerDepenseController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'date_debut', 'date_fin', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
+        $periode = Periode::depuisRequeteValidee($request);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
         $org = Organization::find($orgId);
         $printedBy = $user->name;
         $now = now();
 
-        $depenses = $this->listing->query($filters, $orgId, $siteIds)
+        $depenses = $this->listing->query($filters, $orgId, $siteIds, $periode)
             ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
             ->get();
 
@@ -44,7 +46,8 @@ class ImprimerDepenseController extends Controller
 
         return response()->view('print.depenses', [
             'sites' => $sites,
-            'filters' => $filters,
+            // Bornes réellement appliquées, aussi pour une période rapide (« Ce mois »…).
+            'filters' => [...$filters, 'date_debut' => $periode->debut?->toDateString(), 'date_fin' => $periode->fin?->toDateString()],
             'org' => $org,
             'printed_by' => $printedBy,
             'generated_at' => $now,

@@ -112,7 +112,7 @@ class CommandeVenteIndexFilterTest extends TestCase
         $ancienne->saveQuietly();
 
         $this->actingAs($this->user)
-            ->get(route('ventes.index', ['date_debut' => now()->subDays(1)->toDateString()]))
+            ->get(route('ventes.index', ['date_debut' => now()->subDays(1)->toDateString(), 'date_fin' => now()->toDateString()]))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
                 ->where('commandes.0.reference', $recente->reference)
@@ -131,11 +131,57 @@ class CommandeVenteIndexFilterTest extends TestCase
         $recente->saveQuietly();
 
         $this->actingAs($this->user)
-            ->get(route('ventes.index', ['date_fin' => now()->subDays(2)->toDateString()]))
+            ->get(route('ventes.index', ['date_debut' => now()->subDays(30)->toDateString(), 'date_fin' => now()->subDays(2)->toDateString()]))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
                 ->where('commandes.0.reference', $ancienne->reference)
                 ->has('commandes', 1),
+            );
+    }
+
+    /** ADR 0057 : jours inclus, bornes semi-ouvertes (lendemain 00:00 exclu). */
+    public function test_periode_personnalisee_inclut_le_dernier_jour_jusqu_a_23h59(): void
+    {
+        $finDeJournee = $this->makeCommande();
+        $finDeJournee->created_at = '2026-11-04 23:59:59';
+        $finDeJournee->saveQuietly();
+
+        $lendemain = $this->makeCommande();
+        $lendemain->created_at = '2026-11-05 00:00:00';
+        $lendemain->saveQuietly();
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.index', ['date_debut' => '2026-11-01', 'date_fin' => '2026-11-04']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('commandes', 1)
+                ->where('commandes.0.reference', $finDeJournee->reference)
+                ->where('filters.periode', 'personnalisee')
+                ->where('filters.date_debut', '2026-11-01'),
+            );
+    }
+
+    public function test_une_seule_date_est_refusee(): void
+    {
+        $this->actingAs($this->user)
+            ->get(route('ventes.index', ['date_debut' => '2026-11-01']))
+            ->assertSessionHasErrors('date_fin');
+    }
+
+    public function test_ancienne_cle_today_reste_acceptee(): void
+    {
+        $hier = $this->makeCommande();
+        $hier->created_at = now()->subDay();
+        $hier->saveQuietly();
+        $aujourdhui = $this->makeCommande();
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.index', ['periode' => 'today']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('commandes', 1)
+                ->where('commandes.0.reference', $aujourdhui->reference)
+                ->where('periode', 'aujourd_hui'),
             );
     }
 

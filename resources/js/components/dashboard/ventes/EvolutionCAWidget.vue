@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useChartTheme } from '@/composables/useChartTheme';
+import type { PeriodeOption } from '@/types/periode';
 import Chart from 'primevue/chart';
 import Select from 'primevue/select';
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface MoisData {
@@ -21,32 +22,33 @@ const props = defineProps<{
     evolutionMensuelle: MoisData[];
     evolutionQuotidienne: JourData[];
     periode?: string;
+    periodes?: PeriodeOption[];
 }>();
 
 // ── Thème — même pattern que ChartDoc.vue (useLayout remplacé par useChartTheme)
 const { getPrimary, getSurface, isDarkTheme } = useChartTheme();
 
 // ── Périodes ──────────────────────────────────────────────────────────────────
-const periodes = [
-    { label: "Aujourd'hui", value: 'aujourd_hui' },
-    { label: 'Hier', value: 'hier' },
-    { label: 'Cette semaine', value: 'cette_semaine' },
-    { label: 'Semaine dernière', value: 'semaine_derniere' },
-    { label: 'Ce mois', value: 'ce_mois' },
-    { label: 'Mois dernier', value: 'mois_dernier' },
-    { label: 'T1', value: 't1' },
-    { label: 'T2', value: 't2' },
-    { label: 'T3', value: 't3' },
-    { label: 'T4', value: 't4' },
-    { label: 'S1', value: 's1' },
-    { label: 'S2', value: 's2' },
-    { label: 'Cette année', value: 'cette_annee' },
-    { label: 'Tout', value: 'tout' },
-];
+// Choix et bornes résolus par le serveur (Periode, ADR 0057) : le découpage du graphique ne lit
+// jamais l'horloge du navigateur.
+const periodes = computed(() => props.periodes ?? []);
 
-const selectedPeriode = ref(
-    periodes.find((p) => p.value === props.periode) ?? periodes[4],
+const selectedPeriode = ref<PeriodeOption | undefined>(
+    periodes.value.find((p) => p.value === props.periode),
 );
+
+/** Périodes affichées mois par mois (série mensuelle) plutôt que jour par jour. */
+const PERIODES_MENSUELLES = new Set([
+    't1',
+    't2',
+    't3',
+    't4',
+    's1',
+    's2',
+    'cette_annee',
+    'annee_precedente',
+    'tout',
+]);
 
 // ── Chart refs — nommage identique à ChartDoc ─────────────────────────────────
 const barData = ref({});
@@ -95,70 +97,30 @@ function getPeriodeData(): PeriodeResult {
         impayees: mensuel.slice(start, end).map((d) => d.impayees),
     });
 
-    const sliceJours = (startIdx: number, endIdx: number): PeriodeResult => {
-        const slice = quotidien.slice(startIdx, endIdx);
-        return {
-            labels: slice.map((d: JourData) => fmtDate(d.date)),
-            payees: slice.map((d: JourData) => d.payees),
-            partielles: slice.map((d: JourData) => d.partielles),
-            impayees: slice.map((d: JourData) => d.impayees),
-        };
-    };
-
-    const filterMois = (ym: string): PeriodeResult => {
-        const slice = quotidien.filter((d: JourData) => d.date.startsWith(ym));
-        return {
-            labels: slice.map((d: JourData) => fmtDate(d.date)),
-            payees: slice.map((d: JourData) => d.payees),
-            partielles: slice.map((d: JourData) => d.partielles),
-            impayees: slice.map((d: JourData) => d.impayees),
-        };
-    };
-
-    const now = new Date();
-    const yr = now.getFullYear();
-    const mo = now.getMonth();
-
-    const ymCourant = `${yr}-${String(mo + 1).padStart(2, '0')}`;
-    const prevDate = new Date(yr, mo - 1, 1);
-    const ymPrec = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-
-    const LAST = quotidien.length - 1; // 59
-    const joursSinceLundi = (now.getDay() + 6) % 7; // 0=Lun … 6=Dim
-    const lundiCetteIdx = LAST - joursSinceLundi;
-    const lundiPrecIdx = lundiCetteIdx - 7;
-
-    switch (selectedPeriode.value.value) {
-        case 'aujourd_hui':
-            return sliceJours(LAST, LAST + 1);
-        case 'hier':
-            return sliceJours(LAST - 1, LAST);
-        case 'cette_semaine':
-            return sliceJours(Math.max(0, lundiCetteIdx), LAST + 1);
-        case 'semaine_derniere':
-            return sliceJours(
-                Math.max(0, lundiPrecIdx),
-                Math.max(0, lundiCetteIdx),
-            );
-        case 'ce_mois':
-            return filterMois(ymCourant);
-        case 'mois_dernier':
-            return filterMois(ymPrec);
-        case 't1':
-            return sliceMois(0, 3);
-        case 't2':
-            return sliceMois(3, 6);
-        case 't3':
-            return sliceMois(6, 9);
-        case 't4':
-            return sliceMois(9, 12);
-        case 's1':
-            return sliceMois(0, 6);
-        case 's2':
-            return sliceMois(6, 12);
-        default:
-            return sliceMois(0, 12);
+    const choix = selectedPeriode.value;
+    if (
+        !choix?.date_debut ||
+        !choix.date_fin ||
+        PERIODES_MENSUELLES.has(choix.value)
+    ) {
+        // Mois du 1er au dernier jour du choix ; toute l'année sans bornes.
+        const debut = choix?.date_debut
+            ? Number(choix.date_debut.slice(5, 7)) - 1
+            : 0;
+        const fin = choix?.date_fin ? Number(choix.date_fin.slice(5, 7)) : 12;
+        return sliceMois(debut, fin);
     }
+
+    const { date_debut: debut, date_fin: fin } = choix;
+    const slice = quotidien.filter(
+        (d: JourData) => d.date >= debut && d.date <= fin,
+    );
+    return {
+        labels: slice.map((d: JourData) => fmtDate(d.date)),
+        payees: slice.map((d: JourData) => d.payees),
+        partielles: slice.map((d: JourData) => d.partielles),
+        impayees: slice.map((d: JourData) => d.impayees),
+    };
 }
 
 // ── setColorOptions ── copie exacte de RevenueOverviewWidget.vue (Apollo) ─────
@@ -289,7 +251,7 @@ watch(
 watch(
     () => props.periode,
     (val) => {
-        const found = periodes.find((p) => p.value === val);
+        const found = periodes.value.find((p) => p.value === val);
         if (found) {
             selectedPeriode.value = found;
             setColorOptions();

@@ -54,8 +54,9 @@ const props = defineProps<{
         direction: string;
         status: string;
         search: string;
-        dateDebut: string;
-        dateFin: string;
+        periode: string;
+        date_debut: string | null;
+        date_fin: string | null;
     };
     channels: SelectOption[];
     directions: SelectOption[];
@@ -98,13 +99,7 @@ const filterFields: FilterField[] = [
         // chiffres visibles (préfixe/suffixe) sont recherchables.
         placeholder: 'Chiffres visibles (ex: 224 ou 12)',
     },
-    {
-        key: 'date',
-        label: 'Période',
-        type: 'date-range',
-        startKey: 'date_debut',
-        endKey: 'date_fin',
-    },
+    { key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' },
 ];
 
 const communicationsFilters = {
@@ -112,8 +107,9 @@ const communicationsFilters = {
     channel: props.filters.channel ?? '',
     direction: props.filters.direction ?? '',
     search: props.filters.search ?? '',
-    date_debut: props.filters.dateDebut ?? '',
-    date_fin: props.filters.dateFin ?? '',
+    periode: props.filters.periode ?? 'tout',
+    date_debut: props.filters.date_debut ?? '',
+    date_fin: props.filters.date_fin ?? '',
 };
 
 const selectedLog = ref<MessageLogRow | null>(null);

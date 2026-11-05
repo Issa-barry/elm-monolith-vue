@@ -16,12 +16,13 @@ class MeController extends Controller
         description: '`roles` liste **tous** les rôles du compte (un compte peut cumuler un rôle '
             .'staff ET un rôle client/proprietaire/livreur, cf. décision multi-rôle du 26/08/2026) — '
             .'**tableau non ordonné**, ne jamais utiliser `roles[0]` comme "rôle principal" (bug de '
-            .'conception déjà rencontré côté frontend). Un frontend doit vérifier '
-            ."`roles.some(r => ['client','proprietaire','livreur'].includes(r))` pour l'accès espace "
-            .'client, jamais une égalité stricte. `context` est résolu exclusivement via '
+            .'conception déjà rencontré côté frontend). Les rôles ne décident jamais de l\'accès à '
+            .'l\'espace client : tout compte actif y entre (compte unique, ADR 0055). Ce qui s\'affiche '
+            .'vient de `context` (activités du compte) ; tous ses ids à `null` et `consultant_ids` vide = '
+            .'compte sans activité, accueil neutre. `context` est résolu exclusivement via '
             .'`ClientIdentityResolver` à partir du compte authentifié, jamais un paramètre client. '
-            .'`context.parrain_id` et `context.consultant_ids` suivent uniquement le rattachement posé au '
-            .'back-office (ADR 0050).',
+            .'`context.parrain_id` et `context.consultant_ids` suivent le rattachement posé sur la fiche, '
+            .'automatique ou manuel (ADR 0050, ADR 0056).',
     )]
     public function __invoke(Request $request, ClientIdentityResolver $identityResolver, QrPayloadResolver $qrPayloadResolver, ActivitesCompteResolver $activites): JsonResponse
     {

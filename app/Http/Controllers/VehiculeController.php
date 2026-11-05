@@ -33,8 +33,8 @@ use App\Services\SavedFilterService;
 use App\Services\VehiculeCapaciteService;
 use App\Services\Vehicules\VehiculeListExport;
 use App\Services\Vehicules\VehiculeSituationVentesService;
+use App\Support\Periodes\Periode;
 use App\Support\SavedFilters\SavedFilterScopes;
-use App\Support\Vehicules\SituationPeriode;
 use App\Support\Vehicules\VehiculeIndexFilters;
 use App\Support\Ventes\CommandeVenteFormBuilder;
 use Illuminate\Http\RedirectResponse;
@@ -411,7 +411,7 @@ class VehiculeController extends Controller
                 'commentaire' => $d->commentaire,
             ]);
 
-        $situationPeriode = SituationPeriode::depuisRequete($request);
+        $situationPeriode = Periode::depuisRequeteValidee($request, parametre: 'situation_periode');
         $situationVentes = $this->situationVentesService->pourVehicule($vehicule, $situationPeriode);
 
         $equipe = $vehicule->equipe;

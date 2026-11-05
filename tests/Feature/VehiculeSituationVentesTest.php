@@ -303,7 +303,7 @@ class VehiculeSituationVentesTest extends TestCase
             );
 
         $this->actingAs($this->user)
-            ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_from' => '2026-09-01', 'date_to' => '2026-09-13']))
+            ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_debut' => '2026-09-01', 'date_fin' => '2026-09-13']))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('situation_periode.cle', 'personnalisee')
                 ->where('situation_periode.date_debut', '2026-09-01')
@@ -355,7 +355,7 @@ class VehiculeSituationVentesTest extends TestCase
         }
 
         $this->actingAs($this->user)
-            ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_from' => '2026-09-01', 'date_to' => '2026-09-13']))
+            ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_debut' => '2026-09-01', 'date_fin' => '2026-09-13']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('situation_ventes.kpis.ca_vendu', 16000)
@@ -373,21 +373,14 @@ class VehiculeSituationVentesTest extends TestCase
             );
     }
 
-    public function test_periode_personnalisee_incomplete_affiche_toute_la_periode(): void
+    public function test_periode_personnalisee_incomplete_est_refusee(): void
     {
         $vehicule = $this->makeVehicule();
 
-        $ancienne = $this->makeCommande($vehicule, ['total_commande' => 5000]);
-        $ancienne->created_at = now()->subYears(2);
-        $ancienne->saveQuietly();
-        $this->makeCommande($vehicule, ['total_commande' => 10000]);
-
+        // ADR 0057 : une seule date ne forme pas une période ; erreur explicite plutôt qu'un repli
+        // silencieux sur « Toutes les périodes ».
         $this->actingAs($this->user)
-            ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_from' => '2026-09-01']))
-            ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->where('situation_periode.cle', 'tout')
-                ->where('situation_ventes.kpis.nb_ventes', 2)
-            );
+            ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_debut' => '2026-09-01']))
+            ->assertSessionHasErrors('date_fin');
     }
 }
