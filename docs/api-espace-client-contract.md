@@ -471,17 +471,27 @@ Accessible au proprietaire **et** au livreur (même périmètre que
 large que le calcul de solde du dashboard (`GET /v1/mobile/dashboard`, §5) qui,
 lui, ignore les dépenses côté livreur.
 
-Un livreur voit aussi les dépenses rattachées **directement à lui**
-(`beneficiaire_type = livreur`, ex. avance sur salaire) : `vehicule` vaut alors
-`null`. Il ne voit jamais celles d'un autre livreur, et un propriétaire ne voit
-pas celles des livreurs. Les dépenses rattachées directement à un propriétaire
-ne sont pas listées ici.
+Règle (05/11/2026) : **toute dépense que le reste à payer déduit figure dans
+cette liste**, pour le bénéficiaire concerné. Chaque activité du compte voit donc
+aussi les dépenses rattachées **directement à elle** (`beneficiaire_type` =
+`proprietaire`, `livreur`, `parrain` ou `prestataire` pour un consultant, ex.
+avance sur salaire) : `vehicule` vaut alors `null`. Jusqu'au 05/11, seules celles
+du livreur l'étaient ; celles du propriétaire, du parrain et du consultant étaient
+déduites (`deductionsParActivite`, ADR 0054) sans apparaître (la phrase « les
+dépenses rattachées directement à un propriétaire ne sont pas listées » est
+remplacée par cette règle).
+
+Limites : un compte ne voit jamais les dépenses d'un autre bénéficiaire ni d'une
+autre organisation ; un propriétaire ne voit pas celles des livreurs ; un parrain
+ne voit pas les dépenses du véhicule qu'il parraine (ADR 0054). La liste reste plus
+large que la déduction sur un point, voulu : un livreur voit les frais des
+véhicules de son équipe, qui sont retenus au propriétaire, pas à lui.
 
 Query params (tous optionnels) :
 
 | Param | Effet |
 |---|---|
-| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles — sinon liste vide) ; exclut les dépenses rattachées directement au livreur |
+| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles — sinon liste vide) ; exclut les dépenses rattachées directement au compte (propriétaire, livreur, parrain, consultant) |
 | `depense_type_id` | Filtre par type de dépense (catégorie) |
 | `statut` | Valeur de `StatutDepense` : `brouillon`, `soumis`, `valide`, `rejete`, `annule` — **aucun filtre par défaut**, contrairement au calcul du dashboard qui ne compte que `valide` |
 | `date_debut`, `date_fin` | Filtre par `date_depense` — **aucune période par défaut** (liste complète si non fourni) |
@@ -673,6 +683,9 @@ Détail des commissions du compte, **toutes activités**, une ligne par part don
 bénéficiaire — jamais la part d'un autre bénéficiaire de la même opération. Paginé (`per_page` 1-100,
 20 par défaut, `page`), de la plus récente à la plus ancienne (date de gain).
 
+La page Commissions de l'espace client Nuxt n'appelle plus cet endpoint depuis le 05/11/2026 (section
+« Détail des commissions » retirée, voir l'ADR 0054, point 6). Le contrat ci-dessous reste valable.
+
 | Param | Effet |
 |---|---|
 | `periode` | période rapide, mêmes clés que le dashboard (`tout` = sans borne) |
@@ -778,6 +791,10 @@ Sous-routes associées (workflow livreur, écrites) :
 - `POST /v1/mobile/livraisons-transferts/{transfert}/demarrer-chargement`
 - `PUT /v1/mobile/livraisons-transferts/{transfert}/quantites-chargees`
 - `POST /v1/mobile/livraisons-transferts/{transfert}/confirmer-depart`
+
+Identité du livreur (ADR 0059) : le lien `user_id` de la fiche prime. Le téléphone ne retient qu'une
+fiche non réclamée de l'organisation du compte, jamais celle d'un autre compte. Sinon, la liste est
+vide et les autres routes répondent `403 {"message": "Accès non autorisé."}`.
 
 Ces 4 routes sont le workflow de chargement/départ d'un livreur — plus
 pertinentes pour l'app mobile livreur que pour un espace client web
@@ -886,14 +903,54 @@ volume total du compte.
 Résout une référence scannée (QR). Depuis le 31/08/2026, le préfixe dépend du processus
 d'origine (cf. `docs/references-metier.md`) : `VTE-`/`DST-`/legacy `CMD-` = commande de vente
 (vente standard ou distribution client), `TRF-`/legacy `TR-` = transfert logistique — les
-anciennes références ne sont jamais renommées et restent reconnues indéfiniment. `404` si
-préfixe non reconnu ou référence introuvable **ou appartenant à une autre organisation**. Pas de
-garde de rôle explicite (`auth:sanctum` seul), mais la recherche est systématiquement filtrée par
-`organization_id` de l'utilisateur authentifié, sur les deux méthodes privées — corrigé le
-31/08/2026 : la numérotation scopée par organisation (cf. `docs/references-metier.md`) rend deux
-organisations capables de porter *exactement* la même référence (ex: `VTE-310826-001` pour l'une
-ET l'autre), ce qui aurait sinon rendu une recherche non scopée fonctionnellement ambiguë (retour
-possible des données d'une autre organisation), pas seulement un défaut d'isolation préexistant.
+anciennes références ne sont jamais renommées et restent reconnues indéfiniment. La recherche est
+toujours filtrée par `organization_id` du compte : la numérotation étant scopée par organisation
+(cf. `docs/references-metier.md`), deux organisations peuvent porter *exactement* la même référence.
+
+**Formats lus par les applications mobiles (05/11/2026).** Le paramètre `{reference}` accepte une
+référence (`VTE-`, `DST-`, `CMD-`, `VT-`, `TRF-`, `TR-`) ou l'identifiant d'une vente. Les applications
+extraient cette valeur du QR :
+
+| QR | Valeur envoyée |
+|---|---|
+| Référence seule (liste Ventes, anciens supports) | La référence |
+| `…/scan/livraison/{reference}` | La référence |
+| `…/backoffice/ventes/{id}` (ticket de vente, ticket PDV) | L'identifiant de la vente |
+| Toute autre URL (par exemple `/backoffice/achats/{id}`) | Rien : l'application affiche « QR code non reconnu. » sans appeler l'API |
+
+Le format ne donne aucun droit : les règles ci-dessous s'appliquent à l'identifiant comme à la référence.
+
+**Accès (05/11/2026).** Les références sont séquentielles : connaître une référence ne donne accès à
+rien. Peuvent lire une opération :
+
+| Compte | Condition | Données d'une vente |
+|---|---|---|
+| Personnel | `ventes.read` (vente) ou `logistique.read` (transfert), **et** agence de l'opération dans `user_sites` (départ ou arrivée pour un transfert), ou vision toutes agences (ADR 0025) | Toutes |
+| Client | Commande à son nom, hors brouillon | Toutes |
+| Livreur | Voir ci-dessous | Sans `total` ; `client_telephone` et `client_adresse` pendant la livraison seulement |
+| Propriétaire | Opération de son véhicule | Sans `total`, `client_telephone` ni `client_adresse` |
+
+Un compte cumulant plusieurs liens reçoit leur union. Les clés restent présentes dans la réponse, à
+`null` si elles sont masquées : les deux applications mobiles les lisent. Un parrain ou un consultant
+n'a aucun accès par ce seul titre. Le super administrateur reste limité à son organisation, et un
+compte sans organisation n'obtient rien, jamais par déduction de son téléphone.
+
+**Livreur.** Il est lié à une opération par l'un de ces trois cas :
+
+1. une part de commission non annulée à son nom, même s'il a quitté l'équipe depuis ;
+2. une opération en cours (vente : à charger, chargement, livraison ; transfert : brouillon,
+   chargement, transit) de son équipe actuelle ;
+3. une opération de son équipe actuelle datée, au jour près, de son entrée dans l'équipe au plus tôt.
+
+L'équipe d'une opération est celle figée au chargement ; à défaut, celle du véhicule. **Limite connue :
+il n'existe aucun historique des membres d'équipe.** `equipe_livreurs` est recréée à chaque modification
+d'équipe, donc sa date peut être postérieure à l'arrivée réelle, jamais antérieure : un membre ancien
+peut perdre l'accès à une opération terminée sans commission, un nouveau membre n'accède pas à
+l'historique antérieur.
+
+**Refus.** Préfixe inconnu, référence inconnue, autre organisation, compte sans lien ou agence non
+couverte : toujours `404 {"message": "Référence introuvable."}`, pour ne jamais confirmer qu'une
+opération existe.
 
 ---
 

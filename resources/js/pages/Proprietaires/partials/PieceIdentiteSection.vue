@@ -187,7 +187,7 @@ function supprimer(piece: PieceIdentiteRow) {
 </script>
 
 <template>
-    <div class="rounded-xl border bg-card p-5 sm:p-6">
+    <div class="rounded-xl border bg-card p-4 sm:p-6">
         <div
             class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
@@ -346,6 +346,7 @@ function supprimer(piece: PieceIdentiteRow) {
             modal
             :header="editingPiece ? 'Modifier la pièce' : 'Ajouter une pièce'"
             :style="{ width: '32rem' }"
+            :breakpoints="{ '640px': 'calc(100vw - 1rem)' }"
         >
             <form class="space-y-4" @submit.prevent="submitForm">
                 <div>
@@ -368,7 +369,7 @@ function supprimer(piece: PieceIdentiteRow) {
                     </p>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid gap-4 sm:grid-cols-2">
                     <div>
                         <label class="mb-1.5 block text-sm font-medium"
                             >Numéro</label
@@ -393,7 +394,7 @@ function supprimer(piece: PieceIdentiteRow) {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid gap-4 sm:grid-cols-2">
                     <div>
                         <label class="mb-1.5 block text-sm font-medium"
                             >Date de délivrance</label
@@ -426,7 +427,7 @@ function supprimer(piece: PieceIdentiteRow) {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid gap-4 sm:grid-cols-2">
                     <div>
                         <label class="mb-1.5 block text-sm font-medium"
                             >Recto
@@ -496,6 +497,7 @@ function supprimer(piece: PieceIdentiteRow) {
             modal
             header="Rejeter la pièce"
             :style="{ width: '28rem' }"
+            :breakpoints="{ '640px': 'calc(100vw - 1rem)' }"
         >
             <form class="space-y-3" @submit.prevent="submitRejet">
                 <label class="block text-sm font-medium"

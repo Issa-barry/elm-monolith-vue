@@ -3972,43 +3972,15 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "anyOf": [
-                                        {
-                                            "type": "object",
-                                            "properties": {
-                                                "message": {
-                                                    "type": "string",
-                                                    "const": "R\u00e9f\u00e9rence non reconnue."
-                                                }
-                                            },
-                                            "required": [
-                                                "message"
-                                            ]
-                                        },
-                                        {
-                                            "type": "object",
-                                            "properties": {
-                                                "message": {
-                                                    "type": "string",
-                                                    "const": "Transfert introuvable."
-                                                }
-                                            },
-                                            "required": [
-                                                "message"
-                                            ]
-                                        },
-                                        {
-                                            "type": "object",
-                                            "properties": {
-                                                "message": {
-                                                    "type": "string",
-                                                    "const": "Commande introuvable."
-                                                }
-                                            },
-                                            "required": [
-                                                "message"
-                                            ]
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "R\u00e9f\u00e9rence introuvable."
                                         }
+                                    },
+                                    "required": [
+                                        "message"
                                     ]
                                 }
                             }
@@ -4042,7 +4014,16 @@
                                                 },
                                                 "statut_label": {
                                                     "type": "string",
-                                                    "const": "Livraison en cours"
+                                                    "enum": [
+                                                        "Brouillon",
+                                                        "En chargement",
+                                                        "Livraison en cours",
+                                                        "R\u00e9ceptionn\u00e9",
+                                                        "Cl\u00f4tur\u00e9",
+                                                        "Annul\u00e9",
+                                                        "Retourn\u00e9",
+                                                        "\u2014"
+                                                    ]
                                                 },
                                                 "site_source": {
                                                     "type": "string"
@@ -4191,7 +4172,10 @@
                                                     "type": "integer"
                                                 },
                                                 "total": {
-                                                    "type": "number"
+                                                    "type": [
+                                                        "number",
+                                                        "null"
+                                                    ]
                                                 }
                                             },
                                             "required": [
@@ -6940,20 +6924,22 @@
                         "type": "string"
                     },
                     "produit_nom": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
+                        "type": [
+                            "string",
+                            "null"
                         ]
                     },
                     "variante_libelle": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "sku": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "produit_image_url": {
                         "type": [

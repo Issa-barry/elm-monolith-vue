@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\StatutTransfert;
 use App\Services\ReferenceNumeroService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -92,6 +93,23 @@ class TransfertLogistique extends Model
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
+
+    /**
+     * Périmètre de consultation : toute l'organisation pour qui voit toutes les agences, sinon les
+     * transferts partis de ses agences ou arrivant à l'une d'elles (vues Transferts et Réceptions du web).
+     */
+    public function scopeDansAgencesDe(Builder $query, User $user): Builder
+    {
+        if ($user->voitToutesLesAgences()) {
+            return $query;
+        }
+
+        $siteIds = $user->sites()->pluck('sites.id');
+
+        return $query->where(fn (Builder $q) => $q
+            ->whereIn('site_source_id', $siteIds)
+            ->orWhereIn('site_destination_id', $siteIds));
+    }
 
     public function organization(): BelongsTo
     {

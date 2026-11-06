@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class TransfertsController extends Controller
@@ -28,7 +29,8 @@ class TransfertsController extends Controller
                 'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
                 'lignes',
             ])
-            ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id));
+            ->where('organization_id', $user->organization_id)
+            ->dansAgencesDe($user);
 
         if ($request->filled('statut')) {
             $query->where('statut', $request->query('statut'));
@@ -52,22 +54,30 @@ class TransfertsController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
+        $orgId = $user->organization_id;
 
         $data = $request->validate([
-            'site_source_id' => ['required', 'string', 'exists:sites,id'],
-            'site_destination_id' => ['required', 'string', 'exists:sites,id', 'different:site_source_id'],
-            'vehicule_id' => ['nullable', 'string', 'exists:vehicules,id'],
+            'site_source_id' => ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
+            'site_destination_id' => ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId), 'different:site_source_id'],
+            'vehicule_id' => ['nullable', 'string', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)],
             'date_depart_prevue' => ['nullable', 'date'],
             'date_arrivee_prevue' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'lignes' => ['required', 'array', 'min:1'],
-            'lignes.*.produit_id' => ['required', 'string', 'exists:produits,id'],
-            'lignes.*.variante_id' => ['nullable', 'string', 'exists:produit_variantes,id'],
+            'lignes.*.produit_id' => ['required', 'string', Rule::exists('produits', 'id')->where('organization_id', $orgId)],
+            'lignes.*.variante_id' => ['nullable', 'string', Rule::exists('produit_variantes', 'id')->where('organization_id', $orgId)],
             'lignes.*.quantite_demandee' => ['required', 'integer', 'min:1'],
         ]);
 
+        // Même règle que le back-office web : seul qui agit sur toutes les agences choisit librement le départ.
+        if (! $user->agitSurToutesLesAgences() && ! $user->isAssignedToSite($data['site_source_id'])) {
+            throw ValidationException::withMessages([
+                'site_source_id' => 'Le site source doit être une de vos agences.',
+            ]);
+        }
+
         $transfert = TransfertLogistique::create([
-            'organization_id' => $user->organization_id,
+            'organization_id' => $orgId,
             'site_source_id' => $data['site_source_id'],
             'site_destination_id' => $data['site_destination_id'],
             'vehicule_id' => $data['vehicule_id'] ?? null,
@@ -96,15 +106,8 @@ class TransfertsController extends Controller
         return response()->json(new TransfertResource($transfert), 201);
     }
 
-    public function show(Request $request, TransfertLogistique $transfert): JsonResponse
+    public function show(TransfertLogistique $transfert): JsonResponse
     {
-        /** @var User $user */
-        $user = $request->user();
-
-        if ($user->organization_id && $transfert->organization_id !== $user->organization_id) {
-            return response()->json(['message' => 'Accès non autorisé.'], 403);
-        }
-
         $transfert->load([
             'siteSource:id,nom',
             'siteDestination:id,nom',

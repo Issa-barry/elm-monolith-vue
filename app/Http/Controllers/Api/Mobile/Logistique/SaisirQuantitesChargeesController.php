@@ -6,29 +6,23 @@ use App\Enums\StatutTransfert;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Logistique\SaisirQuantitesChargeesRequest;
 use App\Http\Resources\Api\Logistique\TransfertResource;
-use App\Models\Livreur;
 use App\Models\TransfertLigne;
 use App\Models\TransfertLogistique;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Builder;
+use App\Services\Logistique\LivreurCompteResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 class SaisirQuantitesChargeesController extends Controller
 {
+    public function __construct(private readonly LivreurCompteResolver $livreurs) {}
+
     public function __invoke(SaisirQuantitesChargeesRequest $request, TransfertLogistique $transfert): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $livreur = Livreur::query()
-            ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn (Builder $q) => $q
-                ->where('user_id', $user->id)
-                ->when($user->telephone, fn (Builder $q2) => $q2->orWhereHas('personne', fn (Builder $p) => $p->where('telephone', $user->telephone))))
-            ->first();
-
-        if (! $livreur || ! $livreur->equipes()->pluck('equipes_livraison.id')->contains($transfert->equipe_livraison_id)) {
+        if (! $this->livreurs->concerne($user, $transfert)) {
             return response()->json(['message' => 'Accès non autorisé.'], 403);
         }
 

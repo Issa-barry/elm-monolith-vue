@@ -42,9 +42,16 @@ les parts `proprietaire` et `livreur` de `ClientEarningsService` :
 5. **Répartition par activité.** `par_activite` (dashboard, résumé du détail) donne les mêmes champs que
    `summary` pour chaque activité du compte ; leur somme est `summary`. Seule la page Commissions
    l'affiche, à partir de deux activités (retirée de l'accueil le 04/11/2026) ; le badge d'origine
-   reste toujours présent.
+   reste toujours présent ailleurs (véhicules, accueil). Depuis le 05/11/2026, la section reprend la
+   présentation de « Gains par véhicule » : gain décroissant, part du total et barre, sans badge ni
+   reste à payer par activité à l'écran (`balance` reste renvoyé par l'API).
 6. **Détail des commissions** : `GET /v1/mobile/commissions`, paginé, mêmes périodes que l'accueil,
    filtres véhicule, activité, statut et recherche (référence, nom ou immatriculation du véhicule).
+   **Révision du 05/11/2026 (demande de l'utilisateur)** : la liste « Détail des commissions » est
+   retirée de la page Commissions de l'espace client Nuxt, en mobile et au bureau. L'endpoint reste en
+   place et n'a plus de consommateur à l'écran : le front Nuxt n'affiche donc plus les parts annulées
+   (point 3), ni l'origine ligne par ligne, ni les lignes citées en D2 et D3 ; la page garde la
+   répartition par activité et « Gains par véhicule ».
 7. **Véhicules rattachés** : propriétaire, livreur de l'équipe actuelle, parrain ; un véhicule par
    ligne avec tous ses liens (`liens`). Nouveau `GET /v1/mobile/vehicules/rattaches` ;
    `vehicules/mine` reste inchangé pour l'application mobile.
