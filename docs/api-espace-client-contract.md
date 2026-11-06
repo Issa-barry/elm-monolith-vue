@@ -471,17 +471,27 @@ Accessible au proprietaire **et** au livreur (même périmètre que
 large que le calcul de solde du dashboard (`GET /v1/mobile/dashboard`, §5) qui,
 lui, ignore les dépenses côté livreur.
 
-Un livreur voit aussi les dépenses rattachées **directement à lui**
-(`beneficiaire_type = livreur`, ex. avance sur salaire) : `vehicule` vaut alors
-`null`. Il ne voit jamais celles d'un autre livreur, et un propriétaire ne voit
-pas celles des livreurs. Les dépenses rattachées directement à un propriétaire
-ne sont pas listées ici.
+Règle (05/11/2026) : **toute dépense que le reste à payer déduit figure dans
+cette liste**, pour le bénéficiaire concerné. Chaque activité du compte voit donc
+aussi les dépenses rattachées **directement à elle** (`beneficiaire_type` =
+`proprietaire`, `livreur`, `parrain` ou `prestataire` pour un consultant, ex.
+avance sur salaire) : `vehicule` vaut alors `null`. Jusqu'au 05/11, seules celles
+du livreur l'étaient ; celles du propriétaire, du parrain et du consultant étaient
+déduites (`deductionsParActivite`, ADR 0054) sans apparaître (la phrase « les
+dépenses rattachées directement à un propriétaire ne sont pas listées » est
+remplacée par cette règle).
+
+Limites : un compte ne voit jamais les dépenses d'un autre bénéficiaire ni d'une
+autre organisation ; un propriétaire ne voit pas celles des livreurs ; un parrain
+ne voit pas les dépenses du véhicule qu'il parraine (ADR 0054). La liste reste plus
+large que la déduction sur un point, voulu : un livreur voit les frais des
+véhicules de son équipe, qui sont retenus au propriétaire, pas à lui.
 
 Query params (tous optionnels) :
 
 | Param | Effet |
 |---|---|
-| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles — sinon liste vide) ; exclut les dépenses rattachées directement au livreur |
+| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles — sinon liste vide) ; exclut les dépenses rattachées directement au compte (propriétaire, livreur, parrain, consultant) |
 | `depense_type_id` | Filtre par type de dépense (catégorie) |
 | `statut` | Valeur de `StatutDepense` : `brouillon`, `soumis`, `valide`, `rejete`, `annule` — **aucun filtre par défaut**, contrairement au calcul du dashboard qui ne compte que `valide` |
 | `date_debut`, `date_fin` | Filtre par `date_depense` — **aucune période par défaut** (liste complète si non fourni) |
@@ -896,6 +906,19 @@ d'origine (cf. `docs/references-metier.md`) : `VTE-`/`DST-`/legacy `CMD-` = comm
 anciennes références ne sont jamais renommées et restent reconnues indéfiniment. La recherche est
 toujours filtrée par `organization_id` du compte : la numérotation étant scopée par organisation
 (cf. `docs/references-metier.md`), deux organisations peuvent porter *exactement* la même référence.
+
+**Formats lus par les applications mobiles (05/11/2026).** Le paramètre `{reference}` accepte une
+référence (`VTE-`, `DST-`, `CMD-`, `VT-`, `TRF-`, `TR-`) ou l'identifiant d'une vente. Les applications
+extraient cette valeur du QR :
+
+| QR | Valeur envoyée |
+|---|---|
+| Référence seule (liste Ventes, anciens supports) | La référence |
+| `…/scan/livraison/{reference}` | La référence |
+| `…/backoffice/ventes/{id}` (ticket de vente, ticket PDV) | L'identifiant de la vente |
+| Toute autre URL (par exemple `/backoffice/achats/{id}`) | Rien : l'application affiche « QR code non reconnu. » sans appeler l'API |
+
+Le format ne donne aucun droit : les règles ci-dessous s'appliquent à l'identifiant comme à la référence.
 
 **Accès (05/11/2026).** Les références sont séquentielles : connaître une référence ne donne accès à
 rien. Peuvent lire une opération :

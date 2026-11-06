@@ -12,6 +12,7 @@ use App\Services\Client\Operations\OperationsCompte;
 use App\Services\Client\Operations\PresentationOperation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Scan d'une référence : réservé au personnel habilité sur l'agence et aux comptes réellement liés à
@@ -21,10 +22,10 @@ use Illuminate\Support\Collection;
 class ScanCommandeController extends Controller
 {
     /**
-     * VTE-/DST- = nouvelles commandes (cf. NatureOperation::prefixeReference()) ; CMD- =
-     * référence émise avant le chantier du 31/08/2026, jamais renommée, toujours reconnue.
+     * VTE-/DST- = nouvelles commandes (cf. NatureOperation::prefixeReference()) ; CMD- et VT- =
+     * références émises avant le chantier du 31/08/2026, jamais renommées, toujours reconnues.
      */
-    private const COMMANDE_PREFIXES = ['VTE-', 'DST-', 'CMD-'];
+    private const COMMANDE_PREFIXES = ['VTE-', 'DST-', 'CMD-', 'VT-'];
 
     /** TRF- = nouveaux transferts ; TR- = référence émise avant le 31/08/2026. */
     private const TRANSFERT_PREFIXES = ['TRF-', 'TR-'];
@@ -46,8 +47,13 @@ class ScanCommandeController extends Controller
 
         $identity = $this->identityResolver->resolve($user);
 
+        // Le ticket de vente et le ticket PDV portent l'identifiant de la vente, pas sa référence.
+        if (Str::isUlid(trim($reference))) {
+            return $this->scanCommande('id', strtolower(trim($reference)), $user, $identity);
+        }
+
         if ($this->startsWithAny($ref, self::COMMANDE_PREFIXES)) {
-            return $this->scanCommande($ref, $user, $identity);
+            return $this->scanCommande('reference', $ref, $user, $identity);
         }
 
         if ($this->startsWithAny($ref, self::TRANSFERT_PREFIXES)) {
@@ -89,7 +95,8 @@ class ScanCommandeController extends Controller
         return $user->sites()->whereIn('sites.id', array_filter($siteIds))->exists();
     }
 
-    private function scanCommande(string $reference, User $user, ClientIdentity $identity): JsonResponse
+    /** @param  'id'|'reference'  $colonne */
+    private function scanCommande(string $colonne, string $valeur, User $user, ClientIdentity $identity): JsonResponse
     {
         // La numérotation est scopée par organisation : la même référence peut exister ailleurs, toujours
         // filtrer sur l'organisation du compte, préfixes historiques compris.
@@ -99,7 +106,7 @@ class ScanCommandeController extends Controller
             'vehicule.equipe:id,vehicule_id',
             'client:id,nom,prenom,telephone,adresse,ville',
             'lignes:id,commande_vente_id,quantite_demandee',
-        ])->where('reference', $reference)->where('organization_id', $identity->organizationId)->first();
+        ])->where($colonne, $valeur)->where('organization_id', $identity->organizationId)->first();
 
         if (! $commande) {
             return $this->introuvable();
@@ -161,7 +168,7 @@ class ScanCommandeController extends Controller
             'type' => 'transfert',
             'reference' => $transfert->reference,
             'statut' => $transfert->statut instanceof \BackedEnum ? $transfert->statut->value : $transfert->statut,
-            'statut_label' => 'Livraison en cours',
+            'statut_label' => $transfert->statut instanceof \BackedEnum ? $transfert->statut->label() : '—',
             'site_source' => $transfert->siteSource?->nom ?? '—',
             'site_destination' => $transfert->siteDestination?->nom ?? '—',
             'vehicule' => $transfert->vehicule ? [
