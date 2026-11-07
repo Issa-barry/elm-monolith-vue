@@ -5,6 +5,7 @@ namespace App\Services\Search;
 use App\Models\User;
 use App\Services\Search\Providers\ClientSearchProvider;
 use App\Services\Search\Providers\CommandeVenteSearchProvider;
+use App\Services\Search\Providers\ContactSearchProvider;
 use App\Services\Search\Providers\FactureVenteSearchProvider;
 use App\Services\Search\Providers\LivreurSearchProvider;
 use App\Services\Search\Providers\ProprietaireSearchProvider;
@@ -25,6 +26,8 @@ class GlobalSearchService
             new VehiculeSearchProvider,
             new ProprietaireSearchProvider,
             new LivreurSearchProvider,
+            // Référentiel Contacts (ADR 0060, lot 2) : en dernier, les groupes historiques restent en tête.
+            new ContactSearchProvider,
         ];
     }
 

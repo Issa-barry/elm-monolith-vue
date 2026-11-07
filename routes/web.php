@@ -89,6 +89,10 @@ use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\Comptabilite\TransfererMobileMoneyAgentController;
 use App\Http\Controllers\Comptabilite\VerserCaisseAgentController;
+use App\Http\Controllers\Contacts\Entreprises\IndexEntrepriseController;
+use App\Http\Controllers\Contacts\Entreprises\ShowEntrepriseController;
+use App\Http\Controllers\Contacts\Personnes\IndexPersonneController;
+use App\Http\Controllers\Contacts\Personnes\ShowPersonneController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\Depenses\CommandesCarburantDepenseController;
 use App\Http\Controllers\Depenses\ConcerneDetailDepenseController;
@@ -477,6 +481,14 @@ Route::prefix('backoffice')->group(function () {
             ->name('clients.vehicules.update');
         Route::delete('clients/{client}/vehicules/{vehicule}', DestroyVehiculeClientController::class)
             ->name('clients.vehicules.destroy');
+
+        // Référentiel Contacts (ADR 0060, lot 2) — lecture seule. Permission et visibilité
+        // (organisation, fonctions lisibles, périmètre d'agences des parrains) vérifiées par les
+        // contrôleurs.
+        Route::get('contacts/personnes', IndexPersonneController::class)->name('contacts.personnes.index');
+        Route::get('contacts/personnes/{personne}', ShowPersonneController::class)->name('contacts.personnes.show');
+        Route::get('contacts/entreprises', IndexEntrepriseController::class)->name('contacts.entreprises.index');
+        Route::get('contacts/entreprises/{entreprise}', ShowEntrepriseController::class)->name('contacts.entreprises.show');
 
         // ── Module : PDV ──────────────────────────────────────────────────────────
         // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune

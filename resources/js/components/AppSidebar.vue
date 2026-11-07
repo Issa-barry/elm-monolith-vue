@@ -68,9 +68,22 @@ const approvisionnementsAConfirmer = computed(
 const canSee = (permission: PermissionKey, module: string): boolean =>
     can(permission) && moduleActive(module);
 
-/** Tiers regroupés sous Contacts : Clients, Fournisseurs, Prestataires, Propriétaires et Parrains. */
+/**
+ * Tiers regroupés sous Contacts : le référentiel (Entreprises, Personnes physiques — ADR 0060,
+ * lot 2), puis les écrans par fonction, conservés jusqu'à la bascule du lot 8.
+ */
 const contactsItems = computed((): NavItem[] => {
     const sub: NavItem[] = [];
+    if (can('contacts.read')) {
+        sub.push({
+            title: 'Entreprises',
+            href: '/backoffice/contacts/entreprises',
+        });
+        sub.push({
+            title: 'Personnes physiques',
+            href: '/backoffice/contacts/personnes',
+        });
+    }
     if (can('clients.read'))
         sub.push({ title: 'Clients', href: '/backoffice/clients' });
     // Les routes fournisseurs sont dans le groupe module:achats : sans le module, le lien

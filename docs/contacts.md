@@ -12,10 +12,12 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 
 | Lot | Contenu | État |
 | --- | --- | --- |
-| 1 — Socle | Coordonnées, interlocuteurs (service), référentiel des sous-catégories, permissions, lecture des fonctions, synchronisation client non branchée | Fait (06/11/2026) |
-| 2 à 9 | Écrans, création téléphone d'abord, interlocuteurs à l'écran, reprises, paramétrage, client, bascule, fusion | À venir |
+| 1 — Socle | Coordonnées, interlocuteurs (service), référentiel des sous-catégories, permissions, lecture des fonctions, synchronisation client non branchée | Fait (06/11/2026, commit `35abb314`) |
+| 2 — Consultation | Listes et fiches Personnes physiques / Entreprises, recherche globale « Contacts », liens de menu — lecture seule | Fait (07/11/2026) |
+| 3 à 9 | Création téléphone d'abord, interlocuteurs à l'écran, reprises, paramétrage, client, bascule, fusion | À venir |
 
-Le lot 1 n'ajoute ni écran ni route et ne change aucun comportement existant.
+Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule et ne change
+aucun écran existant (Clients, Fournisseurs, Prestataires, Propriétaires, Parrains).
 
 ## Règles métier (IDs)
 
@@ -65,6 +67,39 @@ Le lot 1 n'ajoute ni écran ni route et ne change aucun comportement existant.
   l'arbitrage des écarts (D16), CLIENTPERSONNE-002 reste la règle en vigueur
   ([identite-client-personne.md](identite-client-personne.md)).
 
+- **CONTACT-013** — Une fonction est lisible si l'utilisateur a sa permission de lecture et, quand
+  elle en dépend, si le module est actif : `clients.read` ; `fournisseurs.read` + module Achats ;
+  `prestataires.read` + module Prestataires ; `proprietaires.read` et `parrains.read` + module
+  Véhicules ; `livreurs.read` ; `rh-employes.read` + module RH. Un lien d'interlocuteur n'est lisible
+  que si son entreprise est visible. Une fonction non lisible n'apparaît ni dans les badges, ni dans
+  les filtres, ni dans les données transmises au navigateur ; un filtre sur une fonction non lisible
+  est refusé.
+- **CONTACT-014** — Une personne ou une entreprise n'est visible que si au moins une de ses fonctions
+  l'est (parrain : dans le périmètre d'agences du lecteur). Sinon elle n'apparaît nulle part dans le
+  module : listes, fiches (404), recherche, compteurs. Une personne sans aucune fonction (compte seul)
+  n'y apparaît jamais : elle se gère dans Utilisateurs. Une fiche d'une autre organisation répond 404,
+  y compris pour un super_admin (la visibilité est vérifiée dans le contrôleur, pas seulement par la
+  policy, car `Gate::before` accorde tout au super_admin).
+- **CONTACT-015** — Les écrans Contacts n'exposent que les coordonnées (nom, téléphones, e-mail,
+  pays, ville, quartier, adresse, position) : jamais la naissance, les pièces d'identité ni les
+  données RH d'une personne.
+- **CONTACT-016** — Le module est en lecture seule au lot 2 : aucune création, modification,
+  suppression ni association. La recherche globale ajoute un groupe « Contacts » (fiches Personne et
+  Entreprise) ; les groupes existants ne changent pas, une même personne peut figurer sous
+  « Clients » et « Contacts » jusqu'au lot 8.
+
+## Écrans (lot 2)
+
+| Route | Écran |
+| --- | --- |
+| `GET /backoffice/contacts/personnes` | Liste Personnes physiques : nom (repli sur la désignation du livreur, puis le téléphone), téléphone, localisation, badges de fonctions ; filtres fonction, recherche, sous-catégorie, ville ; 25 par page |
+| `GET /backoffice/contacts/personnes/{personne}` | Fiche : Informations, Fonctions (lien vers l'écran existant de la fonction), Entreprises représentées |
+| `GET /backoffice/contacts/entreprises` | Liste Entreprises : raison sociale, téléphone, ville, fonctions, interlocuteur principal, statut ; filtres statut, fonction, recherche, sous-catégorie, ville |
+| `GET /backoffice/contacts/entreprises/{entreprise}` | Fiche : Informations, Fonctions, Interlocuteurs (lecture) |
+
+Menu : « Entreprises » et « Personnes physiques » en tête de Contacts, visibles avec
+`contacts.read` ; les cinq liens par fonction restent jusqu'au lot 8.
+
 ## Permissions
 
 | Permission | Effet |
@@ -95,5 +130,10 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   `EntrepriseTierce::interlocuteurPrincipal()`, `Personne::interlocutions()`.
 - Catalogue : `App\Support\Contacts\SousCategoriesSysteme`, enum `ContactCategorie`.
 - Services : `App\Services\Contacts\InterlocuteurService`, `FonctionsContact`,
-  `ClientIdentiteSynchronisation` (non branché).
+  `ClientIdentiteSynchronisation` (non branché), `VisibiliteContacts` (source unique de la
+  visibilité des listes, fiches et recherche — lot 2).
+- Écrans (lot 2) : contrôleurs `App\Http\Controllers\Contacts\{Personnes,Entreprises}\*`,
+  policies `PersonnePolicy`, `EntrepriseTiercePolicy`, présentation
+  `App\Support\Contacts\PresentationContacts`, recherche `ContactSearchProvider`, pages
+  `resources/js/pages/Contacts/`.
 - Tests : `tests/Feature/Contacts/`.

@@ -1,6 +1,7 @@
 # ADR 0060 — Référentiel Contacts : deux fiches d'identité, des fonctions qui gardent leurs ids
 
-- Statut : accepté (architecture validée le 06/11/2026) ; lot 1 réalisé le 06/11/2026
+- Statut : accepté (architecture validée le 06/11/2026) ; lot 1 réalisé le 06/11/2026 (commit
+  `35abb314`) ; lot 2 réalisé le 07/11/2026
 - Documentation : [docs/contacts.md](../contacts.md)
 
 ## Contexte
@@ -52,6 +53,15 @@ Colonnes de coordonnées, interlocuteurs enrichis et leur service, référentiel
 avec ses tables de liaison (vides), permissions, service de lecture des fonctions, service de
 synchronisation client construit et non branché. Aucun écran, aucune route, aucune ligne existante
 modifiée.
+
+## Lot 2 (consultation, 07/11/2026)
+
+Listes et fiches Personnes physiques / Entreprises, groupe « Contacts » de la recherche globale,
+liens de menu visibles avec `contacts.read` — lecture seule. Décisions du 07/11 : liens dès ce lot ;
+personnes sans fonction exclues ; doublon temporaire « Clients » / « Contacts » dans la recherche
+accepté jusqu'au lot 8. La visibilité (fonctions lisibles, périmètre d'agences des parrains,
+organisation) est décidée par un seul service côté serveur et vérifiée dans les contrôleurs en plus
+des policies, `Gate::before` accordant tout au super_admin.
 
 ## Conséquences
 
