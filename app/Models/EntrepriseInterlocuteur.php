@@ -11,6 +11,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Personne physique qui représente une entreprise tierce (ADR 0050). Elle consulte les commissions
  * du prestataire de cette entreprise sans en devenir bénéficiaire. `user_id` n'est pas
  * mass-assignable : seul RattachementCompteService le pose.
+ *
+ * Référentiel Contacts (ADR 0060) : l'interlocuteur porte sa fonction dans l'entreprise et peut être
+ * le principal. `est_principal` et la désactivation ne sont pas mass-assignables : seul
+ * App\Services\Contacts\InterlocuteurService les pose, pour garantir un seul principal actif.
  */
 class EntrepriseInterlocuteur extends Model
 {
@@ -22,8 +26,10 @@ class EntrepriseInterlocuteur extends Model
         'organization_id',
         'entreprise_tierce_id',
         'personne_id',
+        'fonction',
         'acces_commissions',
         'is_active',
+        'notes',
         'created_by',
     ];
 
@@ -32,7 +38,19 @@ class EntrepriseInterlocuteur extends Model
         return [
             'acces_commissions' => 'boolean',
             'is_active' => 'boolean',
+            'est_principal' => 'boolean',
+            'desactive_le' => 'datetime',
         ];
+    }
+
+    public function desactivePar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'desactive_par');
+    }
+
+    public function scopeActifs(Builder $q): Builder
+    {
+        return $q->where('is_active', true);
     }
 
     public function organization(): BelongsTo

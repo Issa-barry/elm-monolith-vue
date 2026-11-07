@@ -199,25 +199,15 @@ class ActiviteControllerTest extends TestCase
         $this->assertSame('logistique', $response->json('data.0.type'));
     }
 
-    public function test_statut_filter_requires_type(): void
+    public function test_le_statut_brut_n_est_plus_un_filtre(): void
     {
-        $org = Organization::factory()->create();
-        $user = $this->makeProprietaireUser($org);
-
-        Sanctum::actingAs($user, ['*']);
-
-        $this->getJson(route('client.activite.mine', ['statut' => 'cloturee']))
-            ->assertStatus(422);
-    }
-
-    public function test_filters_by_statut_within_a_type(): void
-    {
+        // ADR 0058 : il permettrait à un livreur de déduire le paiement d'une vente.
         $org = Organization::factory()->create();
         $user = $this->makeProprietaireUser($org);
         $vehicule = $this->makeVehicule($org, $user->proprietaire->id);
 
-        $this->makeCommande($org, $vehicule, ['statut' => StatutCommandeVente::CLOTUREE->value, 'reference' => 'CMD-CLOTUREE']);
-        $this->makeCommande($org, $vehicule, ['statut' => StatutCommandeVente::A_CHARGER->value, 'reference' => 'CMD-ACHARGER']);
+        $this->makeCommande($org, $vehicule, ['statut' => StatutCommandeVente::CLOTUREE->value]);
+        $this->makeCommande($org, $vehicule, ['statut' => StatutCommandeVente::A_CHARGER->value]);
 
         Sanctum::actingAs($user, ['*']);
 
@@ -226,8 +216,8 @@ class ActiviteControllerTest extends TestCase
             'statut' => StatutCommandeVente::CLOTUREE->value,
         ]))->assertOk();
 
-        $response->assertJsonCount(1, 'data');
-        $this->assertSame('CMD-CLOTUREE', $response->json('data.0.reference'));
+        $response->assertJsonCount(2, 'data');
+        $this->assertArrayNotHasKey('statut', $response->json('filters'));
     }
 
     public function test_filters_by_vehicule_id(): void
@@ -427,7 +417,7 @@ class ActiviteControllerTest extends TestCase
         $this->assertSame(['TRF-JOUR'], array_column($response->json('data'), 'reference'));
     }
 
-    public function test_periode_se_combine_avec_type_statut_et_vehicule(): void
+    public function test_periode_se_combine_avec_type_et_vehicule(): void
     {
         $this->figerHorloge();
         $org = Organization::factory()->create();
@@ -436,7 +426,6 @@ class ActiviteControllerTest extends TestCase
         $vehiculeB = $this->makeVehicule($org, $user->proprietaire->id, 'Vehicule B');
 
         $this->makeCommande($org, $vehiculeA, ['reference' => 'OK', 'statut' => StatutCommandeVente::CLOTUREE->value, 'validated_at' => '2026-03-04 10:00:00']);
-        $this->makeCommande($org, $vehiculeA, ['reference' => 'AUTRE-STATUT', 'statut' => StatutCommandeVente::A_CHARGER->value, 'validated_at' => '2026-03-04 10:00:00']);
         $this->makeCommande($org, $vehiculeA, ['reference' => 'AUTRE-JOUR', 'statut' => StatutCommandeVente::CLOTUREE->value, 'validated_at' => '2026-03-03 10:00:00']);
         $this->makeCommande($org, $vehiculeB, ['reference' => 'AUTRE-VEHICULE', 'statut' => StatutCommandeVente::CLOTUREE->value, 'validated_at' => '2026-03-04 10:00:00']);
         $this->makeTransfert($org, $vehiculeA, ['reference' => 'AUTRE-TYPE', 'date_depart_reelle' => '2026-03-04']);
@@ -446,7 +435,6 @@ class ActiviteControllerTest extends TestCase
         $response = $this->getJson(route('client.activite.mine', [
             'periode' => 'aujourd_hui',
             'type' => 'vente',
-            'statut' => StatutCommandeVente::CLOTUREE->value,
             'vehicule_id' => $vehiculeA->id,
         ]))->assertOk();
 
@@ -648,8 +636,9 @@ class ActiviteControllerTest extends TestCase
 
         $data = collect($this->getJson(route('client.activite.mine'))->assertOk()->json('data'))->keyBy('type');
 
-        $this->assertSame('livree', $data['vente']['statut']);
-        $this->assertSame('Livrée', $data['vente']['statut_label']);
+        // ADR 0058 : `livree` d'une vente standard vient du premier encaissement, jamais d'une remise.
+        $this->assertSame('en_cours_de_cloture', $data['vente']['statut']);
+        $this->assertSame('En cours de clôture', $data['vente']['statut_label']);
         $this->assertSame('partiel', $data['vente']['statut_paiement']);
         $this->assertSame('Partiellement payée', $data['vente']['statut_paiement_label']);
         $this->assertNull($data['logistique']['statut_paiement']);
@@ -671,7 +660,7 @@ class ActiviteControllerTest extends TestCase
         $this->assertNull($response->json('data.0.statut_paiement_label'));
     }
 
-    public function test_vente_soldee_en_attente_des_commissions_affiche_le_libelle_du_back_office(): void
+    public function test_vente_soldee_en_attente_des_commissions_n_expose_pas_le_libelle_interne(): void
     {
         $org = Organization::factory()->create();
         $user = $this->makeProprietaireUser($org);
@@ -686,8 +675,8 @@ class ActiviteControllerTest extends TestCase
 
         $response = $this->getJson(route('client.activite.mine'))->assertOk();
 
-        $this->assertSame('facturation', $response->json('data.0.statut'));
-        $this->assertSame('Commissions à verser', $response->json('data.0.statut_label'));
+        $this->assertSame('en_cours_de_cloture', $response->json('data.0.avancement.code'));
+        $this->assertSame('En cours de clôture', $response->json('data.0.statut_label'));
         $this->assertSame('payee', $response->json('data.0.statut_paiement'));
     }
 

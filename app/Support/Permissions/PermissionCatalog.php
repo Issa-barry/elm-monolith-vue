@@ -74,6 +74,13 @@ final class PermissionCatalog
         'imports-produits.read' => 'Import produits — consulter les imports',
         'parrains.read' => 'Parrains — consulter la liste et les fiches',
         'rattachements-comptes.gerer' => 'Comptes — rattacher ou détacher un compte (parrain, consultant, interlocuteur) ; donne accès à ses commissions',
+        // Référentiel Contacts (ADR 0060) : identité des fiches Personne et Entreprise. Hors
+        // matrice CRUD car il n'existe pas de `contacts.delete` (une fiche se désactive).
+        'contacts.read' => 'Contacts — consulter les fiches Personne et Entreprise',
+        'contacts.create' => 'Contacts — créer une fiche Personne ou Entreprise',
+        'contacts.update' => "Contacts — modifier l'identité d'une fiche (s'applique à toutes ses fonctions)",
+        'contacts.gerer_categories' => 'Contacts — gérer les catégories et sous-catégories',
+        'contacts.gerer_interlocuteurs' => "Contacts — ajouter, modifier ou désactiver les interlocuteurs d'une entreprise",
         'communications.read' => 'Communications — consulter le journal des messages (SMS/WhatsApp)',
         'communications.manage' => 'Communications — configurer les règles de notification (SMS/WhatsApp)',
         'pieces-identite.download' => "Pièces d'identité — télécharger",
@@ -190,6 +197,10 @@ final class PermissionCatalog
             'standalone' => [
                 'Parrains' => ['parrains.read'],
                 'Comptes' => ['rattachements-comptes.gerer'],
+                'Référentiel Contacts' => [
+                    'contacts.read', 'contacts.create', 'contacts.update',
+                    'contacts.gerer_categories', 'contacts.gerer_interlocuteurs',
+                ],
             ],
         ],
         'vehicules' => [

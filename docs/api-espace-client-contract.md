@@ -805,36 +805,44 @@ un souci d'accès similaire à celui déjà rencontré côté proprietaire.
 
 ### `GET /v1/mobile/activite`
 
-Historique complet (**tous statuts**, pas seulement "en cours") des commandes
-de vente **et** transferts logistiques d'un propriétaire — comble exactement
-le manque ci-dessus : contrairement à `/v1/mobile/livraisons-transferts`, cet
-endpoint résout aussi **par véhicule** (pas seulement par équipe de livreur),
-donc fonctionne pour un **proprietaire pur sans équipe**. Un livreur reste
-accueilli (même résolution véhicule/équipe que `/livraisons/en-cours`), mais
-ce n'est pas son usage principal — pour un livreur, préférer
-`/v1/mobile/livraisons-transferts?tab=historique`.
+Liste unique « Commandes » de l'espace client (ADR 0058, depuis le 06/11/2026) : commandes de vente
+**et** transferts logistiques du compte, **tous statuts**, une seule fois chacun même si le compte y est
+lié à plusieurs titres. Ouverte à tout compte, sans garde par rôle (ADR 0055) : un compte sans lien
+reçoit une liste vide. Le périmètre (`OperationsCompte`) est le même que le détail et le scan :
+
+| Lien | Le compte voit |
+|---|---|
+| `client` | Ses commandes, hors brouillons |
+| `proprietaire` | Les opérations de ses véhicules |
+| `livreur` | Une opération avec une part de commission non annulée à son nom ; en cours et confiée à son équipe actuelle ; ou confiée à cette équipe et datée de son entrée au plus tôt (comparaison au jour) |
+
+L'équipe d'une opération est celle figée sur l'opération, sinon le véhicule de l'équipe. Il n'existe
+aucun historique des membres d'équipe : la date d'entrée peut être postérieure à l'arrivée réelle,
+jamais antérieure (ADR 0058, Conséquences). Un parrain n'y voit pas ses ventes parrainées, et un super
+administrateur n'a aucune visibilité supplémentaire.
 
 Query params (tous optionnels) :
 
 | Param | Effet |
 |---|---|
 | `type` | `vente` ou `logistique` — omis = les deux mélangés, triés par date décroissante |
-| `statut` | **Exige `type`** (422 sinon, avec message explicite) — les deux modèles ont des vocabulaires de statut différents (`StatutCommandeVente` vs `StatutTransfert`), aucune correspondance n'est inventée entre les deux |
-| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles) |
-| `periode` | Période rapide : `aujourd_hui`, `hier`, `cette_semaine`, `semaine_precedente`, `ce_mois`, `mois_precedent` ou `cette_annee`. Bornes résolues par le serveur (`SituationPeriode`, fuseau de l'application, semaine du lundi au dimanche) ; une période en cours s'arrête à l'instant présent. **Exclut** `date_debut` et `date_fin` |
+| `lien` | `client`, `livreur` ou `proprietaire` : ne garde que les opérations vues à ce titre. Chaque ligne garde tous ses `liens` |
+| `vehicule_id` | Restreint à un seul véhicule, sans jamais élargir le périmètre |
+| `periode` | Période rapide : `aujourd_hui`, `hier`, `cette_semaine`, `semaine_precedente`, `ce_mois`, `mois_precedent` ou `cette_annee`. Bornes résolues par le serveur (fuseau de l'application, semaine du lundi au dimanche) ; une période en cours s'arrête à l'instant présent. **Exclut** `date_debut` et `date_fin` |
 | `date_debut`, `date_fin` | Jours entiers, bornes incluses, sur la date de référence décrite ci-dessous |
 | `annee`, `mois`, `quinzaine` | Période comptable : `quinzaine` vaut `P1` (du 1er au 15), `P2` (du 16 à la fin du mois) ou `TOUT` (omise = le mois) ; `mois` omis = l'année. Sur la même date de référence. **Exclut** `periode` et `date_debut`/`date_fin`. Voir [filtre-periode-comptable.md](filtre-periode-comptable.md) |
 | `per_page` | 1 à 100, défaut 20 |
 | `page` | Entier ≥ 1, défaut 1 |
 
-Tous les filtres se combinent (`periode` + `type` + `statut` + `vehicule_id`), et toujours à
-l'intérieur du périmètre de l'utilisateur connecté.
+Le filtre `statut` a été **retiré** le 06/11/2026 : il permettait à un livreur de déduire le paiement
+d'une vente par essais successifs. Envoyé, il est ignoré. Tous les filtres se combinent, toujours à
+l'intérieur du périmètre du compte.
 
 Erreurs de validation (`422`, clé dans `errors`) :
 
 | Cas | Clé |
 |---|---|
-| `statut` sans `type`, ou statut inconnu pour ce type | `statut` |
+| `lien` inconnu | `lien` |
 | `periode` inconnue | `periode` |
 | `periode` envoyée avec `date_debut` ou `date_fin` | `periode` |
 | `annee` future ou avant 2000, `mois` hors 1-12, `quinzaine` inconnue | le champ concerné |
@@ -858,38 +866,75 @@ date de vente d'une précommande, qui est celle de sa réalisation (ADR 0007 §3
 {
   "data": [
     {
-      "id": "...", "type": "vente", "reference": "CMD-2847",
-      "statut": "livree", "statut_label": "Livrée",
+      "id": "...", "type": "vente", "reference": "VTE-061126-004",
+      "nature": { "code": "vente_standard", "label": "Vente" },
+      "liens": ["client", "proprietaire"],
+      "avancement": { "code": "en_cours_de_cloture", "label": "En cours de clôture" },
+      "statut": "en_cours_de_cloture", "statut_label": "En cours de clôture",
       "statut_paiement": "partiel", "statut_paiement_label": "Partiellement payée",
       "site_source": "Siège de Matoto", "site_destination": "Client X",
       "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" },
-      "date": "2026-08-20", "nb_packs": 12
+      "date": "2026-11-06", "nb_packs": 12
     },
     {
-      "id": "...", "type": "logistique", "reference": "TR-00042-XYZ",
-      "statut": "cloture", "statut_label": "Clôturé",
+      "id": "...", "type": "logistique", "reference": "TRF-00042",
+      "nature": { "code": "transfert", "label": "Transfert logistique" },
+      "liens": ["livreur"],
+      "avancement": { "code": "termine", "label": "Terminé" },
+      "statut": "termine", "statut_label": "Terminé",
       "statut_paiement": null, "statut_paiement_label": null,
       "site_source": "Siège de Matoto", "site_destination": "Dépôt Kindia",
       "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" },
-      "date": "2026-08-18", "nb_packs": 40
+      "date": "2026-11-04", "nb_packs": 40
     }
   ],
   "links": { "first": "...", "last": "...", "prev": null, "next": null },
   "meta": { "current_page": 1, "last_page": 2, "per_page": 20, "total": 27 },
-  "filters": { "type": null, "statut": null, "vehicule_id": null, "periode": "cette_semaine", "annee": null, "mois": null, "quinzaine": null, "date_debut": "2026-11-02", "date_fin": "2026-11-02" }
+  "filters": { "type": null, "lien": null, "vehicule_id": null, "periode": "cette_semaine", "annee": null, "mois": null, "quinzaine": null, "date_debut": "2026-11-02", "date_fin": "2026-11-06" },
+  "compte_a_des_operations": true
 }
 ```
 
 `filters.date_debut` et `filters.date_fin` renvoient les bornes effectives, y compris celles résolues
-depuis `periode`.
+depuis `periode`. `compte_a_des_operations` est calculé **sans aucun filtre** : `false` signifie que le
+compte n'a encore aucune opération, `true` avec une liste vide signifie que les filtres ou la période
+n'en retiennent aucune.
 
-**Statut affiché d'une vente** (depuis le 03/11/2026) : `statut` reste la valeur brute du workflow
-(celle du filtre `statut`), mais `statut_label` est le libellé du back-office
-(`CommandeVente::statutAffichage()`) : « Commissions à verser » pour une facture soldée en attente des
-commissions, « Retirée » pour une précommande retirée. `statut_paiement` / `statut_paiement_label`
-reprennent le statut de la facture (`StatutFactureVente` : `creee`, `impayee`, `partiel`, `payee`,
-`annulee`) — une vente « Livrée » peut être « Partiellement payée », comme sur la fiche back-office.
-`null` pour une vente sans facture et pour tout transfert logistique.
+**Nature** : `vente_standard` (« Vente »), `distribution_client` (« Distribution client »),
+`precommande` (« Précommande »), `transfert` (« Transfert logistique »).
+
+**Avancement** (traduction des statuts réels, sans les modifier) :
+
+| Statut réel | `avancement` |
+|---|---|
+| Vente `brouillon` | `brouillon`, Brouillon |
+| Précommande `reservee`, `a_preparer`, `preparee` | `creee` Créée, `preparation_en_cours` Préparation en cours, `prete_au_retrait` Prête au retrait |
+| `a_charger`, `chargement_en_cours` | `en_preparation`, En préparation |
+| `livraison_en_cours` | `en_cours_de_livraison`, En cours de livraison |
+| `livree` après réception validée | `livree`, Livrée |
+| `livree` sans réception, `facturation` | `en_cours_de_cloture`, En cours de clôture |
+| `facturation` d'une précommande retirée | `retiree`, Retirée |
+| `cloturee` | `terminee`, Terminée |
+| `annulee`, `annulee_erreur_saisie` | `annulee`, Annulée |
+| `retournee` | `retournee`, Retournée |
+| Transfert `brouillon`, `chargement` | `en_preparation`, En préparation |
+| Transfert `transit` | `en_cours_de_livraison`, En cours de livraison |
+| Transfert `reception` | `receptionne`, Réceptionné |
+| Transfert `cloture` | `termine`, Terminé |
+| Transfert `annule`, `retourne` | `annule` Annulé, `retourne` Retourné |
+
+Une vente standard passe `livree` au **premier encaissement**, sans preuve de remise physique : elle
+s'affiche donc « En cours de clôture », alors que le back-office affiche « Livrée » pour la même vente.
+
+**Paiement** : `statut_paiement` / `statut_paiement_label` reprennent le statut de la facture
+(`StatutFactureVente` : `creee`, `impayee`, `partiel`, `payee`, `annulee`), indépendant de l'avancement.
+Une précommande dont la facture est encore « Créée » malgré un encaissement vaut `acompte_recu`
+(« Acompte reçu »). `null` pour une vente sans facture, pour tout transfert, et pour un compte lié
+seulement comme livreur.
+
+**Transition** : `statut` et `statut_label` répètent `avancement` pour le front déjà en ligne ; ils ne
+portent plus jamais le statut brut, qui révélait le paiement. Ils seront retirés après le déploiement du
+nouveau front.
 
 **Pagination sans requête SQL unique** : les deux modèles (`CommandeVente`, `TransfertLogistique`)
 sont filtrés et comptés en base, puis seules les `page × per_page` premières lignes de chacun sont
@@ -897,6 +942,47 @@ chargées, fusionnées et triées par date décroissante (puis `id`, pour un ord
 l'autre). `meta.total` compte tout le résultat filtré, sans plafond ; le plafond de 200 lignes par
 modèle a été retiré le 02/11/2026. Le coût d'une requête croît avec le numéro de page, pas avec le
 volume total du compte.
+
+### `GET /v1/mobile/activite/{type}/{id}` (ADR 0058)
+
+Détail d'une opération de la liste, `type` = `vente` ou `logistique` (autre valeur : 404 de route).
+Même périmètre que la liste : hors du périmètre du compte, ou d'une autre organisation,
+`404 {"message": "Opération introuvable."}`, jamais `403`, pour ne pas confirmer l'existence de
+l'opération. Lecture seule.
+
+```json
+{
+  "data": {
+    "id": "...", "type": "vente", "reference": "VTE-061126-004",
+    "nature": { "code": "distribution_client", "label": "Distribution client" },
+    "liens": ["client"],
+    "avancement": { "code": "livree", "label": "Livrée" },
+    "statut_paiement": "payee", "statut_paiement_label": "Payée",
+    "remise": { "date": "2026-11-06", "source": "reception" },
+    "site_source": "Siège de Matoto", "site_destination": "Client X",
+    "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" },
+    "date": "2026-11-06", "nb_packs": 12,
+    "lignes": [{ "id": "...", "libelle": "Pack eau 1,5 L", "quantite": 12, "prix_unitaire": 8000, "total": 96000 }],
+    "total": 96000,
+    "contact": { "telephone": "+224621000001", "adresse": "Cité Enco-5, Conakry" }
+  }
+}
+```
+
+Le contenu suit les `liens` du compte, avec l'union pour un compte qui en cumule plusieurs :
+
+| Champ | Client | Livreur | Propriétaire |
+|---|---|---|---|
+| `statut_paiement` | Oui | `null` | Oui |
+| `lignes` (libellé, quantité) | Oui | Oui | Oui |
+| `prix_unitaire`, `total` des lignes, `total` | Oui | `null` | `null` |
+| `contact` | Le sien | Pendant `livraison_en_cours` seulement | `null` |
+
+`remise` n'est renseignée que si le système connaît la remise physique : `reception` (réception validée
+d'une vente qui l'exige) ou `retrait` (précommande retirée sans véhicule). Elle vaut `null` dans tous les
+autres cas, y compris une précommande livrée, dont `remise_at` date le chargement. Un transfert n'a ni
+montant, ni paiement, ni contact, ni commission : `lignes` donne la quantité reçue, à défaut chargée, à
+défaut demandée.
 
 ### `GET /v1/mobile/livraisons/scan/{reference}`
 
@@ -1351,6 +1437,8 @@ aucune vérification de propriété).
 | "Mes commandes" pour un rôle `client` pur (achats, historique) | **Fait** (26/08/2026) — `GET /v1/mobile/commandes/mine` + `/commandes/{id}`, §6 |
 | Dépenses consolidées (tous véhicules) | **Fait** (26/08/2026) — `GET /v1/mobile/depenses/mine`, §4 |
 | Historique complet livraisons pour un proprietaire | **Fait** (26/08/2026) — `GET /v1/mobile/activite`, §5 |
+| Liste unique « Commandes » : client, livreur et propriétaire, avec détail | **Fait** (06/11/2026, ADR 0058) — `GET /v1/mobile/activite` et `/activite/{type}/{id}`, §5 |
+| Confirmation de la remise physique d'une vente standard | **N'existe pas** — le premier encaissement fait passer `livree` sans preuve de remise (ADR 0058) |
 | Dashboard financier API (net à payer, reste à payer...) | **Fait** (26/08/2026) — `GET /v1/mobile/dashboard`, §5 |
 | Propositions de véhicule (créer/lister) | **Fait** (26/08/2026) — `POST`/`GET /v1/mobile/propositions-vehicules`, §4 |
 | Modification du prénom, du nom et de l'e-mail | **Fait** (02/11/2026, ADR 0051) — `PATCH /v1/mobile/profile`, §3 |

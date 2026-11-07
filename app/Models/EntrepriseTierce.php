@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -25,9 +26,9 @@ class EntrepriseTierce extends Model
     protected $table = 'entreprises_tierces';
 
     protected $fillable = [
-        'organization_id', 'raison_sociale', 'identifiant_fiscal',
-        'telephone', 'telephone_normalise', 'email',
-        'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse',
+        'organization_id', 'raison_sociale', 'nom_commercial', 'identifiant_fiscal', 'rccm',
+        'telephone', 'telephone_normalise', 'telephone_secondaire', 'email',
+        'pays', 'code_pays', 'code_phone_pays', 'ville', 'quartier', 'adresse', 'latitude', 'longitude',
         'contact_personne_id', 'is_active',
     ];
 
@@ -35,6 +36,8 @@ class EntrepriseTierce extends Model
     {
         return [
             'is_active' => 'boolean',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
         ];
     }
 
@@ -71,6 +74,12 @@ class EntrepriseTierce extends Model
     public function interlocuteurs(): HasMany
     {
         return $this->hasMany(EntrepriseInterlocuteur::class);
+    }
+
+    /** Au plus un, garanti par App\Services\Contacts\InterlocuteurService (ADR 0060). */
+    public function interlocuteurPrincipal(): HasOne
+    {
+        return $this->hasOne(EntrepriseInterlocuteur::class)->where('est_principal', true)->where('is_active', true);
     }
 
     /**

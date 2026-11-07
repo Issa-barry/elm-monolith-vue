@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Prestataire extends Model
@@ -148,6 +149,18 @@ class Prestataire extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Qualifications du référentiel Contacts (ADR 0060). Lues par aucune règle métier avant le
+     * lot 6 : `type` reste la seule source de la qualification consultant.
+     */
+    public function sousCategories(): BelongsToMany
+    {
+        return $this->belongsToMany(ContactSousCategorie::class, 'prestataire_sous_categories', 'prestataire_id', 'contact_sous_categorie_id')
+            ->using(FonctionSousCategorie::class)
+            ->withPivot(['id', 'created_by'])
+            ->withTimestamps();
     }
 
     // ── Scopes ────────────────────────────────────────────────────────────────

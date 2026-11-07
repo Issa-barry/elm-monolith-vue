@@ -83,7 +83,12 @@ export type StandalonePermission =
     | 'rh-transmissions-paie.valider'
     | 'rh-transmissions-paie.transmettre'
     | 'parrains.read'
-    | 'rattachements-comptes.gerer';
+    | 'rattachements-comptes.gerer'
+    | 'contacts.read'
+    | 'contacts.create'
+    | 'contacts.update'
+    | 'contacts.gerer_categories'
+    | 'contacts.gerer_interlocuteurs';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

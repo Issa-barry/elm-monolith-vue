@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -25,8 +26,8 @@ class Personne extends Model
 
     protected $fillable = [
         'organization_id', 'nom', 'prenom', 'nom_complet', 'surnom',
-        'telephone', 'telephone_normalise', 'email',
-        'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse',
+        'telephone', 'telephone_normalise', 'telephone_secondaire', 'email',
+        'pays', 'code_pays', 'code_phone_pays', 'ville', 'quartier', 'adresse', 'latitude', 'longitude',
         'date_naissance', 'lieu_naissance', 'civilite', 'sexe', 'nationalite',
     ];
 
@@ -35,6 +36,8 @@ class Personne extends Model
         return [
             'date_naissance' => 'date',
             'civilite' => Civilite::class,
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
         ];
     }
 
@@ -116,6 +119,12 @@ class Personne extends Model
     public function prestataire(): HasOne
     {
         return $this->hasOne(Prestataire::class);
+    }
+
+    /** Entreprises que cette personne représente (une même personne peut en représenter plusieurs). */
+    public function interlocutions(): HasMany
+    {
+        return $this->hasMany(EntrepriseInterlocuteur::class);
     }
 
     public function piecesIdentite(): MorphMany

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\DomaineActivite;
 use App\Services\Comptabilite\PlanComptableBootstrapService;
+use App\Support\Contacts\SousCategoriesSysteme;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -54,6 +55,20 @@ class Organization extends Model
                 app(PlanComptableBootstrapService::class)->bootstrap($org->id);
             } catch (\Throwable $e) {
                 Log::error('Bootstrap comptable automatique échoué', [
+                    'organization_id' => $org->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        });
+
+        // Sous-catégories par défaut du référentiel Contacts (ADR 0060) : rejouable, et non
+        // bloquant pour la même raison que ci-dessus. Les organisations antérieures sont
+        // initialisées par la migration 2026_11_06_100300.
+        static::created(function (Organization $org) {
+            try {
+                SousCategoriesSysteme::initialiserPour($org->id);
+            } catch (\Throwable $e) {
+                Log::error('Initialisation du référentiel Contacts échouée', [
                     'organization_id' => $org->id,
                     'error' => $e->getMessage(),
                 ]);
