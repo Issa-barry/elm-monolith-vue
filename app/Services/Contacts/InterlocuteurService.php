@@ -2,10 +2,12 @@
 
 namespace App\Services\Contacts;
 
+use App\Enums\AuditEvent;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\EntrepriseTierce;
 use App\Models\Personne;
 use App\Models\User;
+use App\Services\AuditLogService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -26,10 +28,16 @@ use Illuminate\Validation\ValidationException;
  *   qui sérialise deux désignations concurrentes.
  * - On ne supprime jamais un interlocuteur : on le désactive, l'historique reste lisible.
  *
- * Non exposé par une route avant le lot 4.
+ * - Une entreprise désactivée ne reçoit plus d'interlocuteur ; ses liens existants restent gérables.
+ * - Chaque opération est inscrite au journal d'audit existant, avec des identifiants et des
+ *   indicateurs seulement : jamais de nom, de téléphone ni le texte des notes.
+ *
+ * Exposé au lot 4 par les contrôleurs App\Http\Controllers\Contacts\Interlocuteurs.
  */
 final class InterlocuteurService
 {
+    public function __construct(private readonly AuditLogService $journal) {}
+
     /** Personne de l'organisation qui porte déjà ce numéro, à proposer à l'utilisateur. */
     public function personneConnue(EntrepriseTierce $entreprise, string $telephone): ?Personne
     {
@@ -52,6 +60,10 @@ final class InterlocuteurService
         bool $principal = false,
     ): EntrepriseInterlocuteur {
         $this->assertMemeOrganisation($entreprise, $acteur);
+        // Strictement false : un modèle tout juste créé n'a pas encore lu le défaut (actif) de la base.
+        if ($entreprise->is_active === false) {
+            throw ValidationException::withMessages(['entreprise' => 'Cette entreprise est désactivée : aucun interlocuteur ne peut lui être ajouté.']);
+        }
 
         $telephone = trim((string) ($donnees['telephone'] ?? ''));
         if (Personne::normaliserTelephone($telephone) === '') {
@@ -83,9 +95,11 @@ final class InterlocuteurService
                     'created_by' => $acteur->id,
                 ]);
 
-                if ($principal) {
-                    $this->marquerPrincipal($entreprise, $interlocuteur);
-                }
+                $anciens = $principal ? $this->marquerPrincipal($entreprise, $interlocuteur) : [];
+
+                $this->journal->record($interlocuteur, AuditEvent::CREATED, $acteur, null,
+                    ['entreprise_tierce_id' => $entreprise->id, 'est_principal' => $principal],
+                    ['personne_existante' => $personneConfirmeeId !== null, 'ancien_principal_ids' => $anciens]);
 
                 return $interlocuteur->refresh();
             });
@@ -106,10 +120,17 @@ final class InterlocuteurService
     {
         $this->assertMemeOrganisation($interlocuteur->entrepriseTierce, $acteur);
 
-        $interlocuteur->update(array_filter([
+        $interlocuteur->fill(array_filter([
             'fonction' => array_key_exists('fonction', $donnees) ? $this->texte($donnees['fonction']) : false,
             'notes' => array_key_exists('notes', $donnees) ? $this->texte($donnees['notes']) : false,
         ], fn ($valeur) => $valeur !== false));
+
+        $champs = array_keys($interlocuteur->getDirty());
+        if ($champs !== []) {
+            $interlocuteur->save();
+            // Noms des champs seulement : les notes sont du texte libre.
+            $this->journal->record($interlocuteur, AuditEvent::UPDATED, $acteur, null, null, ['champs_modifies' => $champs]);
+        }
 
         return $interlocuteur->refresh();
     }
@@ -119,7 +140,7 @@ final class InterlocuteurService
         $entreprise = $interlocuteur->entrepriseTierce;
         $this->assertMemeOrganisation($entreprise, $acteur);
 
-        return DB::transaction(function () use ($entreprise, $interlocuteur) {
+        return DB::transaction(function () use ($entreprise, $interlocuteur, $acteur) {
             $this->verrouiller($entreprise);
 
             $interlocuteur->refresh();
@@ -127,7 +148,12 @@ final class InterlocuteurService
                 throw ValidationException::withMessages(['interlocuteur' => 'Un interlocuteur désactivé ne peut pas être principal : réactivez-le d\'abord.']);
             }
 
-            $this->marquerPrincipal($entreprise, $interlocuteur);
+            if ($interlocuteur->est_principal) {
+                return $interlocuteur;
+            }
+
+            $anciens = $this->marquerPrincipal($entreprise, $interlocuteur);
+            $this->journal->record($interlocuteur, AuditEvent::UPDATED, $acteur, ['est_principal' => false], ['est_principal' => true], ['ancien_principal_ids' => $anciens]);
 
             return $interlocuteur->refresh();
         });
@@ -142,12 +168,20 @@ final class InterlocuteurService
         return DB::transaction(function () use ($entreprise, $interlocuteur, $acteur) {
             $this->verrouiller($entreprise);
 
+            $interlocuteur->refresh();
+            if (! $interlocuteur->is_active) {
+                return $interlocuteur;
+            }
+            $etaitPrincipal = $interlocuteur->est_principal;
+
             $interlocuteur->forceFill([
                 'is_active' => false,
                 'est_principal' => false,
                 'desactive_le' => now(),
                 'desactive_par' => $acteur->id,
             ])->save();
+
+            $this->journal->record($interlocuteur, AuditEvent::STATUS_CHANGED, $acteur, ['is_active' => true], ['is_active' => false], ['etait_principal' => $etaitPrincipal]);
 
             return $interlocuteur->refresh();
         });
@@ -157,12 +191,17 @@ final class InterlocuteurService
     public function reactiver(EntrepriseInterlocuteur $interlocuteur, User $acteur): EntrepriseInterlocuteur
     {
         $this->assertMemeOrganisation($interlocuteur->entrepriseTierce, $acteur);
+        if ($interlocuteur->is_active) {
+            return $interlocuteur;
+        }
 
         $interlocuteur->forceFill([
             'is_active' => true,
             'desactive_le' => null,
             'desactive_par' => null,
         ])->save();
+
+        $this->journal->record($interlocuteur, AuditEvent::STATUS_CHANGED, $acteur, ['is_active' => false], ['is_active' => true]);
 
         return $interlocuteur->refresh();
     }
@@ -211,15 +250,25 @@ final class InterlocuteurService
         ]);
     }
 
-    /** À appeler dans une transaction, après verrouiller(). */
-    private function marquerPrincipal(EntrepriseTierce $entreprise, EntrepriseInterlocuteur $interlocuteur): void
+    /**
+     * À appeler dans une transaction, après verrouiller().
+     *
+     * @return list<string> ids des interlocuteurs qui perdent le rôle de principal
+     */
+    private function marquerPrincipal(EntrepriseTierce $entreprise, EntrepriseInterlocuteur $interlocuteur): array
     {
-        EntrepriseInterlocuteur::where('entreprise_tierce_id', $entreprise->id)
+        $ids = EntrepriseInterlocuteur::where('entreprise_tierce_id', $entreprise->id)
             ->where('id', '!=', $interlocuteur->id)
             ->where('est_principal', true)
-            ->update(['est_principal' => false]);
+            ->pluck('id')
+            ->all();
+        if ($ids !== []) {
+            EntrepriseInterlocuteur::whereIn('id', $ids)->update(['est_principal' => false]);
+        }
 
         $interlocuteur->forceFill(['est_principal' => true])->save();
+
+        return $ids;
     }
 
     private function verrouiller(EntrepriseTierce $entreprise): void

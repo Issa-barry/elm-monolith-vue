@@ -94,6 +94,12 @@ use App\Http\Controllers\Contacts\Entreprises\IndexEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\ShowEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\StoreEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\StoreFonctionEntrepriseController;
+use App\Http\Controllers\Contacts\Interlocuteurs\DefinirPrincipalInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\DesactiverInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\ReactiverInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\RechercheTelephoneInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\StoreInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\UpdateInterlocuteurController;
 use App\Http\Controllers\Contacts\Personnes\IndexPersonneController;
 use App\Http\Controllers\Contacts\Personnes\ShowPersonneController;
 use App\Http\Controllers\Contacts\Personnes\StoreFonctionPersonneController;
@@ -504,6 +510,17 @@ Route::prefix('backoffice')->group(function () {
         Route::post('contacts/entreprises', StoreEntrepriseController::class)->name('contacts.entreprises.store');
         Route::post('contacts/personnes/{personne}/fonctions', StoreFonctionPersonneController::class)->name('contacts.personnes.fonctions.store');
         Route::post('contacts/entreprises/{entreprise}/fonctions', StoreFonctionEntrepriseController::class)->name('contacts.entreprises.fonctions.store');
+
+        // Lot 4 — interlocuteurs d'une entreprise (ADR 0060). contacts.gerer_interlocuteurs ; entreprise
+        // visible vérifiée par les contrôleurs ; scopeBindings : un interlocuteur d'une autre entreprise répond 404.
+        Route::scopeBindings()->prefix('contacts/entreprises/{entreprise}/interlocuteurs')->name('contacts.entreprises.interlocuteurs.')->group(function () {
+            Route::get('recherche-telephone', RechercheTelephoneInterlocuteurController::class)->name('recherche-telephone');
+            Route::post('/', StoreInterlocuteurController::class)->name('store');
+            Route::patch('{interlocuteur}', UpdateInterlocuteurController::class)->name('update');
+            Route::post('{interlocuteur}/principal', DefinirPrincipalInterlocuteurController::class)->name('principal');
+            Route::post('{interlocuteur}/desactiver', DesactiverInterlocuteurController::class)->name('desactiver');
+            Route::post('{interlocuteur}/reactiver', ReactiverInterlocuteurController::class)->name('reactiver');
+        });
 
         // ── Module : PDV ──────────────────────────────────────────────────────────
         // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune

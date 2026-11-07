@@ -74,6 +74,20 @@ ce lot ; « autre personne » arrête sans retirer ni réaffecter le numéro ; r
 traitée seulement pour Fournisseur et Prestataire ; modification d'identité au lot 7. Aucune
 migration.
 
+## Lot 4 (interlocuteurs, 07/11/2026)
+
+Gestion des interlocuteurs depuis l'onglet Interlocuteurs de la fiche Entreprise : ajout
+« téléphone d'abord », fonction et notes, désignation du principal, désactivation, réactivation
+(CONTACT-021 à CONTACT-026). Décisions du 07/11 : (1) personne connue non visible → message neutre
+et arrêt, appliqué aussi à l'enregistrement (identifiant forgé compris) ; (2) modification limitée à
+la fonction et aux notes, coordonnées au lot 7 ; (3) journal d'audit existant, sans donnée
+personnelle ; (4) accès aux commissions hors lot 4, ni affiché ni modifié ; (5) entreprise
+désactivée → ajout interdit, gestion des liens existants autorisée ; (6) case « principal » cochée
+par défaut seulement s'il n'y a aucun principal actif, choix explicite. Contrôle serveur à chaque
+requête : permission `contacts.gerer_interlocuteurs`, entreprise visible (404 sinon, super_admin
+compris), interlocuteur lié à l'entreprise de l'URL (`scopeBindings`). Rattachement de compte
+d'ADR 0056 inchangé. Aucune migration.
+
 ## Conséquences
 
 - Aucune entrée ajoutée au morph map : les comptes auxiliaires stockent le nom de classe des

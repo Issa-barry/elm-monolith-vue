@@ -14,13 +14,16 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | --- | --- | --- |
 | 1 — Socle | Coordonnées, interlocuteurs (service), référentiel des sous-catégories, permissions, lecture des fonctions, synchronisation client non branchée | Fait (06/11/2026, commit `35abb314`) |
 | 2 — Consultation | Listes et fiches Personnes physiques / Entreprises, recherche globale « Contacts », liens de menu — lecture seule | Fait (07/11/2026, commit `d7a1effb`) |
-| 3 — Création | Parcours « téléphone d'abord », ajout explicite d'une fonction, une fonction par catégorie, fin de la reprise silencieuse (Fournisseur, Prestataire), D17 | Fait (07/11/2026) |
-| 4 à 9 | Interlocuteurs à l'écran, reprises, paramétrage, client, bascule, fusion | À venir |
+| 3 — Création | Parcours « téléphone d'abord », ajout explicite d'une fonction, une fonction par catégorie, fin de la reprise silencieuse (Fournisseur, Prestataire), D17 | Fait (07/11/2026, commit `ae3f8842`) |
+| 4 — Interlocuteurs | Gestion depuis l'onglet Interlocuteurs de la fiche Entreprise : ajout « téléphone d'abord », fonction et notes, principal, désactivation, réactivation, journal | Fait (07/11/2026) |
+| 5 à 9 | Reprises, paramétrage, client, bascule, fusion | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
 décision : les formulaires Fournisseur et Prestataire refusent un numéro déjà connu
-(CONTACT-020), et une fonction qui a un historique ne se supprime plus (CONTACT-019).
+(CONTACT-020), et une fonction qui a un historique ne se supprime plus (CONTACT-019). Le lot 4
+ajoute 6 routes de gestion des interlocuteurs (1 GET en lecture seule, 4 POST, 1 PATCH) ; aucune
+migration, aucun changement d'accès aux commissions.
 
 ## Règles métier (IDs)
 
@@ -123,6 +126,36 @@ décision : les formulaires Fournisseur et Prestataire refusent un numéro déj�
   modifié. Les autres saisies (clients, propriétaires, équipes et livreurs, utilisateurs, parrain
   depuis le véhicule) gardent leur comportement jusqu'à leurs lots.
 
+- **CONTACT-021** — Gestion des interlocuteurs (lot 4) : permission `contacts.gerer_interlocuteurs`
+  et entreprise visible du lecteur, vérifiées par le serveur à chaque requête (recherche comprise).
+  Une entreprise non visible ou d'une autre organisation répond 404, y compris pour un super_admin.
+  Un interlocuteur est toujours désigné dans l'URL de son entreprise : un interlocuteur d'une autre
+  entreprise répond 404. Les actions de l'onglet ne s'affichent qu'avec la permission
+  (`peut_gerer_interlocuteurs` calculé par le serveur).
+- **CONTACT-022** — Ajout « téléphone d'abord » : téléphone puis « Rechercher » (lecture seule).
+  **Libre** : identité (nom obligatoire), fonction dans l'entreprise, notes. **Connu** et visible :
+  la personne est présentée, rien n'est rattaché ; « C'est la même personne » l'ajoute telle quelle,
+  « C'est une autre personne » arrête avec un message. **Déjà interlocuteur** de cette entreprise :
+  l'ajout est refusé, avec l'invitation à réactiver un lien désactivé. **Indisponible** (personne non
+  visible du lecteur) : message neutre, aucune donnée, l'ajout s'arrête. Le serveur applique la même
+  règle à l'enregistrement : une personne non visible, qu'elle porte le numéro saisi ou soit désignée
+  par un identifiant forgé, reçoit le message neutre et n'est jamais rattachée ni nommée.
+- **CONTACT-023** — La modification d'un interlocuteur ne porte que sur sa fonction dans
+  l'entreprise et ses notes. Ses coordonnées appartiennent à sa fiche Personne et ne se modifient pas
+  depuis cet écran (lot 7).
+- **CONTACT-024** — Principal : la case « Interlocuteur principal » est proposée cochée quand
+  l'entreprise n'a aucun principal actif, et reste un choix de l'utilisateur. Désigner un principal,
+  en ajoutant ou depuis la liste, le retire à l'ancien sous verrou de l'entreprise (CONTACT-006). Un
+  interlocuteur désactivé ne peut pas être désigné.
+- **CONTACT-025** — Entreprise désactivée : aucun interlocuteur ne peut lui être ajouté (refus serveur,
+  bouton remplacé par un message) ; ses interlocuteurs existants restent modifiables, désignables,
+  désactivables et réactivables.
+- **CONTACT-026** — Journal : chaque ajout, modification, désignation, désactivation et réactivation
+  est inscrit au journal d'audit existant (`created`, `updated`, `status_changed`) avec des
+  identifiants et des indicateurs seulement (entreprise, principal, personne existante, anciens
+  principaux, noms des champs modifiés) : jamais de nom, de téléphone, d'e-mail ni le texte des
+  notes. L'accès aux commissions (`acces_commissions`) n'est ni affiché ni modifié par ces écrans.
+
 ## Écrans (lot 2)
 
 | Route | Écran |
@@ -147,6 +180,23 @@ Menu : « Entreprises » et « Personnes physiques » en tête de Contacts, visi
 Boutons : « Nouveau contact » sur les deux listes, « Ajouter une fonction » sur les deux fiches,
 affichés selon des indicateurs calculés par le serveur (`peut_creer`, `fonctions_ajoutables`).
 
+## Routes (lot 4)
+
+Préfixe `/backoffice/contacts/entreprises/{entreprise}/interlocuteurs`, liaison de route limitée à
+l'entreprise (`scopeBindings`).
+
+| Route | Rôle |
+| --- | --- |
+| `GET …/recherche-telephone` | « Rechercher » : libre, connu, déjà interlocuteur, indisponible ou invalide (lecture seule) |
+| `POST …` | Ajout d'un interlocuteur (nouvelle personne, ou personne connue confirmée) |
+| `PATCH …/{interlocuteur}` | Fonction dans l'entreprise et notes |
+| `POST …/{interlocuteur}/principal` | Désigner comme principal |
+| `POST …/{interlocuteur}/desactiver` | Désactiver (confirmation, lien conservé) |
+| `POST …/{interlocuteur}/reactiver` | Réactiver (sans redevenir principal) |
+
+Onglet Interlocuteurs de la fiche Entreprise : bouton « Ajouter un interlocuteur » et menu ⋮ par
+ligne (Modifier la fonction et les notes, Définir comme principal, Désactiver / Réactiver).
+
 ## Permissions
 
 | Permission | Effet |
@@ -155,7 +205,7 @@ affichés selon des indicateurs calculés par le serveur (`peut_creer`, `fonctio
 | `contacts.create` | Créer une fiche |
 | `contacts.update` | Modifier l'identité (s'applique à toutes les fonctions de la fiche) |
 | `contacts.gerer_categories` | Paramétrer les sous-catégories |
-| `contacts.gerer_interlocuteurs` | Ajouter, modifier, désactiver un interlocuteur |
+| `contacts.gerer_interlocuteurs` | Ajouter, modifier, désigner, désactiver, réactiver un interlocuteur (lot 4, avec l'entreprise visible) |
 
 Pas de `contacts.delete` : une fiche se désactive. Ajoutées par migration à `super_admin` et
 `admin_entreprise` ; les autres rôles les reçoivent dans « Rôles ». Les blocs de chaque fonction
@@ -187,4 +237,9 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   policies `PersonnePolicy`, `EntrepriseTiercePolicy`, présentation
   `App\Support\Contacts\PresentationContacts`, recherche `ContactSearchProvider`, pages
   `resources/js/pages/Contacts/`.
+- Interlocuteurs (lot 4) : contrôleurs `App\Http\Controllers\Contacts\Interlocuteurs\*` (contrôle
+  commun `ControleAccesInterlocuteurs`), requêtes `StoreInterlocuteurRequest`,
+  `UpdateInterlocuteurRequest`, policy `EntrepriseTiercePolicy::gererInterlocuteurs`, recherche
+  `RechercheTelephoneContact::rechercherInterlocuteur`, journal dans `InterlocuteurService`,
+  dialogues `AjouterInterlocuteurDialog.vue`, `ModifierInterlocuteurDialog.vue`.
 - Tests : `tests/Feature/Contacts/`.

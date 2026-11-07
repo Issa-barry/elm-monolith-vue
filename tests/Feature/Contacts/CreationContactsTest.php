@@ -411,7 +411,8 @@ class CreationContactsTest extends TestCase
 
     // ── Routes ──────────────────────────────────────────────────────────────
 
-    public function test_les_routes_d_ecriture_du_module_sont_les_quatre_creations_prevues(): void
+    /** Inventaire exact : les 4 créations du lot 3 et les 5 écritures d'interlocuteurs du lot 4. */
+    public function test_les_routes_d_ecriture_du_module_sont_celles_prevues(): void
     {
         $ecritures = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($r) => str_starts_with((string) $r->getName(), 'contacts.') && $r->methods() !== ['GET', 'HEAD'])
@@ -420,6 +421,11 @@ class CreationContactsTest extends TestCase
 
         $this->assertSame([
             'contacts.entreprises.fonctions.store:POST',
+            'contacts.entreprises.interlocuteurs.desactiver:POST',
+            'contacts.entreprises.interlocuteurs.principal:POST',
+            'contacts.entreprises.interlocuteurs.reactiver:POST',
+            'contacts.entreprises.interlocuteurs.store:POST',
+            'contacts.entreprises.interlocuteurs.update:PATCH',
             'contacts.entreprises.store:POST',
             'contacts.personnes.fonctions.store:POST',
             'contacts.personnes.store:POST',

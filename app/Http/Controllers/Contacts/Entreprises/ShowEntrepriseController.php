@@ -14,9 +14,10 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Fiche Entreprise du référentiel Contacts (ADR 0060, lot 2) — lecture seule : identité, fonctions
- * visibles, interlocuteurs. La gestion des interlocuteurs arrive au lot 4. Visibilité vérifiée ici
- * en plus de la policy (voir ShowPersonneController).
+ * Fiche Entreprise du référentiel Contacts (ADR 0060) : identité, fonctions visibles,
+ * interlocuteurs (lot 2), fonctions ajoutables (lot 3) et droit de gérer les interlocuteurs (lot 4,
+ * contrôleurs App\Http\Controllers\Contacts\Interlocuteurs). Visibilité vérifiée ici en plus de la
+ * policy (voir ShowPersonneController).
  */
 class ShowEntrepriseController extends Controller
 {
@@ -45,6 +46,7 @@ class ShowEntrepriseController extends Controller
                 'est_principal' => $i->est_principal,
                 'is_active' => $i->is_active,
                 'desactive_le' => $i->desactive_le?->toDateString(),
+                'notes' => $i->notes,
             ])
             ->values();
 
@@ -55,6 +57,8 @@ class ShowEntrepriseController extends Controller
             // Lot 3 : fonctions que l'utilisateur peut ajouter et que la fiche ne porte pas encore.
             'fonctions_ajoutables' => $user->can('create', EntrepriseTierce::class) ? app(FonctionsContactEcriture::class)->fonctionsAjoutables($entreprise, $user) : [],
             'types_prestataire' => PrestataireType::options(),
+            // Lot 4 : gestion des interlocuteurs (l'entreprise est déjà vérifiée visible ci-dessus).
+            'peut_gerer_interlocuteurs' => $user->can('gererInterlocuteurs', EntrepriseTierce::class),
         ]);
     }
 }

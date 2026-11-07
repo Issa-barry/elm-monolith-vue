@@ -24,6 +24,12 @@ class EntrepriseTiercePolicy
         return $user->can('contacts.create');
     }
 
+    /** Interlocuteurs (lot 4) ; la visibilité de l'entreprise est vérifiée en plus par les contrôleurs. */
+    public function gererInterlocuteurs(User $user): bool
+    {
+        return $user->can('contacts.gerer_interlocuteurs');
+    }
+
     public function view(User $user, EntrepriseTierce $entreprise): Response
     {
         if (! $user->can('contacts.read')) {

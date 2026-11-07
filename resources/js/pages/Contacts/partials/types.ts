@@ -114,4 +114,5 @@ export interface InterlocuteurFiche {
     est_principal: boolean;
     is_active: boolean;
     desactive_le: string | null;
+    notes: string | null;
 }
