@@ -10,6 +10,7 @@ use App\Models\PieceIdentite;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Models\VehiculeCapacite;
+use App\Support\Contacts\SuppressionFonction;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,7 +30,10 @@ class ProprietaireController extends Controller
         $proprietaires = Proprietaire::with('personne')
             ->withCount('vehicules')
             ->where('organization_id', auth()->user()->organization_id)
-            ->get()
+            ->get();
+        $nonSupprimables = array_flip(SuppressionFonction::idsReferences(Proprietaire::class, $proprietaires->pluck('id')->all()));
+
+        $proprietaires = $proprietaires
             ->sortBy('nom')
             ->map(fn (Proprietaire $p) => [
                 'id' => $p->id,
@@ -50,6 +54,7 @@ class ProprietaireController extends Controller
                 'adresse' => $p->adresse,
                 'is_active' => $p->is_active,
                 'vehicules_count' => $p->vehicules_count,
+                'supprimable' => ! isset($nonSupprimables[$p->id]),
             ])
             ->values();
 
@@ -351,6 +356,12 @@ class ProprietaireController extends Controller
     public function destroy(Proprietaire $proprietaire): RedirectResponse
     {
         $this->authorize('delete', $proprietaire);
+
+        // D17 (ADR 0060) : un propriétaire référencé par une opération se désactive, il ne se supprime plus.
+        if (! SuppressionFonction::estSupprimable($proprietaire)) {
+            return back()->with('error', SuppressionFonction::message($proprietaire));
+        }
+
         $proprietaire->delete();
 
         return redirect()->route('proprietaires.index')

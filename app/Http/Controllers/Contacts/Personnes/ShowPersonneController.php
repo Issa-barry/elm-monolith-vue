@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Contacts\Personnes;
 
+use App\Enums\PrestataireType;
 use App\Http\Controllers\Controller;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\Personne;
+use App\Services\Contacts\FonctionsContactEcriture;
 use App\Services\Contacts\VisibiliteContacts;
 use App\Support\Contacts\PresentationContacts;
 use Illuminate\Http\Request;
@@ -50,6 +52,9 @@ class ShowPersonneController extends Controller
             ],
             'fonctions' => $presentation->fonctions(array_values(array_filter($fonctions, fn (array $f) => $f['fonction'] !== 'interlocuteur'))),
             'entreprises' => $entreprises,
+            // Lot 3 : fonctions que l'utilisateur peut ajouter et que la fiche ne porte pas encore.
+            'fonctions_ajoutables' => $user->can('create', Personne::class) ? app(FonctionsContactEcriture::class)->fonctionsAjoutables($personne, $user) : [],
+            'types_prestataire' => PrestataireType::options(),
         ]);
     }
 }

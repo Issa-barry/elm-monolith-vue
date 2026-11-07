@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Contacts\Entreprises;
 
 use App\Http\Controllers\Controller;
 use App\Models\EntrepriseTierce;
+use App\Services\Contacts\FonctionsContactEcriture;
 use App\Services\Contacts\VisibiliteContacts;
 use App\Support\Contacts\PresentationContacts;
 use Illuminate\Database\Eloquent\Builder;
@@ -73,6 +74,7 @@ class IndexEntrepriseController extends Controller
             'entreprises' => $page,
             'filters' => $filters,
             'options' => $options,
+            'peut_creer' => $user->can('create', EntrepriseTierce::class) && app(FonctionsContactEcriture::class)->fonctionsCreables($user) !== [],
         ]);
     }
 }

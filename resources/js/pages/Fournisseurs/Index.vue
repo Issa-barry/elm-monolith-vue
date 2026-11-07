@@ -52,6 +52,8 @@ interface Fournisseur {
     code_phone_pays: string | null;
     ville: string | null;
     is_active: boolean;
+    /** D17 : aucune opération ne la référence (calculé par le serveur). */
+    supprimable: boolean;
 }
 
 const props = defineProps<{ fournisseurs: Fournisseur[] }>();
@@ -107,13 +109,29 @@ function confirmDelete(f: Fournisseur) {
         acceptClass: 'p-button-danger',
         accept: () => {
             router.delete(`/backoffice/fournisseurs/${f.id}`, {
-                onSuccess: () =>
+                onSuccess: (page) => {
+                    // D17 : le serveur refuse la suppression d'une fiche qui a un historique.
+                    const refus = (
+                        page.props.flash as
+                            | { error?: string | null }
+                            | undefined
+                    )?.error;
+                    if (refus) {
+                        toast.add({
+                            severity: 'error',
+                            summary: 'Suppression impossible',
+                            detail: refus,
+                            life: 6000,
+                        });
+                        return;
+                    }
                     toast.add({
                         severity: 'success',
                         summary: 'Supprimé',
                         detail: `${f.nom_complet ?? f.reference} a été supprimé.`,
                         life: 3000,
-                    }),
+                    });
+                },
             });
         },
     });
@@ -234,11 +252,14 @@ function confirmDelete(f: Fournisseur) {
                             <DropdownMenuSeparator
                                 v-if="
                                     can('fournisseurs.update') &&
-                                    can('fournisseurs.delete')
+                                    can('fournisseurs.delete') &&
+                                    f.supprimable
                                 "
                             />
                             <DropdownMenuItem
-                                v-if="can('fournisseurs.delete')"
+                                v-if="
+                                    can('fournisseurs.delete') && f.supprimable
+                                "
                                 class="cursor-pointer text-destructive focus:text-destructive"
                                 @click="confirmDelete(f)"
                             >
@@ -508,11 +529,15 @@ function confirmDelete(f: Fournisseur) {
                                         <DropdownMenuSeparator
                                             v-if="
                                                 can('fournisseurs.update') &&
-                                                can('fournisseurs.delete')
+                                                can('fournisseurs.delete') &&
+                                                data.supprimable
                                             "
                                         />
                                         <DropdownMenuItem
-                                            v-if="can('fournisseurs.delete')"
+                                            v-if="
+                                                can('fournisseurs.delete') &&
+                                                data.supprimable
+                                            "
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >

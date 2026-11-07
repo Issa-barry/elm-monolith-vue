@@ -65,6 +65,8 @@ interface Proprietaire {
     code_pays: string | null;
     adresse: string | null;
     is_active: boolean;
+    /** D17 : aucune opération ne la référence (calculé par le serveur). */
+    supprimable: boolean;
     vehicules_count: number;
 }
 
@@ -186,13 +188,29 @@ function confirmDelete(p: Proprietaire) {
         acceptClass: 'p-button-danger',
         accept: () => {
             router.delete(`/backoffice/proprietaires/${p.id}`, {
-                onSuccess: () =>
+                onSuccess: (page) => {
+                    // D17 : le serveur refuse la suppression d'une fiche qui a un historique.
+                    const refus = (
+                        page.props.flash as
+                            | { error?: string | null }
+                            | undefined
+                    )?.error;
+                    if (refus) {
+                        toast.add({
+                            severity: 'error',
+                            summary: 'Suppression impossible',
+                            detail: refus,
+                            life: 6000,
+                        });
+                        return;
+                    }
                     toast.add({
                         severity: 'success',
                         summary: 'Supprimé',
                         detail: `${p.nom_affichage} a été supprimé.`,
                         life: 3000,
-                    }),
+                    });
+                },
             });
         },
     });
@@ -358,7 +376,8 @@ function confirmDelete(p: Proprietaire) {
                             <DropdownMenuSeparator
                                 v-if="
                                     can('proprietaires.update') ||
-                                    can('proprietaires.delete')
+                                    (can('proprietaires.delete') &&
+                                        p.supprimable)
                                 "
                             />
                             <DropdownMenuItem
@@ -376,11 +395,14 @@ function confirmDelete(p: Proprietaire) {
                             <DropdownMenuSeparator
                                 v-if="
                                     can('proprietaires.update') &&
-                                    can('proprietaires.delete')
+                                    can('proprietaires.delete') &&
+                                    p.supprimable
                                 "
                             />
                             <DropdownMenuItem
-                                v-if="can('proprietaires.delete')"
+                                v-if="
+                                    can('proprietaires.delete') && p.supprimable
+                                "
                                 class="cursor-pointer text-destructive focus:text-destructive"
                                 @click="confirmDelete(p)"
                             >
@@ -642,7 +664,8 @@ function confirmDelete(p: Proprietaire) {
                                         <DropdownMenuSeparator
                                             v-if="
                                                 can('proprietaires.update') ||
-                                                can('proprietaires.delete')
+                                                (can('proprietaires.delete') &&
+                                                    data.supprimable)
                                             "
                                         />
                                         <DropdownMenuItem
@@ -660,11 +683,15 @@ function confirmDelete(p: Proprietaire) {
                                         <DropdownMenuSeparator
                                             v-if="
                                                 can('proprietaires.update') &&
-                                                can('proprietaires.delete')
+                                                can('proprietaires.delete') &&
+                                                data.supprimable
                                             "
                                         />
                                         <DropdownMenuItem
-                                            v-if="can('proprietaires.delete')"
+                                            v-if="
+                                                can('proprietaires.delete') &&
+                                                data.supprimable
+                                            "
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >

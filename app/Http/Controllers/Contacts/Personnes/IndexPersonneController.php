@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Contacts\Personnes;
 
 use App\Http\Controllers\Controller;
 use App\Models\Personne;
+use App\Services\Contacts\FonctionsContactEcriture;
 use App\Services\Contacts\VisibiliteContacts;
 use App\Support\Contacts\PresentationContacts;
 use Illuminate\Database\Eloquent\Builder;
@@ -66,6 +67,7 @@ class IndexPersonneController extends Controller
             'personnes' => $page,
             'filters' => $filters,
             'options' => $options,
+            'peut_creer' => $user->can('create', Personne::class) && app(FonctionsContactEcriture::class)->fonctionsCreables($user) !== [],
         ]);
     }
 }

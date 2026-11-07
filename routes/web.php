@@ -89,10 +89,16 @@ use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\Comptabilite\TransfererMobileMoneyAgentController;
 use App\Http\Controllers\Comptabilite\VerserCaisseAgentController;
+use App\Http\Controllers\Contacts\CreateContactController;
 use App\Http\Controllers\Contacts\Entreprises\IndexEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\ShowEntrepriseController;
+use App\Http\Controllers\Contacts\Entreprises\StoreEntrepriseController;
+use App\Http\Controllers\Contacts\Entreprises\StoreFonctionEntrepriseController;
 use App\Http\Controllers\Contacts\Personnes\IndexPersonneController;
 use App\Http\Controllers\Contacts\Personnes\ShowPersonneController;
+use App\Http\Controllers\Contacts\Personnes\StoreFonctionPersonneController;
+use App\Http\Controllers\Contacts\Personnes\StorePersonneController;
+use App\Http\Controllers\Contacts\RechercheTelephoneContactController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\Depenses\CommandesCarburantDepenseController;
 use App\Http\Controllers\Depenses\ConcerneDetailDepenseController;
@@ -489,6 +495,15 @@ Route::prefix('backoffice')->group(function () {
         Route::get('contacts/personnes/{personne}', ShowPersonneController::class)->name('contacts.personnes.show');
         Route::get('contacts/entreprises', IndexEntrepriseController::class)->name('contacts.entreprises.index');
         Route::get('contacts/entreprises/{entreprise}', ShowEntrepriseController::class)->name('contacts.entreprises.show');
+
+        // Lot 3 — création « téléphone d'abord » et ajout explicite d'une fonction (ADR 0060).
+        // contacts.create + permission et module de la fonction ; visibilité vérifiée par les contrôleurs.
+        Route::get('contacts/nouveau', CreateContactController::class)->name('contacts.create');
+        Route::get('contacts/recherche-telephone', RechercheTelephoneContactController::class)->name('contacts.recherche-telephone');
+        Route::post('contacts/personnes', StorePersonneController::class)->name('contacts.personnes.store');
+        Route::post('contacts/entreprises', StoreEntrepriseController::class)->name('contacts.entreprises.store');
+        Route::post('contacts/personnes/{personne}/fonctions', StoreFonctionPersonneController::class)->name('contacts.personnes.fonctions.store');
+        Route::post('contacts/entreprises/{entreprise}/fonctions', StoreFonctionEntrepriseController::class)->name('contacts.entreprises.fonctions.store');
 
         // ── Module : PDV ──────────────────────────────────────────────────────────
         // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune

@@ -1,7 +1,7 @@
 # ADR 0060 — Référentiel Contacts : deux fiches d'identité, des fonctions qui gardent leurs ids
 
 - Statut : accepté (architecture validée le 06/11/2026) ; lot 1 réalisé le 06/11/2026 (commit
-  `35abb314`) ; lot 2 réalisé le 07/11/2026
+  `35abb314`) ; lot 2 réalisé le 07/11/2026 (commit `d7a1effb`) ; lot 3 réalisé le 07/11/2026
 - Documentation : [docs/contacts.md](../contacts.md)
 
 ## Contexte
@@ -62,6 +62,17 @@ personnes sans fonction exclues ; doublon temporaire « Clients » / « Contacts
 accepté jusqu'au lot 8. La visibilité (fonctions lisibles, périmètre d'agences des parrains,
 organisation) est décidée par un seul service côté serveur et vérifiée dans les contrôleurs en plus
 des policies, `Gate::before` accordant tout au super_admin.
+
+## Lot 3 (création, 07/11/2026)
+
+Parcours « Nouveau contact » (type, téléphone puis « Rechercher », identité, première fonction),
+ajout explicite d'une fonction à une fiche existante, une fonction par catégorie sous verrou, fin
+de la reprise silencieuse dans les formulaires Fournisseur et Prestataire, et D17 sur les quatre
+écrans Client, Fournisseur, Prestataire, Propriétaire. Décisions du 07/11 : message neutre et
+arrêt pour un numéro d'une fiche non visible ; Fournisseur et Prestataire seuls créables ; D17 dès
+ce lot ; « autre personne » arrête sans retirer ni réaffecter le numéro ; reprise silencieuse
+traitée seulement pour Fournisseur et Prestataire ; modification d'identité au lot 7. Aucune
+migration.
 
 ## Conséquences
 

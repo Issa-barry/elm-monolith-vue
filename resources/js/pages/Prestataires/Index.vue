@@ -54,6 +54,8 @@ interface Prestataire {
     type: string;
     type_label: string;
     is_active: boolean;
+    /** D17 : aucune opération ne la référence (calculé par le serveur). */
+    supprimable: boolean;
 }
 
 const props = defineProps<{ prestataires: Prestataire[] }>();
@@ -120,13 +122,29 @@ function confirmDelete(p: Prestataire) {
         acceptClass: 'p-button-danger',
         accept: () => {
             router.delete(`/backoffice/prestataires/${p.id}`, {
-                onSuccess: () =>
+                onSuccess: (page) => {
+                    // D17 : le serveur refuse la suppression d'une fiche qui a un historique.
+                    const refus = (
+                        page.props.flash as
+                            | { error?: string | null }
+                            | undefined
+                    )?.error;
+                    if (refus) {
+                        toast.add({
+                            severity: 'error',
+                            summary: 'Suppression impossible',
+                            detail: refus,
+                            life: 6000,
+                        });
+                        return;
+                    }
                     toast.add({
                         severity: 'success',
                         summary: 'Supprimé',
                         detail: `${p.nom_complet ?? p.reference} a été supprimé.`,
                         life: 3000,
-                    }),
+                    });
+                },
             });
         },
     });
@@ -256,11 +274,14 @@ function confirmDelete(p: Prestataire) {
                             <DropdownMenuSeparator
                                 v-if="
                                     can('prestataires.update') &&
-                                    can('prestataires.delete')
+                                    can('prestataires.delete') &&
+                                    p.supprimable
                                 "
                             />
                             <DropdownMenuItem
-                                v-if="can('prestataires.delete')"
+                                v-if="
+                                    can('prestataires.delete') && p.supprimable
+                                "
                                 class="cursor-pointer text-destructive focus:text-destructive"
                                 @click="confirmDelete(p)"
                             >
@@ -549,11 +570,15 @@ function confirmDelete(p: Prestataire) {
                                         <DropdownMenuSeparator
                                             v-if="
                                                 can('prestataires.update') &&
-                                                can('prestataires.delete')
+                                                can('prestataires.delete') &&
+                                                data.supprimable
                                             "
                                         />
                                         <DropdownMenuItem
-                                            v-if="can('prestataires.delete')"
+                                            v-if="
+                                                can('prestataires.delete') &&
+                                                data.supprimable
+                                            "
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >

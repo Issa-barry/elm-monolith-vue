@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Contacts\Entreprises;
 
+use App\Enums\PrestataireType;
 use App\Http\Controllers\Controller;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\EntrepriseTierce;
+use App\Services\Contacts\FonctionsContactEcriture;
 use App\Services\Contacts\VisibiliteContacts;
 use App\Support\Contacts\PresentationContacts;
 use Illuminate\Http\Request;
@@ -50,6 +52,9 @@ class ShowEntrepriseController extends Controller
             'entreprise' => $presentation->coordonneesEntreprise($entreprise),
             'fonctions' => $presentation->fonctions($fonctions),
             'interlocuteurs' => $interlocuteurs,
+            // Lot 3 : fonctions que l'utilisateur peut ajouter et que la fiche ne porte pas encore.
+            'fonctions_ajoutables' => $user->can('create', EntrepriseTierce::class) ? app(FonctionsContactEcriture::class)->fonctionsAjoutables($entreprise, $user) : [],
+            'types_prestataire' => PrestataireType::options(),
         ]);
     }
 }

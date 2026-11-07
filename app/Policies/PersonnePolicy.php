@@ -19,6 +19,12 @@ class PersonnePolicy
         return $user->can('contacts.read');
     }
 
+    /** Créer une fiche, ou lui ajouter une fonction (lot 3) ; la permission de la fonction est vérifiée en plus. */
+    public function create(User $user): bool
+    {
+        return $user->can('contacts.create');
+    }
+
     public function view(User $user, Personne $personne): Response
     {
         if (! $user->can('contacts.read')) {

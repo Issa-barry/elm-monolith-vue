@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\PrestataireType;
 use App\Models\Prestataire;
+use App\Support\Contacts\SuppressionFonction;
 use App\Traits\PhoneHandlerTrait;
 use App\Traits\ResolutionIdentiteTiersTrait;
 use Illuminate\Http\RedirectResponse;
@@ -22,7 +23,10 @@ class PrestataireController extends Controller
 
         $prestataires = Prestataire::with(['personne', 'entrepriseTierce'])
             ->where('organization_id', auth()->user()->organization_id)
-            ->get()
+            ->get();
+        $nonSupprimables = array_flip(SuppressionFonction::idsReferences(Prestataire::class, $prestataires->pluck('id')->all()));
+
+        $prestataires = $prestataires
             ->sortBy('nom_complet')
             ->values()
             ->map(fn (Prestataire $p) => [
@@ -39,6 +43,7 @@ class PrestataireController extends Controller
                 'type' => $p->type?->value,
                 'type_label' => $p->type_label,
                 'is_active' => $p->is_active,
+                'supprimable' => ! isset($nonSupprimables[$p->id]),
             ]);
 
         return Inertia::render('Prestataires/Index', [
@@ -176,6 +181,12 @@ class PrestataireController extends Controller
     public function destroy(Prestataire $prestataire): RedirectResponse
     {
         $this->authorize('delete', $prestataire);
+
+        // D17 (ADR 0060) : un prestataire référencé par une opération se désactive, il ne se supprime plus.
+        if (! SuppressionFonction::estSupprimable($prestataire)) {
+            return back()->with('error', SuppressionFonction::message($prestataire));
+        }
+
         $prestataire->delete();
 
         return redirect()->route('prestataires.index')

@@ -13,11 +13,14 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | Lot | Contenu | État |
 | --- | --- | --- |
 | 1 — Socle | Coordonnées, interlocuteurs (service), référentiel des sous-catégories, permissions, lecture des fonctions, synchronisation client non branchée | Fait (06/11/2026, commit `35abb314`) |
-| 2 — Consultation | Listes et fiches Personnes physiques / Entreprises, recherche globale « Contacts », liens de menu — lecture seule | Fait (07/11/2026) |
-| 3 à 9 | Création téléphone d'abord, interlocuteurs à l'écran, reprises, paramétrage, client, bascule, fusion | À venir |
+| 2 — Consultation | Listes et fiches Personnes physiques / Entreprises, recherche globale « Contacts », liens de menu — lecture seule | Fait (07/11/2026, commit `d7a1effb`) |
+| 3 — Création | Parcours « téléphone d'abord », ajout explicite d'une fonction, une fonction par catégorie, fin de la reprise silencieuse (Fournisseur, Prestataire), D17 | Fait (07/11/2026) |
+| 4 à 9 | Interlocuteurs à l'écran, reprises, paramétrage, client, bascule, fusion | À venir |
 
-Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule et ne change
-aucun écran existant (Clients, Fournisseurs, Prestataires, Propriétaires, Parrains).
+Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
+ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
+décision : les formulaires Fournisseur et Prestataire refusent un numéro déjà connu
+(CONTACT-020), et une fonction qui a un historique ne se supprime plus (CONTACT-019).
 
 ## Règles métier (IDs)
 
@@ -88,6 +91,38 @@ aucun écran existant (Clients, Fournisseurs, Prestataires, Propriétaires, Parr
   Entreprise) ; les groupes existants ne changent pas, une même personne peut figurer sous
   « Clients » et « Contacts » jusqu'au lot 8.
 
+- **CONTACT-017** — « Nouveau contact » (`contacts.create` et au moins une fonction créable) : type
+  (Personne ou Entreprise), téléphone puis « Rechercher », identité, première fonction. Le numéro est
+  normalisé comme pour Nouvel employé (libphonenumber). Trois réponses : **libre** (formulaire) ;
+  **connu** et visible (la fiche est présentée, rien n'est rattaché : « C'est la même personne »
+  ajoute la fonction, « C'est une autre personne » arrête avec un message, le numéro n'est ni retiré
+  ni réaffecté) ; **indisponible** (fiche non visible du lecteur : message neutre, aucune donnée, la
+  création s'arrête). La création d'une fiche avec un numéro déjà connu est refusée côté serveur ;
+  fiche et fonction sont créées dans une transaction, et deux créations simultanées du même numéro
+  n'en laissent qu'une. Fonctions créables au lot 3 : Fournisseur et Prestataire (permission de
+  création, de lecture et module actif) ; Client, Propriétaire, Parrain, Livreur et Employé gardent
+  leurs parcours actuels. La modification de l'identité depuis la fiche Contact arrive au lot 7.
+- **CONTACT-018** — Une fiche porte au plus une fonction de chaque catégorie, active ou non
+  (décision 11) : l'ajout d'une fonction déjà portée est refusé, avec l'invitation à réactiver
+  celle qui existe. Contrôle sous verrou de la fiche (`SELECT … FOR UPDATE`). L'ajout d'une
+  fonction exige que la fiche soit visible du lecteur (404 sinon, y compris d'une autre
+  organisation). Un consultant ajouté sur une Personne qui a un compte est relié par le
+  rattachement automatique d'ADR 0056, inchangé.
+- **CONTACT-019** — D17 : une fonction Client, Fournisseur, Prestataire ou Propriétaire qu'une
+  opération référence (vente, cashback, proposition de véhicule ; produit, bon de commande,
+  facture, paiement fournisseur ; emballage, affectation ou barème consultant, dépense, part de
+  commission, fiche de paiement ; véhicule, équipe, part ou paiement logistique ; compte
+  auxiliaire) ne se supprime plus : la suppression est refusée avec un message et le bouton
+  Supprimer n'est affiché que pour une fiche supprimable. Les lignes supprimées logiquement
+  comptent : ce sont encore des historiques. Une fiche sans historique se supprime comme avant.
+- **CONTACT-020** — Fin de la reprise silencieuse dans les formulaires Fournisseur, Prestataire
+  et la création rapide de fournisseur depuis un produit : un numéro déjà enregistré n'est plus
+  repris en ignorant le nom saisi, il est refusé avec un message neutre qui renvoie vers Contacts.
+  À la modification, un numéro déjà porté par une autre fiche est refusé par un message (et non
+  plus par une erreur SQL), et la clé de comparaison du téléphone suit désormais le numéro
+  modifié. Les autres saisies (clients, propriétaires, équipes et livreurs, utilisateurs, parrain
+  depuis le véhicule) gardent leur comportement jusqu'à leurs lots.
+
 ## Écrans (lot 2)
 
 | Route | Écran |
@@ -99,6 +134,18 @@ aucun écran existant (Clients, Fournisseurs, Prestataires, Propriétaires, Parr
 
 Menu : « Entreprises » et « Personnes physiques » en tête de Contacts, visibles avec
 `contacts.read` ; les cinq liens par fonction restent jusqu'au lot 8.
+
+## Écrans et routes (lot 3)
+
+| Route | Rôle |
+| --- | --- |
+| `GET /backoffice/contacts/nouveau?type=personne\|entreprise` | Parcours « Nouveau contact » |
+| `GET /backoffice/contacts/recherche-telephone` | « Rechercher » : libre, connu ou indisponible (lecture seule) |
+| `POST /backoffice/contacts/personnes`, `POST /backoffice/contacts/entreprises` | Création d'une fiche et de sa première fonction |
+| `POST /backoffice/contacts/{personnes\|entreprises}/{id}/fonctions` | Ajout explicite d'une fonction à une fiche existante |
+
+Boutons : « Nouveau contact » sur les deux listes, « Ajouter une fonction » sur les deux fiches,
+affichés selon des indicateurs calculés par le serveur (`peut_creer`, `fonctions_ajoutables`).
 
 ## Permissions
 
@@ -132,6 +179,10 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
 - Services : `App\Services\Contacts\InterlocuteurService`, `FonctionsContact`,
   `ClientIdentiteSynchronisation` (non branché), `VisibiliteContacts` (source unique de la
   visibilité des listes, fiches et recherche — lot 2).
+- Création (lot 3) : services `CreationContact`, `FonctionsContactEcriture`,
+  `RechercheTelephoneContact` ; requêtes `App\Http\Requests\Contacts\*` ; règle D17
+  `App\Support\Contacts\SuppressionFonction` ; messages `MessagesContacts` ; reprise silencieuse
+  retirée de `ResolutionIdentiteTiersTrait` ; page `Contacts/Creer.vue`.
 - Écrans (lot 2) : contrôleurs `App\Http\Controllers\Contacts\{Personnes,Entreprises}\*`,
   policies `PersonnePolicy`, `EntrepriseTiercePolicy`, présentation
   `App\Support\Contacts\PresentationContacts`, recherche `ContactSearchProvider`, pages

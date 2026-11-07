@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * Fiche Entreprise du référentiel Contacts (ADR 0060, lot 2) — lecture seule. La gestion des
- * interlocuteurs (ajouter, principal, désactiver) arrive au lot 4.
+ * Fiche Entreprise du référentiel Contacts (ADR 0060) : consultation (lot 2) et ajout explicite
+ * d'une fonction (lot 3). La gestion des interlocuteurs (ajouter, principal, désactiver) arrive
+ * au lot 4.
  */
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
@@ -16,9 +17,11 @@ import {
     Building2,
     CircleHelp,
     Layers,
+    Plus,
     Users,
 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import AjouterFonctionDialog from '../partials/AjouterFonctionDialog.vue';
 import BadgesFonctions from '../partials/BadgesFonctions.vue';
 import Coordonnees from '../partials/Coordonnees.vue';
 import CopierTelephone from '../partials/CopierTelephone.vue';
@@ -27,13 +30,19 @@ import type {
     EntrepriseFiche,
     FonctionContact,
     InterlocuteurFiche,
+    OptionFiltre,
 } from '../partials/types';
 
 const props = defineProps<{
     entreprise: EntrepriseFiche;
     fonctions: FonctionContact[];
     interlocuteurs: InterlocuteurFiche[];
+    /** Lot 3 : fonctions que l'utilisateur peut ajouter et que la fiche ne porte pas. */
+    fonctions_ajoutables: OptionFiltre[];
+    types_prestataire: OptionFiltre[];
 }>();
+
+const ajoutVisible = ref(false);
 
 const ONGLETS = ['informations', 'fonctions', 'interlocuteurs'] as const;
 const { onglet, choisir } = useUrlTab(ONGLETS, 'informations');
@@ -85,6 +94,15 @@ function telephone(valeur: string | null, code: string | null): string {
                     <BadgesFonctions class="mt-2" :fonctions="fonctions" />
                 </template>
                 <template #actions>
+                    <Button
+                        v-if="fonctions_ajoutables.length > 0"
+                        size="sm"
+                        data-testid="fiche-ajouter-fonction"
+                        @click="ajoutVisible = true"
+                    >
+                        <Plus class="mr-1.5 h-4 w-4" />
+                        Ajouter une fonction
+                    </Button>
                     <Link href="/backoffice/contacts/entreprises">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
@@ -246,5 +264,14 @@ function telephone(valeur: string | null, code: string | null): string {
                 </div>
             </div>
         </div>
+
+        <AjouterFonctionDialog
+            v-if="fonctions_ajoutables.length > 0"
+            v-model:visible="ajoutVisible"
+            :url="`/backoffice/contacts/entreprises/${entreprise.id}/fonctions`"
+            :nom-fiche="entreprise.raison_sociale"
+            :fonctions="fonctions_ajoutables"
+            :types-prestataire="types_prestataire"
+        />
     </AppLayout>
 </template>

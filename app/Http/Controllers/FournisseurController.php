@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
 use App\Models\Personne;
+use App\Support\Contacts\SuppressionFonction;
 use App\Traits\PhoneHandlerTrait;
 use App\Traits\ResolutionIdentiteTiersTrait;
 use Illuminate\Http\RedirectResponse;
@@ -24,7 +25,10 @@ class FournisseurController extends Controller
 
         $fournisseurs = Fournisseur::with(['personne', 'entrepriseTierce'])
             ->where('organization_id', auth()->user()->organization_id)
-            ->get()
+            ->get();
+        $nonSupprimables = array_flip(SuppressionFonction::idsReferences(Fournisseur::class, $fournisseurs->pluck('id')->all()));
+
+        $fournisseurs = $fournisseurs
             ->sortBy('nom_complet')
             ->values()
             ->map(fn (Fournisseur $f) => [
@@ -39,6 +43,7 @@ class FournisseurController extends Controller
                 'code_phone_pays' => $f->code_phone_pays,
                 'ville' => $f->ville,
                 'is_active' => $f->is_active,
+                'supprimable' => ! isset($nonSupprimables[$f->id]),
             ]);
 
         return Inertia::render('Fournisseurs/Index', [
@@ -113,11 +118,10 @@ class FournisseurController extends Controller
         $this->validateLocalPhoneLength(array_merge($data, ['telephone' => $data['phone']]));
         $data = $this->normalizeData($data);
 
-        // Détection de doublon sur le téléphone NORMALISÉ (pas la saisie brute) — un même numéro
-        // peut légitimement désigner une EntrepriseTierce déjà connue (ex: déjà Prestataire) :
-        // dans ce cas on la réutilise. Seul un DEUXIÈME Fournisseur pointant vers cette même
-        // société est bloqué, pour éviter une fiche Fournisseur dupliquée créée par erreur
-        // depuis ce raccourci.
+        // Détection de doublon sur le téléphone NORMALISÉ (pas la saisie brute). Un numéro déjà
+        // fournisseur garde son message précis ; tout autre numéro déjà connu (entreprise déjà
+        // prestataire...) est refusé par resoudreIdentite() : il n'est plus repris en silence, la
+        // fonction s'ajoute depuis Contacts après confirmation (ADR 0060, lot 3, CONTACT-020).
         $telephoneNormalise = Personne::normaliserTelephone($data['phone']);
         $entrepriseExistante = EntrepriseTierce::where('organization_id', $orgId)
             ->where('telephone_normalise', $telephoneNormalise)
@@ -231,6 +235,12 @@ class FournisseurController extends Controller
     public function destroy(Fournisseur $fournisseur): RedirectResponse
     {
         $this->authorize('delete', $fournisseur);
+
+        // D17 (ADR 0060) : un fournisseur référencé par une opération se désactive, il ne se supprime plus.
+        if (! SuppressionFonction::estSupprimable($fournisseur)) {
+            return back()->with('error', SuppressionFonction::message($fournisseur));
+        }
+
         $fournisseur->delete();
 
         return redirect()->route('fournisseurs.index')

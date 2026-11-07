@@ -408,10 +408,15 @@ class ConsultationContactsTest extends TestCase
 
     // ── Lecture seule ───────────────────────────────────────────────────────
 
-    public function test_le_module_contacts_n_expose_aucune_ecriture(): void
+    /**
+     * Les quatre routes de consultation du lot 2 restent en lecture. Les seules écritures du module
+     * sont les créations du lot 3, vérifiées par CreationContactsTest.
+     */
+    public function test_les_routes_de_consultation_restent_en_lecture(): void
     {
+        $noms = ['contacts.personnes.index', 'contacts.personnes.show', 'contacts.entreprises.index', 'contacts.entreprises.show'];
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($r) => str_starts_with((string) $r->getName(), 'contacts.'));
+            ->filter(fn ($r) => in_array($r->getName(), $noms, true));
 
         $this->assertCount(4, $routes);
         $this->assertTrue($routes->every(fn ($r) => $r->methods() === ['GET', 'HEAD']));

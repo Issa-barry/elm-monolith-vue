@@ -1,17 +1,20 @@
 <script setup lang="ts">
 /**
- * Liste « Entreprises » du référentiel Contacts (ADR 0060, lot 2) — lecture seule. Le serveur ne
+ * Liste « Entreprises » du référentiel Contacts (ADR 0060, lots 2 et 3). Le serveur ne
  * renvoie que les entreprises et les fonctions visibles de l'utilisateur.
  */
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
+import { Button } from '@/components/ui/button';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
+import { Plus } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { computed } from 'vue';
@@ -27,6 +30,8 @@ const props = defineProps<{
     entreprises: Pagination<EntrepriseListe>;
     filters: Record<string, unknown>;
     options: OptionsFiltres;
+    /** contacts.create et au moins une fonction créable (calculé par le serveur). */
+    peut_creer: boolean;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -86,16 +91,35 @@ function telephone(e: EntrepriseListe): string {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-4 p-4 sm:gap-6 sm:p-6">
-            <div>
-                <h1 class="text-2xl font-semibold tracking-tight">
-                    Entreprises
-                </h1>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    {{ entreprises.total }} entreprise{{
-                        entreprises.total !== 1 ? 's' : ''
-                    }}. Une seule fiche par entreprise, avec toutes ses
-                    fonctions.
-                </p>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Entreprises
+                    </h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        {{ entreprises.total }} entreprise{{
+                            entreprises.total !== 1 ? 's' : ''
+                        }}. Une seule fiche par entreprise, avec toutes ses
+                        fonctions.
+                    </p>
+                </div>
+                <ListPageActions>
+                    <template #primary>
+                        <Link
+                            v-if="peut_creer"
+                            href="/backoffice/contacts/nouveau?type=entreprise"
+                        >
+                            <Button
+                                size="sm"
+                                class="h-9 px-3 sm:px-4"
+                                data-testid="contact-nouveau"
+                            >
+                                <Plus class="mr-1 h-4 w-4 sm:mr-2" />
+                                Nouveau contact
+                            </Button>
+                        </Link>
+                    </template>
+                </ListPageActions>
             </div>
 
             <DataFilters
