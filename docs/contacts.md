@@ -17,7 +17,9 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 3 — Création | Parcours « téléphone d'abord », ajout explicite d'une fonction, une fonction par catégorie, fin de la reprise silencieuse (Fournisseur, Prestataire), D17 | Fait (07/11/2026, commit `ae3f8842`) |
 | 4 — Interlocuteurs | Gestion depuis l'onglet Interlocuteurs de la fiche Entreprise : ajout « téléphone d'abord », fonction et notes, principal, désactivation, réactivation, journal | Fait (07/11/2026, commit `48234f04`) |
 | 5 — Propriétaire entreprise | Lien vers une fiche Entreprise, contact devenu interlocuteur, reprise des données réversible (ADR 0060, décisions D1 à D10) | Codé (08/11/2026), non commité |
-| 6 à 9 | Paramétrage, client, bascule, fusion | À venir |
+| 6a — Catégories de contacts | Écran de paramétrage, sous-catégories Fournisseur multiples, catégories libres (Partenaire) et filtre, sous-catégories système en lecture seule | Codé (08/11/2026), non commité |
+| 6b — Qualifications Prestataire | Qualifications multiples, `qualifieConsultant()`, D15, reprise des qualifications | À planifier après stabilisation du 6a |
+| 7 à 9 | Client, bascule, fusion | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
@@ -27,7 +29,10 @@ ajoute 6 routes de gestion des interlocuteurs (1 GET en lecture seule, 4 POST, 1
 migration, aucun changement d'accès aux commissions. Le lot 5 ajoute une colonne
 (`proprietaires.entreprise_tierce_id`), deux tables de journal de reprise, une route GET en lecture
 seule et la commande `contacts:reprendre-proprietaires-entreprises` ; il ne concerne que les
-propriétaires de type entreprise.
+propriétaires de type entreprise. Le lot 6a ajoute trois tables (catégories libres et leurs
+liaisons), une migration de données (« Partenaire » par organisation), l'écran « Catégories de
+contacts » (1 GET, 3 POST, 2 PATCH) et l'attribution des catégories libres (2 PUT) ; aucun effet
+sur les ventes, commissions, comptabilité ou logistique.
 
 ## Règles métier (IDs)
 
@@ -61,7 +66,9 @@ propriétaires de type entreprise.
   (`prestataires.type`). Ces colonnes restent la seule source lue par les prix, le PDV et les
   commissions.
 - **CONTACT-009** — Une sous-catégorie système (les 4 natures client, Consultant — D18) ne change ni
-  de code ni de catégorie et ne se désactive pas ; seuls son libellé et son ordre se modifient. Une
+  de code ni de catégorie, ne se renomme pas et ne se désactive pas ; seul son ordre se modifie
+  (lot 6a, décision C : le libellé reste en lecture seule tant que ventes, PDV et factures ne lisent
+  pas le référentiel ; D18 interdit la désactivation, il n'autorise pas le renommage). Une
   sous-catégorie ne se supprime jamais : désactivée, elle n'est plus proposée mais reste affichée sur les
   fiches qui la portent.
 - **CONTACT-010** — Chaque organisation reçoit les sous-catégories par défaut (natures client et
@@ -220,6 +227,37 @@ propriétaires de type entreprise.
   conservées, même sans fonction (invisibles dans Contacts) : aucune identité n'est effacée.
   L'annulation est journalisée ; la relancer ne fait rien de plus.
 
+- **CONTACT-033** — Écran « Catégories de contacts » (lot 6a), menu Contacts : consultation et
+  administration réservées à `contacts.gerer_categories`, revérifiée à chaque requête ; un élément
+  d'une autre organisation répond 404. Sous-catégories par fonction : seules celles des
+  fournisseurs s'administrent ; celles des clients et des prestataires sont affichées en lecture
+  seule (décision H : leurs libellés sont encore écrits en dur dans ventes, PDV et Prestataires ;
+  l'administration des qualifications prestataire arrive au lot 6b). Rien ne se supprime.
+- **CONTACT-034** — Code et libellé : le code est généré une fois depuis le libellé (minuscules,
+  sans accents, `_2`, `_3`… en cas de collision) et ne change plus, même après renommage. Libellé
+  unique, sans distinction de casse, par organisation et par fonction (sous-catégories) ou par
+  organisation (catégories libres). Une sous-catégorie système ne se renomme pas, ne se désactive
+  pas et ne change pas de code, y compris pour un super_admin (verrou du modèle).
+- **CONTACT-035** — Désactivation : un élément désactivé n'est plus proposé pour une nouvelle
+  saisie, reste affiché sur les fiches qui le portent, et ces fiches restent enregistrables ; il
+  peut être réactivé. L'ordre d'une liste se change en une fois (la liste envoyée doit être
+  complète, sinon refus).
+- **CONTACT-036** — Sous-catégories d'un fournisseur (formulaire Fournisseur, `fournisseurs.create`
+  ou `fournisseurs.update`) : plusieurs possibles, de l'organisation et de la fonction Fournisseur
+  seulement ; une désactivée se garde mais ne s'ajoute pas ; sans le champ, les sous-catégories
+  portées ne changent pas. Affichées sur la ligne de fonction des fiches Contacts et filtrables
+  (filtre « Sous-catégorie »). Aucun effet sur les achats, factures ou la comptabilité.
+- **CONTACT-037** — Catégories libres (ex. Partenaire, décision 5) : étiquettes sans effet sur les
+  ventes, commissions, comptabilité, logistique ni permissions, distinctes des catégories de
+  produits ou de véhicules et des natures client. « Partenaire » est créée dans chaque organisation,
+  existante (migration rejouable) et nouvelle, une seule fois même renommée ; elle reste renommable
+  et désactivable. Attribution depuis le bloc « Catégories » des fiches Personne et Entreprise avec
+  `contacts.update`, sur une fiche visible seulement (404 sinon, super_admin compris) : la liste
+  envoyée remplace la liste portée, dans une transaction ; une catégorie désactivée se garde mais ne
+  s'ajoute pas. Filtre « Catégorie » sur les deux listes. Un contact sans fonction reste invisible
+  (CONTACT-014 inchangée) : le cas « partenaire seul » est hors lot 6a. Journal d'audit : ids
+  ajoutés et retirés seulement.
+
 ## Écrans (lot 2)
 
 | Route | Écran |
@@ -272,14 +310,29 @@ ligne (Modifier la fonction et les notes, Définir comme principal, Désactiver 
 Formulaire Propriétaire : téléphone et NIF de l'entreprise, recherche et choix dans la carte
 « Entreprise » existante ; aucune carte ajoutée.
 
+## Routes (lot 6a)
+
+| Route | Rôle |
+| --- | --- |
+| `GET /backoffice/contacts/categories` | Écran « Catégories de contacts » |
+| `POST …/categories/sous-categories`, `PATCH …/categories/sous-categories/{sousCategorie}` | Créer ; renommer, désactiver, réactiver (fournisseur, non système) |
+| `POST …/categories/libres`, `PATCH …/categories/libres/{categorieLibre}` | Créer ; renommer, désactiver, réactiver une catégorie libre |
+| `POST …/categories/ordre` | Nouvel ordre d'une liste (`libres` ou `fournisseur`) |
+| `PUT /backoffice/contacts/{personnes\|entreprises}/{id}/categories` | Catégories libres d'une fiche (`contacts.update`, fiche visible) |
+| `POST`/`PUT /backoffice/fournisseurs` (existantes) | Champ `sous_categorie_ids[]` |
+
+Menu Contacts : lien « Catégories de contacts » (avec `contacts.gerer_categories`). Fiches
+Personne et Entreprise : bloc « Catégories » dans l'onglet Informations. Listes : filtre
+« Catégorie ».
+
 ## Permissions
 
 | Permission | Effet |
 | --- | --- |
 | `contacts.read` | Consulter les fiches Personne et Entreprise |
 | `contacts.create` | Créer une fiche |
-| `contacts.update` | Modifier l'identité (s'applique à toutes les fonctions de la fiche) |
-| `contacts.gerer_categories` | Paramétrer les sous-catégories |
+| `contacts.update` | Modifier l'identité (s'applique à toutes les fonctions de la fiche) ; attribuer les catégories libres d'une fiche (lot 6a) |
+| `contacts.gerer_categories` | Consulter et paramétrer les sous-catégories et les catégories libres (écran « Catégories de contacts », lot 6a) |
 | `contacts.gerer_interlocuteurs` | Ajouter, modifier, désigner, désactiver, réactiver un interlocuteur (lot 4, avec l'entreprise visible) |
 
 Pas de `contacts.delete` : une fiche se désactive. Ajoutées par migration à `super_admin` et
@@ -324,4 +377,10 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   `RepriseProprietairesEntreprises` et commande `ContactsReprendreProprietairesEntreprisesCommand`,
   modèles `ContactsReprise`, `ContactsRepriseLigne`, formulaire
   `Proprietaires/partials/ProprietaireForm.vue`.
+- Catégories (lot 6a) : service `App\Services\Contacts\ReferentielCategories` (référentiel,
+  attribution, sous-catégories fournisseur), modèles `CategorieLibre` (table `contact_categories`),
+  `CategorieLibreAttribution` (liaisons), relations `Personne::categoriesLibres()`,
+  `EntrepriseTierce::categoriesLibres()`, initialisation `CategoriesLibresParDefaut`, policy
+  `CategorieLibrePolicy`, contrôleurs `App\Http\Controllers\Contacts\Categories\*`, page
+  `Contacts/Categories/Index.vue`, bloc `partials/BlocCategories.vue`.
 - Tests : `tests/Feature/Contacts/`.

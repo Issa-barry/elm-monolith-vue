@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Contacts\Entreprises;
 
 use App\Enums\PrestataireType;
 use App\Http\Controllers\Controller;
+use App\Models\CategorieLibre;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\EntrepriseTierce;
 use App\Services\Contacts\FonctionsContactEcriture;
+use App\Services\Contacts\ReferentielCategories;
 use App\Services\Contacts\VisibiliteContacts;
 use App\Support\Contacts\PresentationContacts;
 use Illuminate\Http\Request;
@@ -59,6 +61,12 @@ class ShowEntrepriseController extends Controller
             'types_prestataire' => PrestataireType::options(),
             // Lot 4 : gestion des interlocuteurs (l'entreprise est déjà vérifiée visible ci-dessus).
             'peut_gerer_interlocuteurs' => $user->can('gererInterlocuteurs', EntrepriseTierce::class),
+            // Lot 6a : catégories libres portées ; modifiables avec contacts.update (entreprise déjà vérifiée visible).
+            'categories' => $portees = PresentationContacts::categoriesLibresDes('entreprise_contact_categories', 'entreprise_tierce_id', [$entreprise->id])[$entreprise->id],
+            'peut_modifier_categories' => $peut = $user->can('modifierCategories', EntrepriseTierce::class),
+            'categories_options' => $peut
+                ? ReferentielCategories::options(CategorieLibre::where('organization_id', $entreprise->organization_id)->get(), array_column($portees, 'id'))
+                : [],
         ]);
     }
 }

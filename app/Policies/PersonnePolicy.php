@@ -25,6 +25,12 @@ class PersonnePolicy
         return $user->can('contacts.create');
     }
 
+    /** Catégories libres de la fiche (lot 6a) ; la visibilité de la fiche est vérifiée en plus par le contrôleur. */
+    public function modifierCategories(User $user): bool
+    {
+        return $user->can('contacts.update');
+    }
+
     public function view(User $user, Personne $personne): Response
     {
         if (! $user->can('contacts.read')) {

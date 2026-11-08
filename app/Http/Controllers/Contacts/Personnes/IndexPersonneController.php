@@ -8,6 +8,7 @@ use App\Services\Contacts\FonctionsContactEcriture;
 use App\Services\Contacts\VisibiliteContacts;
 use App\Support\Contacts\PresentationContacts;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -34,9 +35,16 @@ class IndexPersonneController extends Controller
             'fonction' => ['nullable', Rule::in($lisibles)],
             'sous_categorie' => ['nullable', Rule::in(array_column($options['sous_categories'], 'value'))],
             'ville' => ['nullable', 'string', 'max:100'],
+            'categorie' => ['nullable', Rule::in(array_column($options['categories'], 'value'))],
         ]);
 
         $requete = $visibilite->personnesVisibles($user)
+            // Lot 6a : catégorie libre (étiquette sans effet). Ne fait que réduire les fiches visibles.
+            ->when($filters['categorie'] ?? null, fn (Builder $q, string $code) => $q->whereExists(fn (QueryBuilder $s) => $s->from('personne_contact_categories')
+                ->join('contact_categories', 'contact_categories.id', '=', 'personne_contact_categories.contact_categorie_id')
+                ->whereColumn('personne_contact_categories.personne_id', 'personnes.id')
+                ->where('contact_categories.organization_id', $user->organization_id)
+                ->where('contact_categories.code', $code)))
             ->when($filters['fonction'] ?? null, fn (Builder $q, string $f) => $visibilite->personnesAvecFonction($q, $user, $f))
             ->when($filters['sous_categorie'] ?? null, function (Builder $q, string $valeur) use ($visibilite, $user) {
                 [$categorie, $code] = explode(':', $valeur, 2);

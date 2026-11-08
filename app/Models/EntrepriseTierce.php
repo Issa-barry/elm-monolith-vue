@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -92,6 +93,15 @@ class EntrepriseTierce extends Model
     public function proprietaires(): HasMany
     {
         return $this->hasMany(Proprietaire::class);
+    }
+
+    /** Catégories libres du référentiel Contacts (ADR 0060, lot 6a), sans effet métier. */
+    public function categoriesLibres(): BelongsToMany
+    {
+        return $this->belongsToMany(CategorieLibre::class, 'entreprise_contact_categories', 'entreprise_tierce_id', 'contact_categorie_id')
+            ->using(CategorieLibreAttribution::class)
+            ->withPivot(['id', 'created_by'])
+            ->withTimestamps();
     }
 
     public function interlocuteurs(): HasMany

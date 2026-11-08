@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -125,6 +126,15 @@ class Personne extends Model
     public function interlocutions(): HasMany
     {
         return $this->hasMany(EntrepriseInterlocuteur::class);
+    }
+
+    /** Catégories libres du référentiel Contacts (ADR 0060, lot 6a), sans effet métier. */
+    public function categoriesLibres(): BelongsToMany
+    {
+        return $this->belongsToMany(CategorieLibre::class, 'personne_contact_categories', 'personne_id', 'contact_categorie_id')
+            ->using(CategorieLibreAttribution::class)
+            ->withPivot(['id', 'created_by'])
+            ->withTimestamps();
     }
 
     public function piecesIdentite(): MorphMany

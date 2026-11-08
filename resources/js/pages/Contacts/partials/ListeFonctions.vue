@@ -38,7 +38,11 @@ defineProps<{ fonctions: FonctionContact[] }>();
                 </p>
                 <p class="truncate text-xs text-muted-foreground">
                     {{
-                        [f.sous_categorie_libelle, f.reference]
+                        [
+                            f.sous_categorie_libelle,
+                            f.sous_categories?.join(', '),
+                            f.reference,
+                        ]
                             .filter(Boolean)
                             .join(' · ') || '—'
                     }}

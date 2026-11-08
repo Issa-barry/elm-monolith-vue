@@ -6,6 +6,7 @@ import { paysOptionsByName } from '@/lib/pays';
 import { Save } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
+import MultiSelect from 'primevue/multiselect';
 import Textarea from 'primevue/textarea';
 import { computed } from 'vue';
 
@@ -28,6 +29,15 @@ export interface FormData {
     adresse: string | null;
     notes: string | null;
     is_active: boolean;
+    /** Lot 6a (ADR 0060) : sous-catégories du référentiel Contacts, sans effet métier. */
+    sous_categorie_ids: string[];
+}
+
+/** Sous-catégorie proposée : actives, plus celles déjà portées même désactivées. */
+export interface OptionSousCategorie {
+    value: string;
+    label: string;
+    actif: boolean;
 }
 
 const props = defineProps<{
@@ -35,6 +45,7 @@ const props = defineProps<{
     errors: Partial<Record<keyof FormData, string>>;
     processing: boolean;
     reference?: string | null;
+    sousCategoriesOptions?: OptionSousCategorie[];
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -428,6 +439,45 @@ function onPhoneInput(value: string | null | undefined) {
                             Décochez pour désactiver
                         </p>
                     </div>
+                </div>
+
+                <div v-if="(sousCategoriesOptions ?? []).length > 0">
+                    <Label for="sous_categorie_ids" class="mb-1.5 block"
+                        >Sous-catégories</Label
+                    >
+                    <MultiSelect
+                        input-id="sous_categorie_ids"
+                        :model-value="form.sous_categorie_ids"
+                        :options="sousCategoriesOptions"
+                        option-label="label"
+                        option-value="value"
+                        :option-disabled="
+                            (o: OptionSousCategorie) =>
+                                !o.actif &&
+                                !form.sous_categorie_ids.includes(o.value)
+                        "
+                        display="chip"
+                        placeholder="Aucune"
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.sous_categorie_ids }"
+                        data-testid="fournisseur-sous-categories"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                sous_categorie_ids: $event ?? [],
+                            })
+                        "
+                    />
+                    <p
+                        v-if="errors.sous_categorie_ids"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.sous_categorie_ids }}
+                    </p>
+                    <p v-else class="mt-1 text-xs text-muted-foreground">
+                        Descriptives, sans effet sur les achats ni la
+                        comptabilité.
+                    </p>
                 </div>
 
                 <div>

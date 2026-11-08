@@ -77,14 +77,16 @@ class ReferentielSousCategoriesTest extends TestCase
     public function test_l_initialisation_est_rejouable_sans_doublon_ni_ecrasement(): void
     {
         $org = Organization::factory()->create();
-        $grossiste = $this->sousCategorie($org, ContactCategorie::CLIENT, 'grossiste');
-        $grossiste->update(['libelle' => 'Grossiste (gros volumes)']);
+        // Lot 6a (décision C) : un libellé système ne se renomme plus ; la non-réécriture se vérifie
+        // sur une sous-catégorie modifiable.
+        $machiniste = $this->sousCategorie($org, ContactCategorie::PRESTATAIRE, 'machiniste');
+        $machiniste->update(['libelle' => 'Machiniste (engins)']);
 
         $this->assertSame(0, SousCategoriesSysteme::initialiserPour($org->id));
         $this->assertSame(0, SousCategoriesSysteme::initialiserPour($org->id));
 
         $this->assertSame(7, ContactSousCategorie::where('organization_id', $org->id)->count());
-        $this->assertSame('Grossiste (gros volumes)', $grossiste->fresh()->libelle);
+        $this->assertSame('Machiniste (engins)', $machiniste->fresh()->libelle);
     }
 
     public function test_la_migration_de_donnees_rejouee_ne_cree_aucun_doublon(): void
@@ -110,25 +112,28 @@ class ReferentielSousCategoriesTest extends TestCase
         ContactSousCategorie::create(['organization_id' => $a->id, 'categorie' => 'client', 'code' => 'externe', 'libelle' => 'Doublon']);
     }
 
-    public function test_une_sous_categorie_systeme_ne_change_ni_de_code_ni_d_activation(): void
+    /** Lot 6a (décision C) : le libellé système est aussi en lecture seule ; seul l'ordre change. */
+    public function test_une_sous_categorie_systeme_ne_change_ni_de_code_ni_de_libelle_ni_d_activation(): void
     {
         $org = Organization::factory()->create();
 
         foreach ([['client', 'grossiste'], ['prestataire', 'consultant']] as [$categorie, $code]) {
             $systeme = $this->sousCategorie($org, ContactCategorie::from($categorie), $code);
+            $libelle = $systeme->libelle;
 
-            foreach ([['code' => 'autre'], ['is_active' => false], ['categorie' => 'fournisseur']] as $changement) {
+            foreach ([['code' => 'autre'], ['is_active' => false], ['categorie' => 'fournisseur'], ['libelle' => 'Libellé renommé']] as $changement) {
                 try {
                     $systeme->fresh()->update($changement);
                     $this->fail('Changement accepté sur une sous-catégorie système : '.json_encode($changement));
                 } catch (ValidationException) {
                     $this->assertSame($code, $systeme->fresh()->code);
+                    $this->assertSame($libelle, $systeme->fresh()->libelle);
                     $this->assertTrue($systeme->fresh()->is_active);
                 }
             }
 
-            $systeme->fresh()->update(['libelle' => 'Libellé renommé', 'ordre' => 9]);
-            $this->assertSame('Libellé renommé', $systeme->fresh()->libelle);
+            $systeme->fresh()->update(['ordre' => 9]);
+            $this->assertSame(9, $systeme->fresh()->ordre);
         }
     }
 

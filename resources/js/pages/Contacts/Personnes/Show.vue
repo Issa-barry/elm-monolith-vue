@@ -6,6 +6,7 @@
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { useFlashToast } from '@/composables/useFlashToast';
 import { useUrlTab } from '@/composables/useUrlTab';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -22,11 +23,14 @@ import {
 import { computed, ref } from 'vue';
 import AjouterFonctionDialog from '../partials/AjouterFonctionDialog.vue';
 import BadgesFonctions from '../partials/BadgesFonctions.vue';
+import BlocCategories from '../partials/BlocCategories.vue';
 import Coordonnees from '../partials/Coordonnees.vue';
 import ListeFonctions from '../partials/ListeFonctions.vue';
 import type {
+    CategorieFiche,
     EntrepriseRepresentee,
     FonctionContact,
+    OptionCategorie,
     OptionFiltre,
     PersonneFiche,
 } from '../partials/types';
@@ -38,8 +42,13 @@ const props = defineProps<{
     /** Lot 3 : fonctions que l'utilisateur peut ajouter et que la fiche ne porte pas. */
     fonctions_ajoutables: OptionFiltre[];
     types_prestataire: OptionFiltre[];
+    /** Lot 6a : catégories libres et permission `contacts.update` (revérifiée côté serveur). */
+    categories: CategorieFiche[];
+    categories_options: OptionCategorie[];
+    peut_modifier_categories: boolean;
 }>();
 
+useFlashToast();
 const ajoutVisible = ref(false);
 
 const ONGLETS = ['informations', 'fonctions', 'entreprises'] as const;
@@ -213,6 +222,13 @@ const telephone = computed(
                             :adresse="personne.adresse"
                             :latitude="personne.latitude"
                             :longitude="personne.longitude"
+                        />
+                        <BlocCategories
+                            class="mt-6 border-t pt-6"
+                            :url="`/backoffice/contacts/personnes/${personne.id}/categories`"
+                            :categories="categories"
+                            :options="categories_options"
+                            :peut-modifier="peut_modifier_categories"
                         />
                     </section>
                 </div>

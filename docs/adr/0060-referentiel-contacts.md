@@ -3,7 +3,8 @@
 - Statut : accepté (architecture validée le 06/11/2026) ; lot 1 réalisé le 06/11/2026 (commit
   `35abb314`) ; lot 2 réalisé le 07/11/2026 (commit `d7a1effb`) ; lot 3 réalisé le 07/11/2026
   (commit `ae3f8842`) ; lot 4 réalisé le 07/11/2026 (commit `48234f04`) ; lot 5 : décisions
-  validées le 07/11/2026, plan technique validé et réalisé le 08/11/2026.
+  validées le 07/11/2026, plan technique validé et réalisé le 08/11/2026 (commit `d2c763e3`) ;
+  lot 6a réalisé le 08/11/2026 ; lot 6b à planifier.
 - Documentation : [docs/contacts.md](../contacts.md)
 
 ## Contexte
@@ -131,6 +132,21 @@ de la reprise a un identifiant (`contacts_reprises`) et journalise ses valeurs d
 entreprises créées, même sans fonction. La raison sociale de l'entreprise est recopiée sur le
 propriétaire relié quel que soit l'écran qui la modifie (Fournisseur et Prestataire compris). Règles
 CONTACT-027 à CONTACT-032.
+
+## Lot 6 (paramétrage) — découpage et lot 6a (08/11/2026)
+
+Décisions du 08/11 : (A) découpage en 6a (paramétrage, sans effet métier) puis 6b
+(qualifications Prestataire, `qualifieConsultant()`, D15) ; (B, 6b) `prestataires.type` rendu
+facultatif, anciennes valeurs conservées, qualifications multiples sans priorité ; (C) sous-catégories
+système en lecture seule — code, libellé et activation — tant que ventes, PDV et factures ne lisent
+pas le référentiel (D18 interdit la désactivation, il n'autorise pas le renommage) ; (D) catégories
+libres incluses au 6a, avec bloc sur les fiches et filtre, attribution par `contacts.update` ;
+(E, 6b) reprise des qualifications par migration au déploiement, avant la bascule des lectures ;
+(F) écran dans le menu Contacts, « Catégories de contacts » ; (G) « Partenaire » créée pour chaque
+organisation existante et nouvelle, idempotente ; (H) au 6a, seules les sous-catégories Fournisseur
+et les catégories libres s'administrent ; (I) un contact sans fonction reste hors périmètre, les
+catégories libres ne s'attribuent qu'aux fiches visibles. Codes stables après renommage ; libellé
+unique sans distinction de casse. Règles CONTACT-033 à CONTACT-037 ; CONTACT-009 modifiée.
 
 ## Conséquences
 

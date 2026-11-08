@@ -74,6 +74,12 @@ const filterFields = computed<FilterField[]>(() => [
         options: props.options.sous_categories,
     },
     {
+        key: 'categorie',
+        label: 'Catégorie',
+        type: 'select',
+        options: props.options.categories,
+    },
+    {
         key: 'ville',
         label: 'Ville',
         type: 'text',

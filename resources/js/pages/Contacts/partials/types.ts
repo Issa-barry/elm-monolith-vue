@@ -23,6 +23,8 @@ export interface FonctionContact {
     /** Lot 5 (D10) : propriétaire entreprise vu depuis la fiche de son contact. */
     au_nom_de?: string | null;
     entreprise_lien?: string | null;
+    /** Lot 6a : sous-catégories d'un fournisseur (sans effet métier). */
+    sous_categories?: string[];
 }
 
 export interface OptionFiltre {
@@ -33,6 +35,22 @@ export interface OptionFiltre {
 export interface OptionsFiltres {
     fonctions: OptionFiltre[];
     sous_categories: OptionFiltre[];
+    /** Lot 6a : catégories libres actives (filtre « Catégorie »). */
+    categories: OptionFiltre[];
+}
+
+/** Lot 6a : catégorie libre portée par une fiche (désactivée comprise). */
+export interface CategorieFiche {
+    id: string;
+    libelle: string;
+    is_active: boolean;
+}
+
+/** Option d'un choix multiple : actives, plus celles déjà portées même désactivées. */
+export interface OptionCategorie {
+    value: string;
+    label: string;
+    actif: boolean;
 }
 
 export interface Pagination<T> {

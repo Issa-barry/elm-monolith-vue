@@ -5,9 +5,11 @@ namespace App\Support\Contacts;
 use App\Enums\ContactCategorie;
 use App\Enums\StatutEmploye;
 use App\Enums\TypeProprietaire;
+use App\Models\CategorieLibre;
 use App\Models\ContactSousCategorie;
 use App\Models\EntrepriseTierce;
 use App\Models\Personne;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Données transmises aux écrans du référentiel Contacts (ADR 0060, lot 2). Seules les coordonnées
@@ -124,7 +126,7 @@ final class PresentationContacts
      * ni dans les badges ni dans les filtres (CONTACT-013).
      *
      * @param  list<string>  $fonctionsLisibles
-     * @return array{fonctions: list<array{value: string, label: string}>, sous_categories: list<array{value: string, label: string}>}
+     * @return array{fonctions: list<array{value: string, label: string}>, sous_categories: list<array{value: string, label: string}>, categories: list<array{value: string, label: string}>}
      */
     public function optionsFiltres(array $fonctionsLisibles): array
     {
@@ -145,7 +147,40 @@ final class PresentationContacts
         return [
             'fonctions' => array_map(fn (string $f) => ['value' => $f, 'label' => self::LIBELLES_FONCTIONS[$f]], $fonctionsLisibles),
             'sous_categories' => $sousCategories,
+            // Lot 6a : catégories libres actives (filtre « Catégorie », par code stable).
+            'categories' => CategorieLibre::where('organization_id', $this->organizationId)
+                ->actives()
+                ->orderBy('ordre')->orderBy('libelle')
+                ->get(['code', 'libelle'])
+                ->map(fn (CategorieLibre $c) => ['value' => $c->code, 'label' => $c->libelle])
+                ->values()
+                ->all(),
         ];
+    }
+
+    /**
+     * Catégories libres portées par chaque fiche (lot 6a), désactivées comprises.
+     *
+     * @param  list<string>  $ids
+     * @return array<string, list<array{id: string, libelle: string, is_active: bool}>>
+     */
+    public static function categoriesLibresDes(string $table, string $colonne, array $ids): array
+    {
+        $resultat = array_fill_keys($ids, []);
+        if ($ids === []) {
+            return $resultat;
+        }
+
+        $lignes = DB::table($table)
+            ->join('contact_categories', 'contact_categories.id', '=', "{$table}.contact_categorie_id")
+            ->whereIn("{$table}.{$colonne}", $ids)
+            ->orderBy('contact_categories.ordre')->orderBy('contact_categories.libelle')
+            ->get(["{$table}.{$colonne} as fiche_id", 'contact_categories.id', 'contact_categories.libelle', 'contact_categories.is_active']);
+        foreach ($lignes as $l) {
+            $resultat[$l->fiche_id][] = ['id' => $l->id, 'libelle' => $l->libelle, 'is_active' => (bool) $l->is_active];
+        }
+
+        return $resultat;
     }
 
     private function libelleSousCategorie(string $fonction, ?string $code): ?string

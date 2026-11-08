@@ -96,6 +96,12 @@ const contactsItems = computed((): NavItem[] => {
         sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     if (canSee('parrains.read', 'vehicules'))
         sub.push({ title: 'Parrains', href: '/backoffice/parrains' });
+    // Lot 6a (ADR 0060) : paramétrage du référentiel, distinct des catégories de produits.
+    if (can('contacts.gerer_categories'))
+        sub.push({
+            title: 'Catégories de contacts',
+            href: '/backoffice/contacts/categories',
+        });
     return sub;
 });
 

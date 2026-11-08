@@ -89,6 +89,14 @@ use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\Comptabilite\TransfererMobileMoneyAgentController;
 use App\Http\Controllers\Comptabilite\VerserCaisseAgentController;
+use App\Http\Controllers\Contacts\Categories\AttribuerCategoriesEntrepriseController;
+use App\Http\Controllers\Contacts\Categories\AttribuerCategoriesPersonneController;
+use App\Http\Controllers\Contacts\Categories\IndexCategoriesController;
+use App\Http\Controllers\Contacts\Categories\OrdonnerCategoriesController;
+use App\Http\Controllers\Contacts\Categories\StoreCategorieLibreController;
+use App\Http\Controllers\Contacts\Categories\StoreSousCategorieController;
+use App\Http\Controllers\Contacts\Categories\UpdateCategorieLibreController;
+use App\Http\Controllers\Contacts\Categories\UpdateSousCategorieController;
 use App\Http\Controllers\Contacts\CreateContactController;
 use App\Http\Controllers\Contacts\Entreprises\IndexEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\ShowEntrepriseController;
@@ -522,6 +530,17 @@ Route::prefix('backoffice')->group(function () {
             Route::post('{interlocuteur}/desactiver', DesactiverInterlocuteurController::class)->name('desactiver');
             Route::post('{interlocuteur}/reactiver', ReactiverInterlocuteurController::class)->name('reactiver');
         });
+
+        // Lot 6a — catégories de contacts (ADR 0060). Écran : contacts.gerer_categories ;
+        // attribution des catégories libres : contacts.update et fiche visible (contrôleurs).
+        Route::get('contacts/categories', IndexCategoriesController::class)->name('contacts.categories.index');
+        Route::post('contacts/categories/sous-categories', StoreSousCategorieController::class)->name('contacts.categories.sous-categories.store');
+        Route::patch('contacts/categories/sous-categories/{sousCategorie}', UpdateSousCategorieController::class)->name('contacts.categories.sous-categories.update');
+        Route::post('contacts/categories/libres', StoreCategorieLibreController::class)->name('contacts.categories.libres.store');
+        Route::patch('contacts/categories/libres/{categorieLibre}', UpdateCategorieLibreController::class)->name('contacts.categories.libres.update');
+        Route::post('contacts/categories/ordre', OrdonnerCategoriesController::class)->name('contacts.categories.ordre');
+        Route::put('contacts/personnes/{personne}/categories', AttribuerCategoriesPersonneController::class)->name('contacts.personnes.categories.update');
+        Route::put('contacts/entreprises/{entreprise}/categories', AttribuerCategoriesEntrepriseController::class)->name('contacts.entreprises.categories.update');
 
         // ── Module : PDV ──────────────────────────────────────────────────────────
         // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune

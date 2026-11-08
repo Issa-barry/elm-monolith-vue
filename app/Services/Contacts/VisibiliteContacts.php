@@ -33,7 +33,7 @@ use Illuminate\Support\Collection;
  *   nulle part (liste, fiche, recherche, compteurs). Une personne sans fonction (compte seul)
  *   n'est jamais visible ici : elle se gère dans Utilisateurs.
  *
- * @phpstan-type Fonction array{fonction: string, id: string, actif: ?bool, sous_categorie: ?string, reference: ?string, entreprise_tierce_id?: string, au_nom_de?: ?string}
+ * @phpstan-type Fonction array{fonction: string, id: string, actif: ?bool, sous_categorie: ?string, reference: ?string, entreprise_tierce_id?: string, au_nom_de?: ?string, sous_categories?: list<string>}
  */
 final class VisibiliteContacts
 {
@@ -228,8 +228,8 @@ final class VisibiliteContacts
                 fn (Client $c) => ['id' => $c->id, 'actif' => $c->is_active, 'sous_categorie' => $c->type?->value, 'reference' => null]);
         }
         if ($this->peutLire($lecteur, 'fournisseur')) {
-            $ajouter('fournisseur', Fournisseur::whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
-                fn (Fournisseur $f) => ['id' => $f->id, 'actif' => $f->is_active, 'sous_categorie' => null, 'reference' => $f->reference]);
+            $ajouter('fournisseur', Fournisseur::with('sousCategories')->whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
+                fn (Fournisseur $f) => ['id' => $f->id, 'actif' => $f->is_active, 'sous_categorie' => null, 'reference' => $f->reference, 'sous_categories' => $this->libellesSousCategories($f)]);
         }
         if ($this->peutLire($lecteur, 'prestataire')) {
             $ajouter('prestataire', Prestataire::whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
@@ -277,8 +277,8 @@ final class VisibiliteContacts
         }
 
         if ($this->peutLire($lecteur, 'fournisseur')) {
-            foreach (Fournisseur::whereIn('entreprise_tierce_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get() as $f) {
-                $resultat[$f->entreprise_tierce_id][] = ['fonction' => 'fournisseur', 'id' => $f->id, 'actif' => $f->is_active, 'sous_categorie' => null, 'reference' => $f->reference];
+            foreach (Fournisseur::with('sousCategories')->whereIn('entreprise_tierce_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get() as $f) {
+                $resultat[$f->entreprise_tierce_id][] = ['fonction' => 'fournisseur', 'id' => $f->id, 'actif' => $f->is_active, 'sous_categorie' => null, 'reference' => $f->reference, 'sous_categories' => $this->libellesSousCategories($f)];
             }
         }
         if ($this->peutLire($lecteur, 'prestataire')) {
@@ -293,6 +293,12 @@ final class VisibiliteContacts
         }
 
         return $resultat;
+    }
+
+    /** Lot 6a : sous-catégories d'un fournisseur (sans effet métier), désactivées comprises. */
+    private function libellesSousCategories(Fournisseur $fournisseur): array
+    {
+        return $fournisseur->sousCategories->sortBy([['ordre', 'asc'], ['libelle', 'asc']])->pluck('libelle')->values()->all();
     }
 
     // ── Sous-requêtes ───────────────────────────────────────────────────────

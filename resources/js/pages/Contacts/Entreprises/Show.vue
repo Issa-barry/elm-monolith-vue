@@ -36,14 +36,17 @@ import { computed, ref } from 'vue';
 import AjouterFonctionDialog from '../partials/AjouterFonctionDialog.vue';
 import AjouterInterlocuteurDialog from '../partials/AjouterInterlocuteurDialog.vue';
 import BadgesFonctions from '../partials/BadgesFonctions.vue';
+import BlocCategories from '../partials/BlocCategories.vue';
 import Coordonnees from '../partials/Coordonnees.vue';
 import CopierTelephone from '../partials/CopierTelephone.vue';
 import ListeFonctions from '../partials/ListeFonctions.vue';
 import ModifierInterlocuteurDialog from '../partials/ModifierInterlocuteurDialog.vue';
 import type {
+    CategorieFiche,
     EntrepriseFiche,
     FonctionContact,
     InterlocuteurFiche,
+    OptionCategorie,
     OptionFiltre,
 } from '../partials/types';
 
@@ -56,6 +59,10 @@ const props = defineProps<{
     types_prestataire: OptionFiltre[];
     /** Lot 4 : permission `contacts.gerer_interlocuteurs` (revérifiée côté serveur). */
     peut_gerer_interlocuteurs: boolean;
+    /** Lot 6a : catégories libres et permission `contacts.update` (revérifiée côté serveur). */
+    categories: CategorieFiche[];
+    categories_options: OptionCategorie[];
+    peut_modifier_categories: boolean;
 }>();
 
 useFlashToast();
@@ -265,6 +272,13 @@ function telephone(valeur: string | null, code: string | null): string {
                             :adresse="entreprise.adresse"
                             :latitude="entreprise.latitude"
                             :longitude="entreprise.longitude"
+                        />
+                        <BlocCategories
+                            class="mt-6 border-t pt-6"
+                            :url="`/backoffice/contacts/entreprises/${entreprise.id}/categories`"
+                            :categories="categories"
+                            :options="categories_options"
+                            :peut-modifier="peut_modifier_categories"
                         />
                     </section>
                 </div>

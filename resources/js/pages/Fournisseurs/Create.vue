@@ -5,7 +5,12 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import { watch } from 'vue';
-import FournisseurForm, { type FormData } from './partials/FournisseurForm.vue';
+import FournisseurForm, {
+    type FormData,
+    type OptionSousCategorie,
+} from './partials/FournisseurForm.vue';
+
+const props = defineProps<{ sous_categories_options: OptionSousCategorie[] }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -26,6 +31,7 @@ const form = useForm({
     adresse: null as string | null,
     notes: null as string | null,
     is_active: true,
+    sous_categorie_ids: [] as string[],
 });
 
 function submit() {
@@ -89,6 +95,7 @@ watch(
                 :form="form"
                 :errors="form.errors"
                 :processing="form.processing"
+                :sous-categories-options="props.sous_categories_options"
                 @submit="submit"
                 @update:form="handleFormUpdate($event)"
             />
