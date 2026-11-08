@@ -2,6 +2,8 @@
 
 - Statut : accepté (architecture validée le 06/11/2026) ; lot 1 réalisé le 06/11/2026 (commit
   `35abb314`) ; lot 2 réalisé le 07/11/2026 (commit `d7a1effb`) ; lot 3 réalisé le 07/11/2026
+  (commit `ae3f8842`) ; lot 4 réalisé le 07/11/2026 (commit `48234f04`) ; lot 5 : décisions
+  validées le 07/11/2026, développement en attente.
 - Documentation : [docs/contacts.md](../contacts.md)
 
 ## Contexte
@@ -87,6 +89,31 @@ par défaut seulement s'il n'y a aucun principal actif, choix explicite. Contrô
 requête : permission `contacts.gerer_interlocuteurs`, entreprise visible (404 sinon, super_admin
 compris), interlocuteur lié à l'entreprise de l'URL (`scopeBindings`). Rattachement de compte
 d'ADR 0056 inchangé. Aucune migration.
+
+## Lot 5 (propriétaire entreprise) — décisions du 07/11/2026, développement en attente
+
+Périmètre : les propriétaires de type entreprise seulement, reliés à une fiche Entreprise par une
+colonne `proprietaires.entreprise_tierce_id` ajoutée ; aucun propriétaire entreprise en production à
+l'audit du 06/11. Décisions : (D1) `personne_id` reste le contact du propriétaire (téléphone, compte,
+espace client) ; (D2) téléphone de l'entreprise facultatif, jamais recopié de celui du contact ;
+(D3) l'écran Propriétaire actuel crée ou relie l'entreprise en arrière-plan ; (D4) propriétaire
+personne physique inchangé ; (D5) `proprietaires.raison_sociale` conservée et synchronisée, la fiche
+Entreprise faisant foi dès que le lien est posé. Garde-fous : aucun rattachement automatique par NIF
+ou raison sociale (l'entreprise trouvée est présentée et confirmée, l'utilisateur arbitre entre
+plusieurs) ; jamais de fusion ; le contact devient interlocuteur sans doublon de lien, les autres
+interlocuteurs sont conservés ; reprise idempotente (`--dry-run`, `--apply`, valeurs d'avant
+journalisées, rapport d'anomalies) ; ids de propriétaire, comptes auxiliaires, commissions, fiches de
+paiement et contrats d'API inchangés. Démarrage après stabilisation des travaux parallèles sur les
+commissions.
+
+Décisions complémentaires : (D6) téléphone ou NIF d'une entreprise non visible du lecteur → message
+neutre et arrêt, rien n'est révélé ; une raison sociale seule ne révèle pas son existence ; (D7)
+renommer depuis l'écran Propriétaire une entreprise qui porte d'autres fonctions → avertissement et
+confirmation explicite, qui ne remplacent pas le droit de modifier l'identité de l'entreprise ;
+(D8) passage d'entreprise à personne physique autorisé : le lien est retiré et journalisé,
+l'entreprise et ses interlocuteurs sont conservés ; (D9) le contact devient principal seulement si
+l'entreprise n'en a aucun, sinon il est ajouté sans rôle de principal. Les rattachements de la
+reprise restent réversibles ; aucune identité n'est supprimée.
 
 ## Conséquences
 

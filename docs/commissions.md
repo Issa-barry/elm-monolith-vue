@@ -1275,10 +1275,15 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
 - Seule une période `CALCULEE` accepte la validation de véhicules — vérifié aussi dans le
   contrôleur (et plus seulement par la policy `ajuster`), car le super administrateur court-circuite
   les policies (`Gate::before`). Même garde ajoutée sur `validerVehicule`.
+- **Ajustement (07/11/2026)** : même garde sur toutes les actions d'ajustement liées à une période
+  (écran d'ajustement d'un véhicule → 403 ; `ajusterGroupe`, `ajusterMultiple`, `absenceGroupe`,
+  `remplacant`, `validerLot` → refus avec message). Avant, le super administrateur voyait encore
+  « Ajuster » sur une période validée et pouvait y modifier des montants. `can.ajuster` de
+  `PaiementPeriodeController::show()` exige désormais aussi une période calculée.
 - Visibilité : cases et boutons affichés uniquement si `can.ajuster` et période calculée ; seules
   les lignes « À vérifier » / « À revérifier » équilibrées sont sélectionnables.
 - Tests : `tests/Feature/Comptabilite/CommissionAjustementVenteTest.php`
-  (`valider_vehicules_en_masse_*`).
+  (`valider_vehicules_en_masse_*`, `ajuster_une_periode_validee_est_refuse_meme_pour_le_super_admin`).
 
 ### Validation d'une grande sélection (01/11/2026)
 

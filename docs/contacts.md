@@ -15,8 +15,9 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 1 — Socle | Coordonnées, interlocuteurs (service), référentiel des sous-catégories, permissions, lecture des fonctions, synchronisation client non branchée | Fait (06/11/2026, commit `35abb314`) |
 | 2 — Consultation | Listes et fiches Personnes physiques / Entreprises, recherche globale « Contacts », liens de menu — lecture seule | Fait (07/11/2026, commit `d7a1effb`) |
 | 3 — Création | Parcours « téléphone d'abord », ajout explicite d'une fonction, une fonction par catégorie, fin de la reprise silencieuse (Fournisseur, Prestataire), D17 | Fait (07/11/2026, commit `ae3f8842`) |
-| 4 — Interlocuteurs | Gestion depuis l'onglet Interlocuteurs de la fiche Entreprise : ajout « téléphone d'abord », fonction et notes, principal, désactivation, réactivation, journal | Fait (07/11/2026) |
-| 5 à 9 | Reprises, paramétrage, client, bascule, fusion | À venir |
+| 4 — Interlocuteurs | Gestion depuis l'onglet Interlocuteurs de la fiche Entreprise : ajout « téléphone d'abord », fonction et notes, principal, désactivation, réactivation, journal | Fait (07/11/2026, commit `48234f04`) |
+| 5 — Propriétaire entreprise | Lien vers une fiche Entreprise, contact devenu interlocuteur, reprise des données (ADR 0060, décisions D1 à D5) | Décisions validées (07/11/2026), développement en attente |
+| 6 à 9 | Paramétrage, client, bascule, fusion | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
