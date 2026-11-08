@@ -20,6 +20,9 @@ export interface FonctionContact {
     libelle: string;
     lien: string | null;
     entreprise_tierce_id?: string;
+    /** Lot 5 (D10) : propriétaire entreprise vu depuis la fiche de son contact. */
+    au_nom_de?: string | null;
+    entreprise_lien?: string | null;
 }
 
 export interface OptionFiltre {

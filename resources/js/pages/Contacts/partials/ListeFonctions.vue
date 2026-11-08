@@ -20,7 +20,22 @@ defineProps<{ fonctions: FonctionContact[] }>();
             data-testid="contact-fonction-ligne"
         >
             <div class="min-w-0">
-                <p class="text-sm font-medium">{{ f.libelle }}</p>
+                <p class="text-sm font-medium">
+                    {{ f.libelle }}
+                    <template v-if="f.au_nom_de">
+                        <span class="font-normal text-muted-foreground">
+                            au nom de
+                        </span>
+                        <Link
+                            v-if="f.entreprise_lien"
+                            :href="f.entreprise_lien"
+                            class="text-primary hover:underline"
+                            data-testid="contact-fonction-au-nom-de"
+                            >{{ f.au_nom_de }}</Link
+                        >
+                        <span v-else>{{ f.au_nom_de }}</span>
+                    </template>
+                </p>
                 <p class="truncate text-xs text-muted-foreground">
                     {{
                         [f.sous_categorie_libelle, f.reference]

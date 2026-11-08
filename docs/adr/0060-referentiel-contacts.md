@@ -3,7 +3,7 @@
 - Statut : accepté (architecture validée le 06/11/2026) ; lot 1 réalisé le 06/11/2026 (commit
   `35abb314`) ; lot 2 réalisé le 07/11/2026 (commit `d7a1effb`) ; lot 3 réalisé le 07/11/2026
   (commit `ae3f8842`) ; lot 4 réalisé le 07/11/2026 (commit `48234f04`) ; lot 5 : décisions
-  validées le 07/11/2026, développement en attente.
+  validées le 07/11/2026, plan technique validé et réalisé le 08/11/2026.
 - Documentation : [docs/contacts.md](../contacts.md)
 
 ## Contexte
@@ -90,7 +90,7 @@ requête : permission `contacts.gerer_interlocuteurs`, entreprise visible (404 s
 compris), interlocuteur lié à l'entreprise de l'URL (`scopeBindings`). Rattachement de compte
 d'ADR 0056 inchangé. Aucune migration.
 
-## Lot 5 (propriétaire entreprise) — décisions du 07/11/2026, développement en attente
+## Lot 5 (propriétaire entreprise, 08/11/2026)
 
 Périmètre : les propriétaires de type entreprise seulement, reliés à une fiche Entreprise par une
 colonne `proprietaires.entreprise_tierce_id` ajoutée ; aucun propriétaire entreprise en production à
@@ -115,12 +115,30 @@ l'entreprise et ses interlocuteurs sont conservés ; (D9) le contact devient pri
 l'entreprise n'en a aucun, sinon il est ajouté sans rôle de principal. Les rattachements de la
 reprise restent réversibles ; aucune identité n'est supprimée.
 
+Plan technique validé le 08/11/2026, après le commit de la session commissions (`1b58e68e`, sans
+incompatibilité) : (D7) `proprietaires.update` seule si l'entreprise ne porte que la fonction
+Propriétaire ; `contacts.update` en plus, avec confirmation, dès qu'elle en porte une autre ; sans
+le droit, l'identité de l'entreprise est en lecture seule ; (D10) la fiche Personne du contact garde
+la fonction Propriétaire avec la mention « au nom de » l'entreprise et un lien vers sa fiche ;
+le rattachement du contact comme interlocuteur, dans le cadre du propriétaire, passe par
+`InterlocuteurService` sans exiger `contacts.gerer_interlocuteurs` ; téléphone et NIF de
+l'entreprise facultatifs dans le formulaire Propriétaire ; une entreprise créée depuis le
+formulaire ou par la reprise ne reprend ni le téléphone ni la localisation du contact (l'adresse
+d'une personne n'est pas celle de son entreprise), sans synchronisation ultérieure. Réversibilité : chaque exécution appliquée
+de la reprise a un identifiant (`contacts_reprises`) et journalise ses valeurs d'avant par ligne
+(`contacts_reprise_lignes`) ; l'annulation vérifie que le rattachement n'a pas changé depuis
+(sinon « conflit »), désactive sans supprimer les interlocuteurs qu'elle avait créés et conserve les
+entreprises créées, même sans fonction. La raison sociale de l'entreprise est recopiée sur le
+propriétaire relié quel que soit l'écran qui la modifie (Fournisseur et Prestataire compris). Règles
+CONTACT-027 à CONTACT-032.
+
 ## Conséquences
 
 - Aucune entrée ajoutée au morph map : les comptes auxiliaires stockent le nom de classe des
   fonctions, un alias créerait des comptes en double.
 - L'unicité du principal est garantie par le service (transaction + verrou), pas par un index, faute
-  d'index unique partiel portable entre SQLite, MySQL et MariaDB.
+  d'index unique partiel portable entre SQLite, MySQL et MariaDB. Même principe pour « un seul
+  propriétaire par entreprise » (lot 5) : les propriétaires supprimés logiquement empêchent un index.
 - Tant que le lot 7 n'est pas livré, l'identité d'un client s'écrit comme avant (CLIENTPERSONNE-002).
 
 ## Alternatives écartées

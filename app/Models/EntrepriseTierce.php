@@ -41,6 +41,23 @@ class EntrepriseTierce extends Model
         ];
     }
 
+    /**
+     * La fiche Entreprise fait foi pour la raison sociale (ADR 0060, lot 5, D5) : quel que soit
+     * l'écran qui la modifie (Fournisseur, Prestataire, Propriétaire), la copie portée par les
+     * propriétaires reliés suit dans la même requête SQL. Les écrans qui modifient une entreprise le
+     * font dans une transaction, pour que les deux écritures réussissent ou échouent ensemble.
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (EntrepriseTierce $entreprise) {
+            if ($entreprise->wasChanged('raison_sociale')) {
+                Proprietaire::withTrashed()
+                    ->where('entreprise_tierce_id', $entreprise->id)
+                    ->update(['raison_sociale' => $entreprise->raison_sociale]);
+            }
+        });
+    }
+
     // ── Mutateurs ─────────────────────────────────────────────────────────────
 
     public function setEmailAttribute(mixed $value): void
@@ -69,6 +86,12 @@ class EntrepriseTierce extends Model
     public function prestataires(): HasMany
     {
         return $this->hasMany(Prestataire::class);
+    }
+
+    /** Au plus un, garanti par App\Services\Contacts\ProprietaireEntreprise (ADR 0060, lot 5). */
+    public function proprietaires(): HasMany
+    {
+        return $this->hasMany(Proprietaire::class);
     }
 
     public function interlocuteurs(): HasMany

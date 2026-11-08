@@ -10,10 +10,12 @@ use App\Models\PieceIdentite;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Models\VehiculeCapacite;
+use App\Services\Contacts\ProprietaireEntreprise;
 use App\Support\Contacts\SuppressionFonction;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -72,26 +74,15 @@ class ProprietaireController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, ProprietaireEntreprise $entreprises): RedirectResponse
     {
         $this->authorize('create', Proprietaire::class);
 
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
-        $data = $request->validate([
-            'type' => ['required', Rule::enum(TypeProprietaire::class)],
-            'nom' => 'required_if:type,personne_physique|nullable|string|max:255',
-            'prenom' => 'required_if:type,personne_physique|nullable|string|max:255',
-            'raison_sociale' => 'required_if:type,entreprise|nullable|string|max:255',
-            'surnom' => 'nullable|string|max:100',
-            'email' => 'nullable|email:rfc,dns|max:255',
-            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
-            'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
-            'ville' => 'required|string|max:100',
-            'adresse' => 'nullable|string|max:500',
-            'is_active' => 'boolean',
-        ], $this->validationMessages());
+        $data = $request->validate($this->regles(), $this->validationMessages());
+        $raisonSocialeSaisie = (string) ($data['raison_sociale'] ?? '');
 
         $data = $this->resolveCountryData($data);
         $this->validateLocalPhoneLength($data);
@@ -107,34 +98,55 @@ class ProprietaireController extends Controller
             $this->assertEmailUniqueInOrg($data['email'], $orgId);
         }
 
-        $personne = Personne::resoudreOuCreer($orgId, [
-            'nom' => $data['nom'] ?? null,
-            'prenom' => $data['prenom'] ?? null,
-            'surnom' => $data['surnom'] ?? null,
-            'email' => $data['email'] ?? null,
-            'telephone' => $data['telephone'],
-            'code_pays' => $data['code_pays'],
-            'code_phone_pays' => $data['code_phone_pays'] ?? null,
-            'pays' => $data['pays'] ?? null,
-            'ville' => $data['ville'],
-            'adresse' => $data['adresse'] ?? null,
-        ]);
+        $estEntreprise = $data['type'] === TypeProprietaire::ENTREPRISE->value;
+        $identite = $estEntreprise ? $this->identiteEntreprise($data, $raisonSocialeSaisie) : null;
 
-        Proprietaire::create([
-            'organization_id' => $orgId,
-            'personne_id' => $personne->id,
-            'type' => $data['type'],
-            'raison_sociale' => $data['type'] === TypeProprietaire::ENTREPRISE->value ? $data['raison_sociale'] : null,
-            'is_active' => $data['is_active'] ?? true,
-        ]);
+        // Une seule transaction : un refus au rattachement de l'entreprise (correspondance à choisir,
+        // numéro non visible...) n'enregistre ni la Personne ni le propriétaire.
+        $message = DB::transaction(function () use ($orgId, $data, $identite, $entreprises, $request) {
+            $personne = Personne::resoudreOuCreer($orgId, [
+                'nom' => $data['nom'] ?? null,
+                'prenom' => $data['prenom'] ?? null,
+                'surnom' => $data['surnom'] ?? null,
+                'email' => $data['email'] ?? null,
+                'telephone' => $data['telephone'],
+                'code_pays' => $data['code_pays'],
+                'code_phone_pays' => $data['code_phone_pays'] ?? null,
+                'pays' => $data['pays'] ?? null,
+                'ville' => $data['ville'],
+                'adresse' => $data['adresse'] ?? null,
+            ]);
 
-        return redirect()->route('proprietaires.index')
-            ->with('success', 'Propriétaire créé avec succès.');
+            $proprietaire = Proprietaire::create([
+                'organization_id' => $orgId,
+                'personne_id' => $personne->id,
+                'type' => $data['type'],
+                'raison_sociale' => $identite !== null ? $data['raison_sociale'] : null,
+                'is_active' => $data['is_active'] ?? true,
+            ]);
+
+            if ($identite === null) {
+                return 'Propriétaire créé avec succès.';
+            }
+
+            // Lot 5 (ADR 0060, D3) : l'entreprise est créée ou reliée en arrière-plan.
+            $lien = $entreprises->rattacherDepuisFormulaire($proprietaire, $identite, $data['entreprise_choix'] ?? null, $request->user());
+
+            return $lien['entreprise_creee']
+                ? 'Propriétaire créé avec succès ; sa fiche Entreprise a été créée.'
+                : "Propriétaire créé avec succès et relié à l'entreprise {$lien['entreprise']->raison_sociale}.";
+        });
+
+        return redirect()->route('proprietaires.index')->with('success', $message);
     }
 
-    public function edit(Proprietaire $proprietaire): Response
+    public function edit(Proprietaire $proprietaire, ProprietaireEntreprise $entreprises): Response
     {
         $this->authorize('update', $proprietaire);
+        $entreprise = $proprietaire->entrepriseTierce;
+        $lienEntreprise = $entreprise !== null && auth()->user()->can('contacts.read')
+            ? "/backoffice/contacts/entreprises/{$entreprise->id}"
+            : null;
 
         [$telephone, $codePhonePays, $codePays, $pays] = $this->splitPhone(
             $proprietaire->telephone,
@@ -151,6 +163,9 @@ class ProprietaireController extends Controller
                 'surnom' => $proprietaire->surnom,
                 'type' => $proprietaire->type->value,
                 'raison_sociale' => $proprietaire->raison_sociale,
+                // Lot 5 : téléphone (format international) et NIF de l'entreprise reliée.
+                'telephone_entreprise' => $entreprise?->telephone,
+                'identifiant_fiscal' => $entreprise?->identifiant_fiscal,
                 'email' => $proprietaire->email,
                 'telephone' => $telephone,
                 'adresse' => $proprietaire->adresse,
@@ -159,6 +174,14 @@ class ProprietaireController extends Controller
                 'code_pays' => $codePays,
                 'code_phone_pays' => $codePhonePays,
                 'is_active' => $proprietaire->is_active,
+            ],
+            // Lot 5 (ADR 0060, D7) : entreprise reliée, partagée ou non, et droit d'en modifier l'identité.
+            'entreprise' => $entreprise === null ? null : [
+                'id' => $entreprise->id,
+                'raison_sociale' => $entreprise->raison_sociale,
+                'partagee' => $entreprises->estPartagee($entreprise, $proprietaire),
+                'peut_modifier_identite' => $entreprises->peutModifierIdentite($proprietaire, auth()->user()),
+                'lien' => $lienEntreprise,
             ],
             'type_proprietaire_options' => TypeProprietaire::options(),
         ]);
@@ -298,23 +321,15 @@ class ProprietaireController extends Controller
             ->all();
     }
 
-    public function update(Request $request, Proprietaire $proprietaire): RedirectResponse
+    public function update(Request $request, Proprietaire $proprietaire, ProprietaireEntreprise $entreprises): RedirectResponse
     {
         $this->authorize('update', $proprietaire);
 
         $data = $request->validate([
-            'type' => ['required', Rule::enum(TypeProprietaire::class)],
-            'nom' => 'required_if:type,personne_physique|nullable|string|max:255',
-            'prenom' => 'required_if:type,personne_physique|nullable|string|max:255',
-            'raison_sociale' => 'required_if:type,entreprise|nullable|string|max:255',
-            'surnom' => 'nullable|string|max:100',
-            'email' => 'nullable|email:rfc,dns|max:255',
-            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
-            'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
-            'ville' => 'required|string|max:100',
-            'adresse' => 'nullable|string|max:500',
-            'is_active' => 'boolean',
+            ...$this->regles(),
+            'confirmer_modification_entreprise' => 'boolean',
         ], $this->validationMessages());
+        $raisonSocialeSaisie = (string) ($data['raison_sociale'] ?? '');
 
         $data = $this->resolveCountryData($data);
         $this->validateLocalPhoneLength($data);
@@ -330,27 +345,111 @@ class ProprietaireController extends Controller
             $this->assertEmailUniqueInOrg($data['email'], $proprietaire->organization_id, $proprietaire->id);
         }
 
-        $proprietaire->personne->update([
-            'nom' => $data['nom'] ?? null,
-            'prenom' => $data['prenom'] ?? null,
-            'surnom' => $data['surnom'] ?? null,
-            'email' => $data['email'] ?? null,
-            'telephone' => $data['telephone'],
-            'telephone_normalise' => Personne::normaliserTelephone($data['telephone']),
-            'code_pays' => $data['code_pays'],
-            'code_phone_pays' => $data['code_phone_pays'] ?? null,
-            'pays' => $data['pays'] ?? null,
-            'ville' => $data['ville'],
-            'adresse' => $data['adresse'] ?? null,
-        ]);
-        $proprietaire->update([
-            'type' => $data['type'],
-            'raison_sociale' => $data['type'] === TypeProprietaire::ENTREPRISE->value ? $data['raison_sociale'] : null,
-            'is_active' => $data['is_active'] ?? $proprietaire->is_active,
-        ]);
+        $estEntreprise = $data['type'] === TypeProprietaire::ENTREPRISE->value;
+        $identite = $estEntreprise ? $this->identiteEntreprise($data, $raisonSocialeSaisie) : null;
+        $user = $request->user();
 
-        return redirect()->route('proprietaires.edit', $proprietaire)
-            ->with('success', 'Propriétaire mis à jour avec succès.');
+        $message = DB::transaction(function () use ($proprietaire, $data, $identite, $entreprises, $user) {
+            $proprietaire->personne->update([
+                'nom' => $data['nom'] ?? null,
+                'prenom' => $data['prenom'] ?? null,
+                'surnom' => $data['surnom'] ?? null,
+                'email' => $data['email'] ?? null,
+                'telephone' => $data['telephone'],
+                'telephone_normalise' => Personne::normaliserTelephone($data['telephone']),
+                'code_pays' => $data['code_pays'],
+                'code_phone_pays' => $data['code_phone_pays'] ?? null,
+                'pays' => $data['pays'] ?? null,
+                'ville' => $data['ville'],
+                'adresse' => $data['adresse'] ?? null,
+            ]);
+            $relie = $proprietaire->entreprise_tierce_id !== null;
+            $colonnes = [
+                'type' => $data['type'],
+                'is_active' => $data['is_active'] ?? $proprietaire->is_active,
+            ];
+            // Entreprise reliée : la raison sociale vient de sa fiche (D5), jamais du formulaire.
+            if ($identite === null) {
+                $colonnes['raison_sociale'] = null;
+            } elseif (! $relie) {
+                $colonnes['raison_sociale'] = $data['raison_sociale'];
+            }
+            $proprietaire->update($colonnes);
+
+            if ($identite === null) {
+                // D8 : passage en personne physique — lien retiré et journalisé, entreprise conservée.
+                $entreprises->delier($proprietaire, $user, 'passage_personne_physique');
+
+                return 'Propriétaire mis à jour avec succès.';
+            }
+
+            if ($relie) {
+                $entreprises->modifierIdentite($proprietaire, $identite, (bool) ($data['confirmer_modification_entreprise'] ?? false), $user);
+
+                return 'Propriétaire mis à jour avec succès.';
+            }
+
+            $lien = $entreprises->rattacherDepuisFormulaire($proprietaire, $identite, $data['entreprise_choix'] ?? null, $user);
+
+            return $lien['entreprise_creee']
+                ? 'Propriétaire mis à jour avec succès ; sa fiche Entreprise a été créée.'
+                : "Propriétaire mis à jour avec succès et relié à l'entreprise {$lien['entreprise']->raison_sociale}.";
+        });
+
+        return redirect()->route('proprietaires.edit', $proprietaire)->with('success', $message);
+    }
+
+    /** Règles communes à la création et à la modification. */
+    private function regles(): array
+    {
+        return [
+            'type' => ['required', Rule::enum(TypeProprietaire::class)],
+            'nom' => 'required_if:type,personne_physique|nullable|string|max:255',
+            'prenom' => 'required_if:type,personne_physique|nullable|string|max:255',
+            // 200 : longueur de la raison sociale de la fiche Entreprise, qui fait foi (lot 5).
+            'raison_sociale' => 'required_if:type,entreprise|nullable|string|max:200',
+            'surnom' => 'nullable|string|max:100',
+            'email' => 'nullable|email:rfc,dns|max:255',
+            'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
+            'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
+            'ville' => 'required|string|max:100',
+            'adresse' => 'nullable|string|max:500',
+            'is_active' => 'boolean',
+            // Lot 5 (ADR 0060) : téléphone et NIF facultatifs de l'entreprise (D2), choix explicite
+            // d'une entreprise qui correspond (son id) ou « nouvelle ».
+            'telephone_entreprise' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
+            'identifiant_fiscal' => 'nullable|string|max:50',
+            'entreprise_choix' => 'nullable|string|max:30',
+        ];
+    }
+
+    /**
+     * Identité de l'entreprise saisie dans le formulaire. Le téléphone de l'entreprise n'est jamais
+     * celui du contact (D2) ; sans indicatif, il prend celui du pays choisi.
+     *
+     * @return array{raison_sociale: string, raison_sociale_saisie: string, telephone: ?string, identifiant_fiscal: ?string}
+     */
+    private function identiteEntreprise(array $data, string $raisonSocialeSaisie): array
+    {
+        $telephone = null;
+        $brut = trim((string) ($data['telephone_entreprise'] ?? ''));
+        if ($brut !== '') {
+            if (! str_starts_with($brut, '+')) {
+                try {
+                    $this->validateLocalPhoneLength(['telephone' => $brut, 'code_pays' => $data['code_pays'] ?? null]);
+                } catch (ValidationException $e) {
+                    throw ValidationException::withMessages(['telephone_entreprise' => $e->errors()['telephone'][0]]);
+                }
+            }
+            $telephone = $this->buildInternationalPhone($brut, $data['code_phone_pays'] ?? null);
+        }
+
+        return [
+            'raison_sociale' => (string) $data['raison_sociale'],
+            'raison_sociale_saisie' => trim($raisonSocialeSaisie),
+            'telephone' => $telephone,
+            'identifiant_fiscal' => isset($data['identifiant_fiscal']) ? trim((string) $data['identifiant_fiscal']) : null,
+        ];
     }
 
     public function destroy(Proprietaire $proprietaire): RedirectResponse

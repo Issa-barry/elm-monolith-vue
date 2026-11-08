@@ -206,6 +206,7 @@ use App\Http\Controllers\Produits\Variantes\IndexProduitVarianteController;
 use App\Http\Controllers\Produits\Variantes\UpdateProduitVarianteController;
 use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ProprietaireController;
+use App\Http\Controllers\Proprietaires\EntreprisesCorrespondantesController;
 use App\Http\Controllers\Rapports\ExportRapportActiviteController;
 use App\Http\Controllers\Rapports\IndexMaSituationController;
 use App\Http\Controllers\Rapports\IndexRapportActiviteController;
@@ -701,6 +702,9 @@ Route::prefix('backoffice')->group(function () {
             Route::get('parrains/{parrain}/compte/candidat', [CompteParrainController::class, 'candidat'])->name('parrains.compte.candidat');
             Route::post('parrains/{parrain}/compte', [CompteParrainController::class, 'store'])->name('parrains.compte.store');
             Route::delete('parrains/{parrain}/compte', [CompteParrainController::class, 'destroy'])->name('parrains.compte.destroy');
+            // Lot 5 du référentiel Contacts (ADR 0060) : déclarée avant la ressource (joker {proprietaire}).
+            Route::get('proprietaires/entreprises-correspondantes', EntreprisesCorrespondantesController::class)
+                ->name('proprietaires.entreprises-correspondantes');
             Route::resource('proprietaires', ProprietaireController::class);
             Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])
                 ->name('proprietaires.definir-interne');

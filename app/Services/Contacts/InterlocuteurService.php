@@ -32,7 +32,8 @@ use Illuminate\Validation\ValidationException;
  * - Chaque opération est inscrite au journal d'audit existant, avec des identifiants et des
  *   indicateurs seulement : jamais de nom, de téléphone ni le texte des notes.
  *
- * Exposé au lot 4 par les contrôleurs App\Http\Controllers\Contacts\Interlocuteurs.
+ * Exposé au lot 4 par les contrôleurs App\Http\Controllers\Contacts\Interlocuteurs ; au lot 5,
+ * rattacherContact() relie le contact d'un propriétaire entreprise (ProprietaireEntreprise).
  */
 final class InterlocuteurService
 {
@@ -182,6 +183,87 @@ final class InterlocuteurService
             ])->save();
 
             $this->journal->record($interlocuteur, AuditEvent::STATUS_CHANGED, $acteur, ['is_active' => true], ['is_active' => false], ['etait_principal' => $etaitPrincipal]);
+
+            return $interlocuteur->refresh();
+        });
+    }
+
+    /**
+     * Contact d'un propriétaire entreprise relié comme interlocuteur de son entreprise (lot 5,
+     * ADR 0060). La personne est déjà connue (c'est le contact du propriétaire, D1) : aucune
+     * confirmation de numéro, aucune donnée saisie. Pas de doublon de lien : un lien existant est
+     * réutilisé tel quel — un lien désactivé reste désactivé (la désactivation était un geste
+     * explicite). D9 : principal seulement si l'entreprise n'a aucun principal actif ; les autres
+     * interlocuteurs ne sont jamais modifiés.
+     *
+     * @return array{interlocuteur: EntrepriseInterlocuteur, etat_avant: 'absent'|'actif'|'inactif', principal_pose: bool}
+     */
+    public function rattacherContact(EntrepriseTierce $entreprise, Personne $personne, User $acteur, string $origine): array
+    {
+        $this->assertMemeOrganisation($entreprise, $acteur);
+        if ($personne->organization_id !== $entreprise->organization_id) {
+            throw new AuthorizationException("Ce contact n'appartient pas à l'organisation de l'entreprise.");
+        }
+
+        return DB::transaction(function () use ($entreprise, $personne, $acteur, $origine) {
+            $this->verrouiller($entreprise);
+
+            $aucunPrincipal = ! EntrepriseInterlocuteur::where('entreprise_tierce_id', $entreprise->id)
+                ->where('est_principal', true)->where('is_active', true)->exists();
+            $existant = EntrepriseInterlocuteur::where('entreprise_tierce_id', $entreprise->id)
+                ->where('personne_id', $personne->id)
+                ->first();
+
+            if ($existant) {
+                $etat = $existant->is_active ? 'actif' : 'inactif';
+                $principal = $existant->is_active && $aucunPrincipal;
+                if ($principal) {
+                    $this->marquerPrincipal($entreprise, $existant);
+                    $this->journal->record($existant, AuditEvent::UPDATED, $acteur, ['est_principal' => false], ['est_principal' => true], ['origine' => $origine]);
+                }
+
+                return ['interlocuteur' => $existant->refresh(), 'etat_avant' => $etat, 'principal_pose' => $principal];
+            }
+
+            if ($entreprise->is_active === false) {
+                throw ValidationException::withMessages(['entreprise' => 'Cette entreprise est désactivée : aucun interlocuteur ne peut lui être ajouté.']);
+            }
+
+            $interlocuteur = EntrepriseInterlocuteur::create([
+                'organization_id' => $entreprise->organization_id,
+                'entreprise_tierce_id' => $entreprise->id,
+                'personne_id' => $personne->id,
+                'is_active' => true,
+                'created_by' => $acteur->id,
+            ]);
+            if ($aucunPrincipal) {
+                $this->marquerPrincipal($entreprise, $interlocuteur);
+            }
+
+            $this->journal->record($interlocuteur, AuditEvent::CREATED, $acteur, null,
+                ['entreprise_tierce_id' => $entreprise->id, 'est_principal' => $aucunPrincipal],
+                ['personne_existante' => true, 'origine' => $origine]);
+
+            return ['interlocuteur' => $interlocuteur->refresh(), 'etat_avant' => 'absent', 'principal_pose' => $aucunPrincipal];
+        });
+    }
+
+    /** Annulation d'une reprise (lot 5) : retire le rôle de principal posé par elle, rien d'autre. */
+    public function retirerPrincipal(EntrepriseInterlocuteur $interlocuteur, User $acteur, string $origine): EntrepriseInterlocuteur
+    {
+        $entreprise = $interlocuteur->entrepriseTierce;
+        $this->assertMemeOrganisation($entreprise, $acteur);
+
+        return DB::transaction(function () use ($entreprise, $interlocuteur, $acteur, $origine) {
+            $this->verrouiller($entreprise);
+
+            $interlocuteur->refresh();
+            if (! $interlocuteur->est_principal) {
+                return $interlocuteur;
+            }
+
+            $interlocuteur->forceFill(['est_principal' => false])->save();
+            $this->journal->record($interlocuteur, AuditEvent::UPDATED, $acteur, ['est_principal' => true], ['est_principal' => false], ['origine' => $origine]);
 
             return $interlocuteur->refresh();
         });

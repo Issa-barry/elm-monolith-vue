@@ -33,7 +33,7 @@ use Illuminate\Support\Collection;
  *   nulle part (liste, fiche, recherche, compteurs). Une personne sans fonction (compte seul)
  *   n'est jamais visible ici : elle se gère dans Utilisateurs.
  *
- * @phpstan-type Fonction array{fonction: string, id: string, actif: ?bool, sous_categorie: ?string, reference: ?string, entreprise_tierce_id?: string}
+ * @phpstan-type Fonction array{fonction: string, id: string, actif: ?bool, sous_categorie: ?string, reference: ?string, entreprise_tierce_id?: string, au_nom_de?: ?string}
  */
 final class VisibiliteContacts
 {
@@ -42,8 +42,8 @@ final class VisibiliteContacts
     /** Condition toujours fausse : aucune ligne visible. */
     private const AUCUN = '1 = 0';
 
-    /** Fonctions qu'une entreprise peut porter aujourd'hui (client et propriétaire : lots 5 et 7). */
-    public const FONCTIONS_ENTREPRISE = ['fournisseur', 'prestataire'];
+    /** Fonctions qu'une entreprise peut porter aujourd'hui (propriétaire : lot 5 ; client : lot 7). */
+    public const FONCTIONS_ENTREPRISE = ['fournisseur', 'prestataire', 'proprietaire'];
 
     /** @var array<string, list<string>> */
     private array $lisibles = [];
@@ -68,7 +68,7 @@ final class VisibiliteContacts
             'employe' => $lecteur->can('rh-employes.read') && $module(ModuleFeature::RH),
         ];
         // Un lien d'interlocuteur n'a de sens que si son entreprise peut être visible.
-        $regles['interlocuteur'] = $lecteur->can('contacts.read') && ($regles['fournisseur'] || $regles['prestataire']);
+        $regles['interlocuteur'] = $lecteur->can('contacts.read') && ($regles['fournisseur'] || $regles['prestataire'] || $regles['proprietaire']);
 
         return $this->lisibles[$lecteur->id] = array_keys(array_filter($regles));
     }
@@ -236,8 +236,11 @@ final class VisibiliteContacts
                 fn (Prestataire $p) => ['id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => $p->type?->value, 'reference' => $p->reference]);
         }
         if ($this->peutLire($lecteur, 'proprietaire')) {
-            $ajouter('proprietaire', Proprietaire::whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
-                fn (Proprietaire $p) => ['id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => $p->type?->value, 'reference' => null]);
+            // D10 (lot 5) : le contact d'un propriétaire entreprise garde la fonction, « au nom de »
+            // l'entreprise — visible du même lecteur, puisqu'elle porte cette fonction.
+            $ajouter('proprietaire', Proprietaire::with('entrepriseTierce:id,raison_sociale')->whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
+                fn (Proprietaire $p) => ['id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => $p->type?->value, 'reference' => null,
+                    ...($p->entreprise_tierce_id !== null ? ['entreprise_tierce_id' => $p->entreprise_tierce_id, 'au_nom_de' => $p->entrepriseTierce?->raison_sociale] : [])]);
         }
         if ($this->peutLire($lecteur, 'parrain')) {
             $ajouter('parrain', Parrain::visiblesPar($lecteur)->whereIn('parrains.personne_id', $ids)->orderBy('parrains.created_at')->get(),
@@ -281,6 +284,11 @@ final class VisibiliteContacts
         if ($this->peutLire($lecteur, 'prestataire')) {
             foreach (Prestataire::whereIn('entreprise_tierce_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get() as $p) {
                 $resultat[$p->entreprise_tierce_id][] = ['fonction' => 'prestataire', 'id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => $p->type?->value, 'reference' => $p->reference];
+            }
+        }
+        if ($this->peutLire($lecteur, 'proprietaire')) {
+            foreach (Proprietaire::whereIn('entreprise_tierce_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get() as $p) {
+                $resultat[$p->entreprise_tierce_id][] = ['fonction' => 'proprietaire', 'id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => null, 'reference' => null];
             }
         }
 
@@ -328,7 +336,11 @@ final class VisibiliteContacts
 
     private function fonctionDeLEntreprise(QueryBuilder $s, string $fonction, ?string $code = null): QueryBuilder
     {
-        $table = $fonction === 'fournisseur' ? 'fournisseurs' : 'prestataires';
+        $table = match ($fonction) {
+            'fournisseur' => 'fournisseurs',
+            'prestataire' => 'prestataires',
+            'proprietaire' => 'proprietaires',
+        };
 
         $s->from($table)
             ->whereColumn("{$table}.entreprise_tierce_id", 'entreprises_tierces.id')

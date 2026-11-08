@@ -16,7 +16,7 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 2 — Consultation | Listes et fiches Personnes physiques / Entreprises, recherche globale « Contacts », liens de menu — lecture seule | Fait (07/11/2026, commit `d7a1effb`) |
 | 3 — Création | Parcours « téléphone d'abord », ajout explicite d'une fonction, une fonction par catégorie, fin de la reprise silencieuse (Fournisseur, Prestataire), D17 | Fait (07/11/2026, commit `ae3f8842`) |
 | 4 — Interlocuteurs | Gestion depuis l'onglet Interlocuteurs de la fiche Entreprise : ajout « téléphone d'abord », fonction et notes, principal, désactivation, réactivation, journal | Fait (07/11/2026, commit `48234f04`) |
-| 5 — Propriétaire entreprise | Lien vers une fiche Entreprise, contact devenu interlocuteur, reprise des données (ADR 0060, décisions D1 à D5) | Décisions validées (07/11/2026), développement en attente |
+| 5 — Propriétaire entreprise | Lien vers une fiche Entreprise, contact devenu interlocuteur, reprise des données réversible (ADR 0060, décisions D1 à D10) | Codé (08/11/2026), non commité |
 | 6 à 9 | Paramétrage, client, bascule, fusion | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
@@ -24,7 +24,10 @@ ajoute la création (2 routes GET, 4 routes POST) et change deux comportements e
 décision : les formulaires Fournisseur et Prestataire refusent un numéro déjà connu
 (CONTACT-020), et une fonction qui a un historique ne se supprime plus (CONTACT-019). Le lot 4
 ajoute 6 routes de gestion des interlocuteurs (1 GET en lecture seule, 4 POST, 1 PATCH) ; aucune
-migration, aucun changement d'accès aux commissions.
+migration, aucun changement d'accès aux commissions. Le lot 5 ajoute une colonne
+(`proprietaires.entreprise_tierce_id`), deux tables de journal de reprise, une route GET en lecture
+seule et la commande `contacts:reprendre-proprietaires-entreprises` ; il ne concerne que les
+propriétaires de type entreprise.
 
 ## Règles métier (IDs)
 
@@ -157,6 +160,66 @@ migration, aucun changement d'accès aux commissions.
   principaux, noms des champs modifiés) : jamais de nom, de téléphone, d'e-mail ni le texte des
   notes. L'accès aux commissions (`acces_commissions`) n'est ni affiché ni modifié par ces écrans.
 
+- **CONTACT-027** — Propriétaire entreprise (lot 5) : un propriétaire de type entreprise est relié à
+  une fiche Entreprise (`proprietaires.entreprise_tierce_id`) ; `personne_id` reste son contact
+  (téléphone, compte, espace client — D1). Une entreprise porte au plus une fonction Propriétaire,
+  contrôlée sous verrou de l'entreprise puis du propriétaire. Le propriétaire personne physique ne
+  change pas (D4).
+- **CONTACT-028** — Formulaire Propriétaire, type entreprise (D2, D3, D6) : raison sociale,
+  téléphone et NIF de l'entreprise facultatifs ; le téléphone de l'entreprise n'est jamais celui du
+  contact. « Rechercher une entreprise existante » (lecture seule) liste les entreprises visibles qui
+  ont le même téléphone, le même NIF ou la même raison sociale normalisée (minuscules, sans accents
+  ni ponctuation). Aucun rattachement d'office : dès qu'une entreprise correspond, l'enregistrement
+  exige un choix explicite (l'une d'elles, ou « Créer une nouvelle entreprise ») et le serveur refuse
+  sinon, sans rien enregistrer. Sans correspondance, la fiche Entreprise est créée en arrière-plan
+  avec la raison sociale, le NIF et le téléphone saisis, et rien d'autre : ni le téléphone ni la
+  localisation (pays, ville, adresse) du contact ne sont repris, et aucune synchronisation n'existe
+  ensuite entre la fiche du contact et celle de l'entreprise (décision du 08/11/2026). Un
+  téléphone déjà porté par une entreprise de la liste interdit d'en créer une seconde. Un téléphone
+  ou un NIF d'une entreprise non visible du lecteur donne un message neutre et arrête ; une
+  entreprise non visible trouvée par sa seule raison sociale n'est pas proposée. Un identifiant
+  d'entreprise forgé, non visible ou d'une autre organisation reçoit « Entreprise introuvable » ; une
+  entreprise désactivée ou déjà propriétaire n'est pas sélectionnable. Jamais de fusion.
+- **CONTACT-029** — La fiche Entreprise fait foi (D5) : au lien, `proprietaires.raison_sociale`
+  reprend celle de l'entreprise (la saisie ne la renomme pas) ; ensuite, tout changement de raison
+  sociale de l'entreprise, quel que soit l'écran (Fournisseur, Prestataire, Propriétaire), est recopié
+  sur le propriétaire dans la même transaction. `nom_affichage`, l'espace client, les exports et les
+  fiches de paiement lisent toujours cette colonne : ids, comptes auxiliaires, commissions et fiches
+  inchangés.
+- **CONTACT-030** — Identité de l'entreprise reliée depuis l'écran Propriétaire (D7) : raison
+  sociale, téléphone et NIF. Si l'entreprise ne porte que la fonction Propriétaire,
+  `proprietaires.update` suffit. Si elle porte une autre fonction (Fournisseur ou Prestataire, active
+  ou non), il faut aussi `contacts.update` et une confirmation explicite ; sans le droit, les champs
+  sont en lecture seule et le serveur refuse, la confirmation ne remplaçant jamais le droit. Une
+  saisie identique à l'existant n'est pas un changement. Le contact (`personne_id`) devient
+  interlocuteur de l'entreprise, sans doublon de lien (un lien existant est réutilisé tel quel, un lien
+  désactivé reste désactivé), principal seulement si l'entreprise n'en a aucun (D9), les autres
+  interlocuteurs étant conservés ; ce rattachement passe par `InterlocuteurService` sans exiger
+  `contacts.gerer_interlocuteurs`. Passer le propriétaire en personne physique retire le lien et le
+  journalise ; l'entreprise et ses interlocuteurs sont conservés (D8). Sur la fiche Personne du
+  contact, la fonction Propriétaire porte la mention « au nom de » l'entreprise, avec un lien vers sa
+  fiche (D10) ; la fiche Entreprise porte la fonction Propriétaire (visible avec `proprietaires.read`
+  et le module Véhicules).
+- **CONTACT-031** — Reprise des propriétaires entreprise existants :
+  `php artisan contacts:reprendre-proprietaires-entreprises --acteur=<id utilisateur>`. Simulation par
+  défaut (`--dry-run`), rien n'est écrit ; `--apply` exige `proprietaires.update` et `contacts.update`
+  pour l'acteur, s'exécute ligne par ligne dans une transaction et reste idempotent (un propriétaire
+  déjà relié est ignoré). Sans correspondance par raison sociale normalisée, l'entreprise est créée
+  (raison sociale seule : ni téléphone ni localisation déduits du contact) et reliée ; avec une correspondance, la ligne est « à arbitrer » et rien n'est
+  relié : l'arbitrage se fait explicitement par `--relier=<propriétaire>:<entreprise>` ou
+  `--creer=<propriétaire>`. Rapport d'anomalies : raison sociale vide, contact absent, contact d'une
+  autre organisation, contact sans téléphone. Chaque exécution appliquée reçoit un identifiant
+  (`contacts_reprises`) ; chaque ligne garde ses valeurs d'avant, l'entreprise créée ou réutilisée,
+  l'état du lien interlocuteur avant l'exécution et le principal posé (`contacts_reprise_lignes`) —
+  identifiants seulement, aucune donnée personnelle.
+- **CONTACT-032** — Annulation d'une reprise : `--annuler=<identifiant>` (simulation sans `--apply`).
+  Une ligne n'est annulée que si le propriétaire est encore relié à l'entreprise posée par
+  l'exécution ; sinon elle est marquée « conflit » et rien n'est touché. Annuler retire le lien,
+  restaure la raison sociale d'avant, désactive l'interlocuteur créé par l'exécution (jamais supprimé)
+  et retire le rôle de principal qu'elle avait posé sur un lien existant. Les entreprises créées sont
+  conservées, même sans fonction (invisibles dans Contacts) : aucune identité n'est effacée.
+  L'annulation est journalisée ; la relancer ne fait rien de plus.
+
 ## Écrans (lot 2)
 
 | Route | Écran |
@@ -197,6 +260,17 @@ l'entreprise (`scopeBindings`).
 
 Onglet Interlocuteurs de la fiche Entreprise : bouton « Ajouter un interlocuteur » et menu ⋮ par
 ligne (Modifier la fonction et les notes, Définir comme principal, Désactiver / Réactiver).
+
+## Routes et commande (lot 5)
+
+| Route / commande | Rôle |
+| --- | --- |
+| `GET /backoffice/proprietaires/entreprises-correspondantes` | « Rechercher une entreprise existante » du formulaire Propriétaire : aucune, correspondances ou indisponible (lecture seule ; `proprietaires.create`, ou `proprietaires.update` sur le propriétaire désigné) |
+| `POST /backoffice/proprietaires`, `PUT /backoffice/proprietaires/{proprietaire}` | Existantes : champs `telephone_entreprise`, `identifiant_fiscal`, `entreprise_choix` (id ou `nouvelle`), `confirmer_modification_entreprise` |
+| `contacts:reprendre-proprietaires-entreprises` | Reprise et annulation (CONTACT-031, CONTACT-032) |
+
+Formulaire Propriétaire : téléphone et NIF de l'entreprise, recherche et choix dans la carte
+« Entreprise » existante ; aucune carte ajoutée.
 
 ## Permissions
 
@@ -243,4 +317,11 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   `UpdateInterlocuteurRequest`, policy `EntrepriseTiercePolicy::gererInterlocuteurs`, recherche
   `RechercheTelephoneContact::rechercherInterlocuteur`, journal dans `InterlocuteurService`,
   dialogues `AjouterInterlocuteurDialog.vue`, `ModifierInterlocuteurDialog.vue`.
+- Propriétaire entreprise (lot 5) : service `App\Services\Contacts\ProprietaireEntreprise`
+  (correspondances, rattachement, D7, lien), `InterlocuteurService::rattacherContact()` et
+  `retirerPrincipal()`, synchronisation de la raison sociale dans `EntrepriseTierce::booted()`,
+  contrôleur `App\Http\Controllers\Proprietaires\EntreprisesCorrespondantesController`, reprise
+  `RepriseProprietairesEntreprises` et commande `ContactsReprendreProprietairesEntreprisesCommand`,
+  modèles `ContactsReprise`, `ContactsRepriseLigne`, formulaire
+  `Proprietaires/partials/ProprietaireForm.vue`.
 - Tests : `tests/Feature/Contacts/`.

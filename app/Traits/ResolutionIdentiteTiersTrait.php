@@ -8,6 +8,7 @@ use App\Models\Personne;
 use App\Models\Prestataire;
 use App\Support\Contacts\MessagesContacts;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -45,7 +46,8 @@ trait ResolutionIdentiteTiersTrait
 
             if ($existant?->entreprise_tierce_id) {
                 $this->assertNumeroLibre(EntrepriseTierce::class, $organizationId, $normalise, $existant->entreprise_tierce_id, 'Ce numéro est déjà celui d\'une autre entreprise.');
-                $existant->entrepriseTierce->update($attributs);
+                // Transaction : la raison sociale est recopiée sur le propriétaire relié (lot 5, D5).
+                DB::transaction(fn () => $existant->entrepriseTierce->update($attributs));
 
                 return ['personne_id' => null, 'entreprise_tierce_id' => $existant->entreprise_tierce_id];
             }

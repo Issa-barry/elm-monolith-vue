@@ -49,6 +49,10 @@ final class PresentationContacts
             'libelle' => self::LIBELLES_FONCTIONS[$f['fonction']] ?? $f['fonction'],
             'sous_categorie_libelle' => $this->libelleSousCategorie($f['fonction'], $f['sous_categorie'] ?? null),
             'lien' => $this->lien($f),
+            // D10 (lot 5) : propriétaire entreprise affiché sur la fiche de son contact.
+            'entreprise_lien' => $f['fonction'] === 'proprietaire' && isset($f['entreprise_tierce_id'])
+                ? "/backoffice/contacts/entreprises/{$f['entreprise_tierce_id']}"
+                : null,
         ], $fonctions);
     }
 

@@ -13,5 +13,8 @@ final class MessagesContacts
 
     public const NUMERO_NON_VISIBLE = 'Ce numéro est déjà enregistré dans les contacts, sur une fiche que vous ne pouvez pas consulter. Adressez-vous à un administrateur.';
 
+    /** Lot 5 (D6) : NIF d'une entreprise que le lecteur ne peut pas consulter. */
+    public const NIF_NON_VISIBLE = 'Ce NIF est déjà enregistré dans les contacts, sur une fiche que vous ne pouvez pas consulter. Adressez-vous à un administrateur.';
+
     public const AUTRE_PERSONNE = 'Ce numéro appartient déjà à une autre fiche. Un même numéro ne peut pas être enregistré deux fois : vérifiez le numéro saisi. Le retrait d\'un numéro réattribué n\'est pas encore disponible.';
 }
