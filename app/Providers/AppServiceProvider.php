@@ -22,6 +22,7 @@ use App\Observers\BusinessProfileRoleObserver;
 use App\Observers\DepenseObserver;
 use App\Observers\RattachementAutomatiqueObserver;
 use App\Observers\VenteObserver;
+use App\Services\Commission\AgencePayeuseCommissionService;
 use App\Services\Communications\NullWhatsAppGateway;
 use App\Services\Rh\Paie\DonneesPaieRhService;
 use App\Services\Sms\NimbaSmsGateway;
@@ -54,6 +55,9 @@ class AppServiceProvider extends ServiceProvider
         // Frontière RH → Comptabilité de la paie (ADR 0040) : la Comptabilité lit la transmission
         // figée du mois, jamais les tables RH.
         $this->app->bind(SourceDonneesPaie::class, DonneesPaieRhService::class);
+
+        // Politique de paiement des commissions lue une fois par requête ou job (ADR 0061).
+        $this->app->scoped(AgencePayeuseCommissionService::class);
 
         // Fournisseur WhatsApp pour les notifications transactionnelles (cf.
         // App\Services\Communications\TransactionalCommunicationDispatcher) —

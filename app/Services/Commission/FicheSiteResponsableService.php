@@ -14,17 +14,24 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Agence d'une fiche de paiement livreur/propriétaire (décision du 06/10/2026) : l'agence qui
- * paie chacune de ses commissions est le site ACTUEL du véhicule (cf.
- * CommissionEnveloppe::siteResponsableId()). Tant qu'une fiche n'est pas entièrement payée, son
- * site suit donc les réaffectations du véhicule — y compris après la période, après sa
- * validation ou après un paiement partiel (le site n'est pas une colonne figée, ADR 0010 ; les
- * paiements déjà faits gardent leur propre site_id).
+ * Agences d'une fiche de paiement de commission :
+ *
+ * - agence de RATTACHEMENT (`site_rattachement_id`) : pour un livreur, un propriétaire ou un parrain,
+ *   le site ACTUEL du véhicule de ses commissions (ADR 0020, CommissionEnveloppe::siteResponsableId()) ;
+ * - agence qui PAIE (`site_id`) : celle de la politique de paiement de l'organisation
+ *   (AgencePayeuseCommissionService, ADR 0061), qui peut être l'agence de rattachement.
+ *
+ * Tant qu'une fiche n'est pas entièrement payée, ses agences suivent les réaffectations du véhicule
+ * et les changements de politique — y compris après la période, après sa validation ou après un
+ * paiement partiel (le site n'est pas une colonne figée, ADR 0010 ; les paiements déjà faits
+ * gardent leur propre site_id).
  */
 class FicheSiteResponsableService
 {
-    /** Fiches payées par l'agence du véhicule ; le parrain suit le livreur dont il partage l'enveloppe (ADR 0035). */
-    public const TYPES_CONCERNES = ['livreur', 'proprietaire', 'parrain'];
+    /** Fiches rattachées à l'agence du véhicule ; le parrain suit le livreur dont il partage l'enveloppe (ADR 0035). */
+    public const TYPES_VEHICULE = ['livreur', 'proprietaire', 'parrain'];
+
+    public function __construct(private readonly AgencePayeuseCommissionService $agencesPayeuses) {}
 
     /**
      * Site retenu pour une fiche : celui qui pèse le plus dans le montant de ses commissions (cas
@@ -44,7 +51,10 @@ class FicheSiteResponsableService
         return array_key_first($montantParSite);
     }
 
-    /** Recalcule le site de la fiche depuis ses lignes de commission, avec le site actuel des véhicules. */
+    /**
+     * Agence de rattachement d'une fiche livreur/propriétaire/parrain, recalculée depuis ses lignes
+     * de commission avec le site actuel des véhicules.
+     */
     public function siteDeLaFiche(PaiementFiche $fiche): ?string
     {
         $lignes = $fiche->lignes()->where('montant', '>', 0)->get();
@@ -77,10 +87,73 @@ class FicheSiteResponsableService
     }
 
     /**
-     * Réaligne le site des fiches non payées portant une commission de ce véhicule. Appelé dès que
-     * le site du véhicule change (Vehicule::booted()).
+     * Agences attendues d'une fiche : [rattachement, agence qui paie]. Le rattachement d'une fiche
+     * de véhicule est recalculé ; celui des autres fiches (site bénéficiaire, aucun pour un
+     * consultant) ne change pas.
      *
-     * @return int nombre de fiches dont le site a changé
+     * @return array{0: ?string, 1: ?string}
+     */
+    public function sitesAttendus(PaiementFiche $fiche): array
+    {
+        $rattachement = in_array($fiche->beneficiaire_type, self::TYPES_VEHICULE, true)
+            ? ($this->siteDeLaFiche($fiche) ?? $fiche->site_rattachement_id)
+            : $fiche->site_rattachement_id;
+
+        return [$rattachement, $this->agencesPayeuses->sitePayeur($fiche->organization_id, $fiche->beneficiaire_type, $rattachement)];
+    }
+
+    /**
+     * Met une fiche non payée sur ses agences attendues.
+     *
+     * @return bool true si l'agence qui paie a changé
+     */
+    public function realigner(PaiementFiche $fiche): bool
+    {
+        [$rattachement, $payeur] = $this->sitesAttendus($fiche);
+
+        if ($rattachement !== $fiche->site_rattachement_id) {
+            $fiche->update(['site_rattachement_id' => $rattachement]);
+        }
+
+        if ($payeur === null || $payeur === $fiche->site_id) {
+            return false;
+        }
+
+        $this->changerSite($fiche, $payeur);
+
+        return true;
+    }
+
+    /**
+     * Après un changement de politique de paiement : chaque fiche de commission non entièrement
+     * payée passe à sa nouvelle agence payeuse (ADR 0061).
+     *
+     * @return int nombre de fiches dont l'agence qui paie a changé
+     */
+    public function realignerAgencesPayeuses(string $organizationId): int
+    {
+        $fiches = PaiementFiche::where('organization_id', $organizationId)
+            ->whereIn('beneficiaire_type', AgencePayeuseCommissionService::TYPES)
+            ->where('statut', '!=', StatutFichePaiement::PAYE->value)
+            ->get();
+
+        $modifiees = 0;
+        foreach ($fiches as $fiche) {
+            $payeur = $this->agencesPayeuses->sitePayeur($organizationId, $fiche->beneficiaire_type, $fiche->site_rattachement_id);
+            if ($payeur !== null && $payeur !== $fiche->site_id) {
+                $this->changerSite($fiche, $payeur);
+                $modifiees++;
+            }
+        }
+
+        return $modifiees;
+    }
+
+    /**
+     * Réaligne les fiches non payées portant une commission de ce véhicule. Appelé dès que le site
+     * du véhicule change (Vehicule::booted()).
+     *
+     * @return int nombre de fiches dont l'agence qui paie a changé
      */
     public function resynchroniserPourVehicule(string $organizationId, string $vehiculeId): int
     {
@@ -95,27 +168,18 @@ class FicheSiteResponsableService
         );
 
         $fiches = PaiementFiche::where('organization_id', $organizationId)
-            ->whereIn('beneficiaire_type', self::TYPES_CONCERNES)
+            ->whereIn('beneficiaire_type', self::TYPES_VEHICULE)
             ->where('statut', '!=', StatutFichePaiement::PAYE->value)
             ->whereHas('lignes', fn (Builder $l) => $l->where(fn ($g) => $g
                 ->where(fn ($w) => $w->where('source_type', CommissionEnveloppePart::class)->whereIn('source_id', $partsVente))
                 ->orWhere(fn ($w) => $w->where('source_type', CommissionLogistiquePart::class)->whereIn('source_id', $partsLogistique))))
             ->get();
 
-        $modifiees = 0;
-        foreach ($fiches as $fiche) {
-            $site = $this->siteDeLaFiche($fiche);
-            if ($site !== null && $site !== $fiche->site_id) {
-                $this->changerSite($fiche, $site);
-                $modifiees++;
-            }
-        }
-
-        return $modifiees;
+        return $fiches->filter(fn (PaiementFiche $fiche) => $this->realigner($fiche))->count();
     }
 
     /**
-     * Seul point qui change l'agence d'une fiche non payée. Si la fiche est déjà constatée en
+     * Seul point qui change l'agence qui paie une fiche non payée. Si la fiche est déjà constatée en
      * comptabilité, son reste dû et la charge correspondante suivent dans l'agence qui la paiera
      * (FicheComptabilisationService::comptabiliserReaffectation()) — en mode shadow, comme la
      * constatation elle-même : un échec comptable est journalisé, jamais bloquant.

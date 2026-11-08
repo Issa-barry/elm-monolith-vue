@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\SiteStatut;
 use App\Enums\SiteType;
+use App\Services\Commission\FicheSiteResponsableService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -81,6 +82,14 @@ class Site extends Model
                     ->when($site->exists, fn ($q) => $q->whereKeyNot($site->getKey()))
                     ->where('is_central_tresorerie', true)
                     ->update(['is_central_tresorerie' => false]);
+            }
+        });
+
+        // Agence centralisée des commissions par défaut (ADR 0061) : les fiches non payées suivent
+        // la nouvelle trésorerie principale.
+        static::saved(function (Site $site) {
+            if ($site->is_central_tresorerie && ($site->wasRecentlyCreated || $site->wasChanged('is_central_tresorerie'))) {
+                app(FicheSiteResponsableService::class)->realignerAgencesPayeuses($site->organization_id);
             }
         });
     }

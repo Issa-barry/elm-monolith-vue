@@ -1,7 +1,10 @@
 # ADR 0020 — Agence qui paie une commission livreur/propriétaire : site actuel du véhicule
 
 - **Date** : 2026-10-06
-- **Statut** : **accepté le 2026-10-06** (décision de l'utilisateur après constat en production)
+- **Statut** : **accepté le 2026-10-06** (décision de l'utilisateur après constat en production) ;
+  **amendé par l'[ADR 0061](0061-agences-payeuses-des-commissions.md) le 2026-11-07** : le site du
+  véhicule devient l'agence de **rattachement** ; l'agence qui paie suit la politique de paiement
+  (par défaut, la trésorerie principale pour les propriétaires et parrains, le véhicule pour les livreurs)
 - **Périmètre** : fiches de paiement livreur/propriétaire, écrans Commissions Livreurs et
   Propriétaires (filtre Agence, colonne Agence, exports), Financement / Remises des agences
   (obligations par agence), paiement d'une fiche (ADR 0009)

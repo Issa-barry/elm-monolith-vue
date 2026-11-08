@@ -1673,10 +1673,48 @@ fiche de paiement partait vers le site majoritaire des ventes de la quinzaine.
   commissions des véhicules de son agence, et ne voit plus celles des ventes faites chez lui par
   un véhicule d'une autre agence. Le site de chaque vente reste visible dans le détail d'un bénéficiaire et
   dans les sites contributeurs d'un véhicule (écran Propriétaires).
-- **Hors règle** : les commissions de la cible **Site** restent dues au site de la vente.
+- **Hors règle** : les commissions de la cible **Site** restent dues au site de la vente (bénéficiaire) ;
+  leur agence payeuse suit la politique de l'ADR 0061.
 - **Rattrapage** : `php artisan commissions:realigner-sites-fiches` liste les fiches non payées
   calculées avant la règle dont l'agence doit changer ; `--appliquer` les corrige.
 - Tests : `tests/Feature/Comptabilite/CommissionSiteResponsableVehiculeTest.php`.
+
+> **Amendé le 07/11/2026 (ADR 0061)** : le site du véhicule est désormais l'agence de
+> **rattachement** de la fiche. L'agence qui **paie** suit la politique de paiement ci-dessous ; par
+> défaut, seuls les livreurs restent payés par l'agence du véhicule.
+
+## Agences payeuses des commissions — politique configurable (07/11/2026, ADR 0061)
+
+Voir [ADR 0061](adr/0061-agences-payeuses-des-commissions.md). Décision : Matoto (trésorerie
+principale) paie tous les bénéficiaires sauf les livreurs, réglable dans **Paramètres → Agences
+payeuses** (permission `commissions.configurer_agences_payeuses`, super administrateur par défaut).
+
+| Bénéficiaire | Règle par défaut | Agence payeuse par défaut |
+| ------------ | ---------------- | ------------------------- |
+| Propriétaire | Agence centralisée | Trésorerie principale (Matoto) |
+| Consultant | Agence centralisée | Trésorerie principale (Matoto) |
+| Parrain | Agence centralisée | Trésorerie principale (Matoto) |
+| Site | Agence centralisée | Trésorerie principale (Matoto) |
+| Livreur | Agence de rattachement | Agence du véhicule |
+
+- **Règles possibles par catégorie** : agence centralisée (une seule agence commune ; vide = la
+  trésorerie principale), agence de rattachement (véhicule ; site bénéficiaire pour une commission
+  Site ; aucune pour un consultant), ou une autre agence choisie.
+- **Deux agences par fiche** : l'agence qui paie (`site_id`) et l'agence de rattachement
+  (`site_rattachement_id`). La colonne **Agence** des écrans Livreurs et Propriétaires reste
+  l'agence de rattachement (agence du véhicule).
+- **Lecture / paiement** : l'agence de rattachement lit les commissions et les fiches ; seule l'agence
+  payeuse (ou un compte « toutes agences ») voit **Payer**. Les responsables de l'agence qui paie
+  une catégorie entière voient toutes ses commissions (écrans Propriétaires, Livreurs, Sites).
+- **Changement de politique** : les fiches non entièrement payées passent aussitôt à la nouvelle
+  agence payeuse (reste dû et charge déplacés en comptabilité si la fiche est constatée) ; les fiches
+  payées et les paiements faits ne bougent pas. Chaque changement est historisé.
+- **Véhicule réaffecté** : l'agence de rattachement suit le véhicule ; l'agence payeuse ne change que
+  pour une catégorie réglée sur « agence de rattachement ».
+- **Financement / Remises** : le besoin des catégories centralisées est compté à l'agence centralisée.
+- **Bascule des fiches existantes** : `php artisan commissions:realigner-sites-fiches` (aperçu), puis
+  `--appliquer`.
+- Tests : `tests/Feature/Comptabilite/AgencesPayeusesCommissionsTest.php`.
 
 ## Part du parrain dans l'enveloppe Livreur (21/10/2026, ADR 0035)
 

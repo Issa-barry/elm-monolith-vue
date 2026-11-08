@@ -375,12 +375,21 @@ class PlanComptableBootstrapService
             ['fiche_reaffectee_sortie', 'charge_commission_proprietaire', null, '622100', 'OD'],
             ['fiche_reaffectee_sortie', 'dette_tiers_parrain', null, '467210', 'OD'],
             ['fiche_reaffectee_sortie', 'charge_commission_parrain', null, '622500', 'OD'],
+            // Agence payeuse changée par la politique de paiement (ADR 0061).
+            ['fiche_reaffectee_sortie', 'dette_tiers_site', null, '467170', 'OD'],
+            ['fiche_reaffectee_sortie', 'charge_commission_site', null, '622300', 'OD'],
+            ['fiche_reaffectee_sortie', 'dette_tiers_prestataire', null, '467180', 'OD'],
+            ['fiche_reaffectee_sortie', 'charge_commission_prestataire', null, '622400', 'OD'],
             ['fiche_reaffectee_entree', 'dette_tiers_livreur', null, '467120', 'OD'],
             ['fiche_reaffectee_entree', 'charge_commission_livreur', null, '622200', 'OD'],
             ['fiche_reaffectee_entree', 'dette_tiers_proprietaire', null, '467110', 'OD'],
             ['fiche_reaffectee_entree', 'charge_commission_proprietaire', null, '622100', 'OD'],
             ['fiche_reaffectee_entree', 'dette_tiers_parrain', null, '467210', 'OD'],
             ['fiche_reaffectee_entree', 'charge_commission_parrain', null, '622500', 'OD'],
+            ['fiche_reaffectee_entree', 'dette_tiers_site', null, '467170', 'OD'],
+            ['fiche_reaffectee_entree', 'charge_commission_site', null, '622300', 'OD'],
+            ['fiche_reaffectee_entree', 'dette_tiers_prestataire', null, '467180', 'OD'],
+            ['fiche_reaffectee_entree', 'charge_commission_prestataire', null, '622400', 'OD'],
 
             // Régularisation de clôture (provision, reprise automatique à la validation réelle)
             ['regularisation_cloture_fiche', 'charge_commission_proprietaire', null, '622100', 'OD'],

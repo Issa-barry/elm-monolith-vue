@@ -132,6 +132,7 @@ final class PermissionCatalog
         'commissions.payer' => 'Commissions — payer',
         'commissions.cloturer' => 'Commissions — clôturer',
         'commissions.exporter' => 'Commissions — exporter',
+        'commissions.configurer_agences_payeuses' => 'Commissions — configurer les agences qui paient les commissions (Paramètres)',
         'logistique.valider_chargement' => 'Logistique — valider le chargement',
         'logistique.valider_reception' => 'Logistique — valider la réception',
         'logistique.enregistrer_retour' => 'Logistique — enregistrer un retour au site source',
@@ -255,7 +256,7 @@ final class PermissionCatalog
                 ],
                 'Contrôle des encaissements' => ['encaissements.surveiller', 'encaissements.traiter_anomalies'],
                 'Comptabilité' => ['comptabilite.payer'],
-                'Commissions' => ['commissions.payer', 'commissions.cloturer', 'commissions.exporter'],
+                'Commissions' => ['commissions.payer', 'commissions.cloturer', 'commissions.exporter', 'commissions.configurer_agences_payeuses'],
             ],
         ],
         'depenses' => [
