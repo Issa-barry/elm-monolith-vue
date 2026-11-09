@@ -5,7 +5,7 @@
   (commit `ae3f8842`) ; lot 4 réalisé le 07/11/2026 (commit `48234f04`) ; lot 5 : décisions
   validées le 07/11/2026, plan technique validé et réalisé le 08/11/2026 (commit `d2c763e3`) ;
   lot 6a réalisé le 08/11/2026 (commit `f3e1508b`) ; lot 6b réalisé le 09/11/2026 (commit
-  `059e64dd`) ; lot 7c réalisé le 09/11/2026.
+  `059e64dd`) ; lot 7c réalisé le 09/11/2026 (commit `74db6f7a`) ; lot 7a réalisé le 09/11/2026.
 - Documentation : [docs/contacts.md](../contacts.md)
 
 ## Contexte
@@ -174,6 +174,17 @@ Transfert grossiste) suit la nature du client enregistrée sur la commande à sa
 plus sa nature actuelle ; D13 : commandes antérieures sans valeur, comportement d'avant ; D14 : un
 changement de nature ne vaut que pour les nouvelles commandes, la fiche Client liste les commandes
 en cours pour information. Prix et barèmes inchangés. CONTACT-042, COMM-011 mis à jour.
+
+Lot 7a : R1 branchée — la fiche Personne fait foi pour l'identité d'un client — mais active par
+organisation seulement après le rapport des écarts et leur arbitrage (D16) : interrupteur
+`organizations.synchronisation_identite_client_le`, renseigné par `contacts:ecarts-clients
+--activer`, refusé tant qu'un conflit ou une complétion reste. L7-1 appliquée : complétion des seuls
+champs vides, conflits arbitrés client par client, exécutions journalisées champ par champ et
+annulables. Les cinq points d'écriture passent par la Personne (création au back-office et à
+l'inscription : `apresCreation()` ; modification au back-office et espace client : déjà écrits sur la
+Personne, recopiés par `Personne::booted()`). Modification de l'identité depuis les fiches Contacts
+(`contacts.update`). CLIENTPERSONNE-002 inversée après activation ; ADR 0051 et ADR 0056 inchangés.
+CONTACT-043 à CONTACT-046.
 
 ## Conséquences
 

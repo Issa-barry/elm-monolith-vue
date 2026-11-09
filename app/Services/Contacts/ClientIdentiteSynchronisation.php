@@ -3,6 +3,7 @@
 namespace App\Services\Contacts;
 
 use App\Models\Client;
+use App\Models\Organization;
 use App\Models\Personne;
 use App\Support\Clients\ClientUniqueness;
 use Illuminate\Support\Facades\DB;
@@ -12,10 +13,12 @@ use Illuminate\Support\Facades\DB;
  * l'identité ; les colonnes d'identité de `clients`, lues par les ventes, le PDV, le cashback et
  * l'espace client, en sont une copie alimentée uniquement par ce service.
  *
- * NON BRANCHÉ : aucun point d'écriture existant ne l'appelle. Le branchement (lot 7) n'aura lieu
- * qu'après le rapport des écarts Client/Personne et leur arbitrage (décision D16), et inversera
- * alors la règle CLIENTPERSONNE-002 (docs/identite-client-personne.md). D'ici là, l'identité d'un
- * client s'écrit exactement comme aujourd'hui.
+ * Branchée au lot 7a, mais ACTIVE par organisation seulement après le rapport des écarts et leur
+ * arbitrage (D16) : `contacts:ecarts-clients --activer`, refusé tant qu'un conflit reste à arbitrer,
+ * renseigne `organizations.synchronisation_identite_client_le`. Avant l'activation, l'identité d'un
+ * client s'écrit exactement comme avant (CLIENTPERSONNE-002) ; après, toute modification de la
+ * Personne — quel que soit l'écran : Client, Contacts, Propriétaire, espace client… — est recopiée
+ * sur ses clients (Personne::booted()), et un client créé reçoit l'identité de sa Personne.
  *
  * Tout ou rien : les clients de la personne sont mis à jour dans une seule transaction ; un conflit
  * d'unicité (téléphone ou e-mail déjà porté par un autre client) refuse l'ensemble avec un message.
@@ -61,6 +64,30 @@ final class ClientIdentiteSynchronisation
 
             return $modifies;
         });
+    }
+
+    /** La synchronisation est-elle active pour cette organisation (D16) ? */
+    public static function estActivePour(?string $organizationId): bool
+    {
+        return $organizationId !== null
+            && Organization::whereKey($organizationId)->whereNotNull('synchronisation_identite_client_le')->exists();
+    }
+
+    /**
+     * Client tout juste créé (back-office, inscription) : il reçoit l'identité de sa Personne, si la
+     * synchronisation est active pour son organisation. Sans effet sinon.
+     */
+    public function apresCreation(Client $client): void
+    {
+        if ($client->personne_id === null || ! self::estActivePour($client->organization_id)) {
+            return;
+        }
+
+        $personne = Personne::find($client->personne_id);
+        if ($personne !== null) {
+            $this->depuisPersonne($personne);
+            $client->refresh();
+        }
     }
 
     /** @return array<string, ?string> */

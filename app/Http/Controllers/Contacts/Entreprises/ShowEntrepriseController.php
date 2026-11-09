@@ -64,6 +64,8 @@ class ShowEntrepriseController extends Controller
             'peut_gerer_interlocuteurs' => $user->can('gererInterlocuteurs', EntrepriseTierce::class),
             // Lot 6a : catégories libres portées ; modifiables avec contacts.update (entreprise déjà vérifiée visible).
             'categories' => $portees = PresentationContacts::categoriesLibresDes('entreprise_contact_categories', 'entreprise_tierce_id', [$entreprise->id])[$entreprise->id],
+            // Lot 7a : modifier l'identité de la fiche (contacts.update ; entreprise déjà vérifiée visible).
+            'peut_modifier_identite' => $user->can('modifierIdentite', EntrepriseTierce::class),
             'peut_modifier_categories' => $peut = $user->can('modifierCategories', EntrepriseTierce::class),
             'categories_options' => $peut
                 ? ReferentielCategories::options(CategorieLibre::where('organization_id', $entreprise->organization_id)->get(), array_column($portees, 'id'))

@@ -20,7 +20,8 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 6a — Catégories de contacts | Écran de paramétrage, sous-catégories Fournisseur multiples, catégories libres (Partenaire) et filtre, sous-catégories système en lecture seule | Codé (08/11/2026), non commité |
 | 6b — Qualifications Prestataire | Qualifications multiples, `qualifieConsultant()`, D15, reprise des qualifications | Codé (09/11/2026), non commité |
 | 7c — Nature du client sur la commande | `commandes_ventes.nature_client` figée à la création, lue par les commissions, listes et exports (D12 à D14) | Codé (09/11/2026), non commité |
-| 7a, 7b, 8, 9 | Identité client, client professionnel, bascule, fusion | À venir |
+| 7a — Identité client | La fiche Personne fait foi (R1) ; rapport, arbitrage et activation par organisation (D16) ; modification de l'identité depuis Contacts | Codé (09/11/2026), non commité |
+| 7b, 8, 9 | Client professionnel, bascule, fusion | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
@@ -299,6 +300,39 @@ sur les ventes, commissions, comptabilité ou logistique.
   nature actuelle du client (aucun calcul de prix modifié). Règle de commission mise à jour dans
   [commissions.md](commissions.md) (COMM-011).
 
+- **CONTACT-043** — R1 (lot 7a) : la fiche Personne fait foi pour l'identité d'un client
+  (`nom`, `prenom`, `nom_complet`, `telephone`, `email`, `pays`, `code_pays`, `code_phone_pays`,
+  `ville`, `adresse`) ; les colonnes de `clients` en sont une copie. **Active par organisation
+  seulement** (`organizations.synchronisation_identite_client_le`), après le rapport des écarts et
+  leur arbitrage (D16) ; avant, comportement inchangé (CLIENTPERSONNE-002). Une fois active : toute
+  modification de la Personne, quel que soit l'écran (Client, Contacts, Propriétaire, espace client,
+  Employé…), est recopiée sur ses clients avant l'enregistrement, et un conflit d'unicité client
+  (téléphone, e-mail) refuse aussi la modification de la Personne ; un client créé (back-office,
+  inscription) reçoit l'identité de sa Personne ; au back-office, une Personne existante garde son
+  identité, seuls ses champs vides sont complétés depuis la saisie. Nature, cashback, dérogation et
+  tarifs ne sont jamais touchés.
+- **CONTACT-044** — Modification de l'identité d'une fiche depuis Contacts : bouton « Modifier » de
+  l'onglet Informations des fiches Personne et Entreprise, avec `contacts.update` et une fiche
+  visible (404 sinon, super_admin compris). La fiche vaut pour toutes ses fonctions. Téléphone
+  unique par organisation : un numéro d'une fiche non visible reçoit le message neutre (D6).
+  Entreprise : téléphone et ville facultatifs ; un renommage est recopié sur son propriétaire
+  (CONTACT-029). Journal : noms des champs seulement.
+- **CONTACT-045** — Rapport des écarts : `contacts:ecarts-clients --acteur=<id>` (simulation par
+  défaut) compare chaque client à sa Personne. Un champ vide d'un côté est complété depuis l'autre ;
+  deux clients d'une même Personne qui proposent deux valeurs pour un champ vide de la Personne, ou
+  deux valeurs différentes, sont des **conflits** jamais tranchés automatiquement (L7-1). Arbitrage
+  explicite client par client : `--personne-fait-foi=<client>` ou `--client-fait-foi=<client>` (sur
+  un champ vide de la Personne, seul « le client fait foi » tranche). Une différence de casse ou
+  d'espaces n'est pas un conflit. `--apply` (droits `clients.update` et `contacts.update`) écrit les
+  complétions et arbitrages, refuse un téléphone déjà porté par une autre fiche, et journalise chaque
+  champ (valeurs d'avant et d'après, `contacts_reprise_valeurs`) sous un identifiant d'exécution.
+  Anomalie signalée : client sans Personne.
+- **CONTACT-046** — `--annuler=<exécution>` (simulation sans `--apply`) restaure chaque champ qui vaut
+  encore la valeur écrite par l'exécution ; un champ modifié depuis est signalé « conflit » et laissé
+  tel quel. `--activer` démarre la synchronisation de l'organisation, refusée tant qu'un conflit ou
+  une complétion reste, puis aligne l'écriture de chaque client sur sa Personne ; journalisée, une
+  seule fois.
+
 ## Écrans (lot 2)
 
 | Route | Écran |
@@ -431,4 +465,10 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   D15, synchronisation de `type`), critère `Prestataire::qualifieConsultant()` /
   `scopeQualifiesConsultant()` / `conditionQualifieConsultant()`, migrations `2026_11_09_100000`
   (`type` facultatif) et `2026_11_09_100100` (reprise).
+- Identité client (lot 7a) : `ClientIdentiteSynchronisation` (activation, `apresCreation()`),
+  recopie dans `Personne::booted()`, `EcartsIdentiteClients` et commande
+  `ContactsEcartsClientsCommand`, `ModificationIdentiteContact`, requêtes
+  `UpdatePersonneContactRequest` / `UpdateEntrepriseContactRequest`, contrôleurs
+  `UpdatePersonneController` / `UpdateEntrepriseController`, dialogue `ModifierIdentiteDialog.vue`,
+  modèle `ContactsRepriseValeur`, migration `2026_11_09_220000`.
 - Tests : `tests/Feature/Contacts/`.

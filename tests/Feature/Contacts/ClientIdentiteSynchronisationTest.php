@@ -12,9 +12,8 @@ use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /**
- * Synchronisation Personne → Client (R1, ADR 0060). Le service est construit et testé mais
- * NON BRANCHÉ : le dernier test garantit qu'aucun point d'écriture existant ne l'appelle avant le
- * lot 7 (arbitrage des écarts, D16).
+ * Synchronisation Personne → Client (R1, ADR 0060). Branchée au lot 7a, active par organisation
+ * seulement après l'arbitrage des écarts (D16, `contacts:ecarts-clients --activer`).
  */
 class ClientIdentiteSynchronisationTest extends TestCase
 {
@@ -120,19 +119,44 @@ class ClientIdentiteSynchronisationTest extends TestCase
         $this->assertSame('Intact', $ailleurs->fresh()->nom_complet);
     }
 
-    public function test_le_service_n_est_branche_a_aucun_point_d_ecriture(): void
+    /** Lot 7a (D16) : branchée, mais sans effet tant que l'organisation n'a pas activé la synchronisation. */
+    public function test_sans_activation_une_modification_de_la_personne_ne_touche_pas_ses_clients(): void
     {
-        $fichiers = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(app_path(), \FilesystemIterator::SKIP_DOTS));
+        $personne = Personne::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => 'Fatou Bah', 'telephone' => '+224622123456']);
+        $client = $this->client($personne);
 
-        $appelants = collect(iterator_to_array($fichiers, false))
-            ->map(fn (\SplFileInfo $f) => $f->getPathname())
-            ->filter(fn (string $fichier) => str_ends_with($fichier, '.php'))
-            ->reject(fn (string $fichier) => str_ends_with($fichier, 'ClientIdentiteSynchronisation.php'))
-            ->filter(fn (string $fichier) => str_contains((string) file_get_contents($fichier), 'ClientIdentiteSynchronisation'))
-            ->map(fn (string $fichier) => str_replace(base_path().DIRECTORY_SEPARATOR, '', $fichier))
-            ->values()
-            ->all();
+        $personne->update(['nom_complet' => 'Fatoumata Bah']);
 
-        $this->assertSame([], $appelants, 'La synchronisation R1 ne se branche qu\'au lot 7, après l\'arbitrage des écarts (D16).');
+        $this->assertFalse(ClientIdentiteSynchronisation::estActivePour($this->org->id));
+        $this->assertSame('Ancien nom', $client->fresh()->nom_complet);
+    }
+
+    public function test_apres_activation_toute_modification_de_la_personne_est_recopiee(): void
+    {
+        $personne = Personne::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => 'Fatou Bah', 'telephone' => '+224622123456']);
+        $client = $this->client($personne);
+        $this->org->forceFill(['synchronisation_identite_client_le' => now()])->save();
+
+        $personne->update(['nom_complet' => 'Fatoumata Bah', 'ville' => 'Kindia']);
+
+        $this->assertSame('Fatoumata Bah', $client->fresh()->nom_complet);
+        $this->assertSame('Kindia', $client->fresh()->ville);
+        $this->assertSame(ClientType::GROSSISTE, $client->fresh()->type);
+    }
+
+    public function test_apres_activation_un_conflit_d_unicite_client_refuse_aussi_la_modification_de_la_personne(): void
+    {
+        $personne = Personne::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => 'Fatou Bah', 'telephone' => '+224622123456']);
+        $this->client($personne);
+        $autre = Personne::factory()->create(['organization_id' => $this->org->id, 'telephone' => '+224655000000']);
+        $this->client($autre, ['telephone' => '+224655000000', 'email' => 'pris@exemple.gn']);
+        $this->org->forceFill(['synchronisation_identite_client_le' => now()])->save();
+
+        try {
+            $personne->update(['email' => 'pris@exemple.gn']);
+            $this->fail('Conflit d\'unicité accepté.');
+        } catch (ValidationException) {
+            $this->assertNull($personne->fresh()->email);
+        }
     }
 }

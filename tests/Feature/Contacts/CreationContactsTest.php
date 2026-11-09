@@ -419,7 +419,7 @@ class CreationContactsTest extends TestCase
             ->map(fn ($r) => $r->getName().':'.implode('|', $r->methods()))
             ->sort()->values()->all();
 
-        // Lot 6a : paramétrage des catégories et attribution des catégories libres, par décision.
+        // Lot 6a : catégories ; lot 7a : modification de l'identité d'une fiche, par décision.
         $this->assertSame([
             'contacts.categories.libres.store:POST',
             'contacts.categories.libres.update:PATCH',
@@ -434,9 +434,11 @@ class CreationContactsTest extends TestCase
             'contacts.entreprises.interlocuteurs.store:POST',
             'contacts.entreprises.interlocuteurs.update:PATCH',
             'contacts.entreprises.store:POST',
+            'contacts.entreprises.update:PATCH',
             'contacts.personnes.categories.update:PUT',
             'contacts.personnes.fonctions.store:POST',
             'contacts.personnes.store:POST',
+            'contacts.personnes.update:PATCH',
         ], $ecritures);
     }
 }

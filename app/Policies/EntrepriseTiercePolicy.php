@@ -30,6 +30,12 @@ class EntrepriseTiercePolicy
         return $user->can('contacts.gerer_interlocuteurs');
     }
 
+    /** Identité de la fiche (lot 7a) ; la visibilité est vérifiée en plus par le contrôleur. */
+    public function modifierIdentite(User $user): bool
+    {
+        return $user->can('contacts.update');
+    }
+
     /** Catégories libres de la fiche (lot 6a) ; la visibilité de l'entreprise est vérifiée en plus par le contrôleur. */
     public function modifierCategories(User $user): bool
     {

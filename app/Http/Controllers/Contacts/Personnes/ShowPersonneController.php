@@ -60,6 +60,8 @@ class ShowPersonneController extends Controller
             'types_prestataire' => QualificationsPrestataire::options($personne->organization_id),
             // Lot 6a : catégories libres portées ; modifiables avec contacts.update (fiche déjà vérifiée visible).
             'categories' => $portees = PresentationContacts::categoriesLibresDes('personne_contact_categories', 'personne_id', [$personne->id])[$personne->id],
+            // Lot 7a : modifier l'identité de la fiche (contacts.update ; fiche déjà vérifiée visible).
+            'peut_modifier_identite' => $user->can('modifierIdentite', Personne::class),
             'peut_modifier_categories' => $peut = $user->can('modifierCategories', Personne::class),
             'categories_options' => $peut
                 ? ReferentielCategories::options(CategorieLibre::where('organization_id', $personne->organization_id)->get(), array_column($portees, 'id'))

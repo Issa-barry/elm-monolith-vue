@@ -9,6 +9,14 @@ indépendant, cf. `TelephoneOwnerLookupService`, désormais obsolète sur ce poi
 
 ## Règles métier (IDs)
 
+> **Référentiel Contacts, lot 7a (09/11/2026, ADR 0060, R1, D16)** — la fiche Personne fait foi
+> pour l'identité d'un client, **par organisation et seulement après activation**
+> (`contacts:ecarts-clients --activer`, refusée tant qu'un écart reste à arbitrer). Avant
+> l'activation, les règles ci-dessous s'appliquent telles quelles. Après : CLIENTPERSONNE-002 est
+> inversée — les colonnes d'identité de `clients` deviennent une copie de la Personne, recopiée à
+> chaque modification de celle-ci quel que soit l'écran ([contacts.md](contacts.md),
+> CONTACT-043 à CONTACT-046).
+
 - **CLIENTPERSONNE-001** — Une identité correspond à une seule `Personne` par organisation.
   Une même `Personne` peut porter plusieurs rôles (`Client`, `Parrain`, `Proprietaire`,
   `Fournisseur`...) sans jamais être dupliquée.
@@ -17,21 +25,27 @@ indépendant, cf. `TelephoneOwnerLookupService`, désormais obsolète sur ce poi
   résolution/dédoublonnage d'identité entre rôles, jamais à leur remplacement. Tous les
   affichages/lectures existants (`Ventes\{Index,Show,Edit}CommandeVenteController`, `CashbackController`,
   `ClientSearchProvider`, l'espace client mobile...) continuent de lire directement les
-  colonnes de `Client`, inchangées.
+  colonnes de `Client`, inchangées. **Après activation (lot 7a)** : ces colonnes restent lues
+  telles quelles, mais ne s'écrivent plus que par recopie de la Personne
+  (`ClientIdentiteSynchronisation`).
 - **CLIENTPERSONNE-003** — À la création d'un `Client` (`StoreClientController`,
   auto-inscription web/mobile), le téléphone est résolu via `Personne::resoudreOuCreer()` — la
   même méthode utilisée par tous les autres rôles. Si une `Personne` existe déjà dans
   l'organisation avec ce téléphone (un autre rôle, ou un autre client), elle est réutilisée
   **telle quelle** (jamais de fusion/écrasement de ses champs). `StoreClientController` garantit déjà
   qu'aucun autre client actif ne porte ce téléphone (`App\Support\Clients\ClientUniqueness::assertPhoneUniqueInOrg()`), donc la Personne
-  trouvée ne peut jamais appartenir à un client concurrent.
+  trouvée ne peut jamais appartenir à un client concurrent. **Après activation (lot 7a)** : une
+  Personne existante garde son identité, seuls ses champs vides sont complétés depuis la saisie
+  (L7-1), puis le client reçoit l'identité de sa Personne.
 - **CLIENTPERSONNE-004** — À la modification d'un client déjà rattaché
   (`UpdateClientController`), l'identité est éditée **en place** sur sa `Personne`
   existante — jamais de re-résolution par téléphone (même principe que
   `ProprietaireController::update()`). Si le nouveau téléphone appartient déjà à une **autre**
   `Personne`, la modification est refusée (`Personne::assertTelephoneDisponible()`) plutôt que
   de heurter silencieusement la contrainte unique `personnes.(organization_id,
-  telephone_normalise)`.
+  telephone_normalise)`. **Après activation (lot 7a)** : la modification de la Personne est
+  recopiée sur tous ses clients, dans la même opération (un conflit d'unicité client refuse
+  l'ensemble).
 - **CLIENTPERSONNE-005** — Deux organisations différentes avec le même numéro donnent toujours
   deux `Personne` distinctes (l'unicité de `personnes` est scopée par organisation).
 - **CLIENTPERSONNE-006** — Auto-inscription (`RegistrationService`, `CreateNewUser`) : si le
@@ -41,7 +55,8 @@ indépendant, cf. `TelephoneOwnerLookupService`, désormais obsolète sur ce poi
   logique que pour un `Livreur`/`Proprietaire` déjà existant. Le prénom et le nom saisis
   complètent uniquement ceux que cette `Personne` n'a pas encore (fiche back-office souvent
   limitée à `nom_complet`) ; une valeur déjà renseignée n'est jamais écrasée et `nom_complet`
-  ne change pas.
+  ne change pas. **Après activation (lot 7a)** : le client créé à l'inscription reçoit l'identité de
+  sa Personne (inscription et ADR 0056 inchangés par ailleurs).
 - **CLIENTPERSONNE-008** — Pré-remplissage de l'inscription et de l'invitation par téléphone
   (`check-phone`, `register/lookup`) : l'identité d'un client se lit sur sa `Personne`, avec
   repli sur ses colonnes `clients.prenom`/`nom`. L'écran verrouille les champs pré-remplis : une
@@ -54,6 +69,8 @@ indépendant, cf. `TelephoneOwnerLookupService`, désormais obsolète sur ce poi
   écrits sur chaque `Personne` du compte et sur `Client`. `nom_complet` n'est jamais réécrit :
   c'est un libellé géré au back-office, qui peut garder une désignation provisoire.
   `code_pays`/`code_phone_pays` ne changent pas non plus : ils décrivent le pays du téléphone.
+  **Après activation (lot 7a)** : l'écriture sur la Personne est aussi recopiée sur ses clients ;
+  le comportement de l'écran (ADR 0051) ne change pas.
 
 ## Backfill
 

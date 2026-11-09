@@ -99,6 +99,7 @@ use App\Http\Controllers\Contacts\Categories\UpdateCategorieLibreController;
 use App\Http\Controllers\Contacts\Categories\UpdateSousCategorieController;
 use App\Http\Controllers\Contacts\CreateContactController;
 use App\Http\Controllers\Contacts\Entreprises\IndexEntrepriseController;
+use App\Http\Controllers\Contacts\Entreprises\UpdateEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\ShowEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\StoreEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\StoreFonctionEntrepriseController;
@@ -109,6 +110,7 @@ use App\Http\Controllers\Contacts\Interlocuteurs\RechercheTelephoneInterlocuteur
 use App\Http\Controllers\Contacts\Interlocuteurs\StoreInterlocuteurController;
 use App\Http\Controllers\Contacts\Interlocuteurs\UpdateInterlocuteurController;
 use App\Http\Controllers\Contacts\Personnes\IndexPersonneController;
+use App\Http\Controllers\Contacts\Personnes\UpdatePersonneController;
 use App\Http\Controllers\Contacts\Personnes\ShowPersonneController;
 use App\Http\Controllers\Contacts\Personnes\StoreFonctionPersonneController;
 use App\Http\Controllers\Contacts\Personnes\StorePersonneController;
@@ -539,6 +541,9 @@ Route::prefix('backoffice')->group(function () {
         Route::post('contacts/categories/libres', StoreCategorieLibreController::class)->name('contacts.categories.libres.store');
         Route::patch('contacts/categories/libres/{categorieLibre}', UpdateCategorieLibreController::class)->name('contacts.categories.libres.update');
         Route::post('contacts/categories/ordre', OrdonnerCategoriesController::class)->name('contacts.categories.ordre');
+        // Lot 7a — identité d'une fiche (contacts.update, fiche visible vérifiée par les contrôleurs).
+        Route::patch('contacts/personnes/{personne}', UpdatePersonneController::class)->name('contacts.personnes.update');
+        Route::patch('contacts/entreprises/{entreprise}', UpdateEntrepriseController::class)->name('contacts.entreprises.update');
         Route::put('contacts/personnes/{personne}/categories', AttribuerCategoriesPersonneController::class)->name('contacts.personnes.categories.update');
         Route::put('contacts/entreprises/{entreprise}/categories', AttribuerCategoriesEntrepriseController::class)->name('contacts.entreprises.categories.update');
 

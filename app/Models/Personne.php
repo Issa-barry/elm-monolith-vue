@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Civilite;
+use App\Services\Contacts\ClientIdentiteSynchronisation;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -40,6 +41,21 @@ class Personne extends Model
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
         ];
+    }
+
+    /**
+     * R1 (ADR 0060, lot 7a) : une fois la synchronisation activée pour l'organisation (D16), toute
+     * modification de l'identité d'une Personne — quel que soit l'écran — est recopiée sur ses
+     * clients avant l'enregistrement : un conflit d'unicité côté client (téléphone, e-mail) refuse
+     * aussi la modification de la Personne. Sans activation : aucun effet (CLIENTPERSONNE-002).
+     */
+    protected static function booted(): void
+    {
+        static::updating(function (Personne $personne) {
+            if ($personne->isDirty(ClientIdentiteSynchronisation::COLONNES) && ClientIdentiteSynchronisation::estActivePour($personne->organization_id)) {
+                app(ClientIdentiteSynchronisation::class)->depuisPersonne($personne);
+            }
+        });
     }
 
     public function setEmailAttribute(mixed $value): void

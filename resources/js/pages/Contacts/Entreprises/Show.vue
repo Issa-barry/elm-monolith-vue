@@ -40,6 +40,7 @@ import BlocCategories from '../partials/BlocCategories.vue';
 import Coordonnees from '../partials/Coordonnees.vue';
 import CopierTelephone from '../partials/CopierTelephone.vue';
 import ListeFonctions from '../partials/ListeFonctions.vue';
+import ModifierIdentiteDialog from '../partials/ModifierIdentiteDialog.vue';
 import ModifierInterlocuteurDialog from '../partials/ModifierInterlocuteurDialog.vue';
 import type {
     CategorieFiche,
@@ -63,6 +64,8 @@ const props = defineProps<{
     categories: CategorieFiche[];
     categories_options: OptionCategorie[];
     peut_modifier_categories: boolean;
+    /** Lot 7a : permission `contacts.update` (revérifiée côté serveur). */
+    peut_modifier_identite: boolean;
 }>();
 
 useFlashToast();
@@ -70,6 +73,10 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const ajoutVisible = ref(false);
+const identiteVisible = ref(false);
+const valeursIdentite = computed(
+    () => props.entreprise as unknown as Record<string, string | null>,
+);
 const ajoutInterlocuteurVisible = ref(false);
 const modificationVisible = ref(false);
 const interlocuteurModifie = ref<InterlocuteurFiche | null>(null);
@@ -213,11 +220,31 @@ function telephone(valeur: string | null, code: string | null): string {
 
                 <div v-if="onglet === 'informations'">
                     <section class="rounded-xl border bg-card p-5 sm:p-6">
-                        <h2
-                            class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        <div
+                            class="mb-4 flex items-center justify-between gap-3"
                         >
-                            Identification
-                        </h2>
+                            <h2
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Identification
+                            </h2>
+                            <Button
+                                v-if="peut_modifier_identite"
+                                variant="outline"
+                                size="sm"
+                                data-testid="fiche-modifier-identite"
+                                @click="identiteVisible = true"
+                            >
+                                Modifier
+                            </Button>
+                        </div>
+                        <ModifierIdentiteDialog
+                            v-if="peut_modifier_identite"
+                            v-model:visible="identiteVisible"
+                            type="entreprise"
+                            :url="`/backoffice/contacts/entreprises/${entreprise.id}`"
+                            :valeurs="valeursIdentite"
+                        />
                         <dl
                             class="mb-6 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2"
                         >

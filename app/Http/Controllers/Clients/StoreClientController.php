@@ -7,18 +7,20 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Personne;
 use App\Services\CashbackEligibiliteService;
+use App\Services\Contacts\ClientIdentiteSynchronisation;
 use App\Support\Clients\ClientUniqueness;
 use App\Support\Clients\ClientValidationMessages;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class StoreClientController extends Controller
 {
     use PhoneHandlerTrait;
 
-    public function __invoke(Request $request): RedirectResponse
+    public function __invoke(Request $request, ClientIdentiteSynchronisation $synchronisation): RedirectResponse
     {
         $this->authorize('create', Client::class);
 
@@ -70,7 +72,7 @@ class StoreClientController extends Controller
         // jamais de doublon d'identité. assertPhoneUniqueInOrg() ci-dessus garantit déjà
         // qu'aucun AUTRE client actif ne porte ce téléphone, donc la Personne trouvée ici ne
         // peut jamais déjà appartenir à un client concurrent.
-        $personne = Personne::resoudreOuCreer($orgId, [
+        $identite = [
             'nom_complet' => $data['nom_complet'],
             'telephone' => $data['telephone'],
             'email' => $data['email'] ?? null,
@@ -79,9 +81,25 @@ class StoreClientController extends Controller
             'pays' => $data['pays'] ?? null,
             'ville' => $data['ville'] ?? null,
             'adresse' => $data['adresse'] ?? null,
-        ]);
+        ];
 
-        $client = Client::create([...$data, 'organization_id' => $orgId, 'personne_id' => $personne->id]);
+        $client = DB::transaction(function () use ($orgId, $data, $identite, $synchronisation) {
+            $personne = Personne::resoudreOuCreer($orgId, $identite);
+
+            // R1 activée (ADR 0060, lot 7a) : la Personne existante fait foi ; seuls ses champs vides
+            // sont complétés depuis la saisie (L7-1), puis le client reçoit son identité.
+            if (ClientIdentiteSynchronisation::estActivePour($orgId) && ! $personne->wasRecentlyCreated) {
+                $personne->fill(array_filter($identite, fn ($valeur, string $champ) => $valeur !== null && $valeur !== '' && blank($personne->getAttributes()[$champ] ?? null), ARRAY_FILTER_USE_BOTH));
+                if ($personne->isDirty()) {
+                    $personne->save();
+                }
+            }
+
+            $client = Client::create([...$data, 'organization_id' => $orgId, 'personne_id' => $personne->id]);
+            $synchronisation->apresCreation($client);
+
+            return $client;
+        });
 
         return redirect()->route('clients.show', $client)
             ->with('success', 'Client créé avec succès.');
