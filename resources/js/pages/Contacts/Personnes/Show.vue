@@ -43,6 +43,8 @@ const props = defineProps<{
     /** Lot 3 : fonctions que l'utilisateur peut ajouter et que la fiche ne porte pas. */
     fonctions_ajoutables: OptionFiltre[];
     types_prestataire: OptionFiltre[];
+    /** Lot 8 : sous-catégories proposées à l'ajout de la fonction Fournisseur. */
+    sous_categories_fournisseur: OptionFiltre[];
     /** Lot 6a : catégories libres et permission `contacts.update` (revérifiée côté serveur). */
     categories: CategorieFiche[];
     categories_options: OptionCategorie[];
@@ -306,6 +308,7 @@ const telephone = computed(
             :nom-fiche="personne.nom_affiche"
             :fonctions="fonctions_ajoutables"
             :types-prestataire="types_prestataire"
+            :sous-categories-fournisseur="sous_categories_fournisseur"
         />
     </AppLayout>
 </template>

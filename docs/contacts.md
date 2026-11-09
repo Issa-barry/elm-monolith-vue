@@ -21,8 +21,9 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 6b — Qualifications Prestataire | Qualifications multiples, `qualifieConsultant()`, D15, reprise des qualifications | Fait (09/11/2026, commit `059e64dd`) |
 | 7c — Nature du client sur la commande | `commandes_ventes.nature_client` figée à la création, lue par les commissions, listes et exports (D12 à D14) | Fait (09/11/2026, commit `74db6f7a`) |
 | 7a — Identité client | La fiche Personne fait foi (R1) ; rapport, arbitrage et activation par organisation (D16) ; modification de l'identité depuis Contacts | Fait (09/11/2026, commit `d268ffe8`) |
-| 7b — Client professionnel | Client relié à une fiche Entreprise (règles du lot 5), raison sociale comme nom principal (L7-2) | Codé (09/11/2026), non commité |
-| 8, 9 | Bascule, fusion | À venir |
+| 7b — Client professionnel | Client relié à une fiche Entreprise (règles du lot 5), raison sociale comme nom principal (L7-2) | Fait (09/11/2026, commit `ee322eb0`) |
+| 8 — Bascule | Menu « Par fonction », groupe « Contacts » unique dans la recherche du back-office, création Fournisseur / Prestataire par le parcours Contacts (L8-1 à L8-3) | Codé (09/11/2026), non commité |
+| 9 | Fusion | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
@@ -108,7 +109,7 @@ sur les ventes, commissions, comptabilité ou logistique.
 - **CONTACT-016** — Le module est en lecture seule au lot 2 : aucune création, modification,
   suppression ni association. La recherche globale ajoute un groupe « Contacts » (fiches Personne et
   Entreprise) ; les groupes existants ne changent pas, une même personne peut figurer sous
-  « Clients » et « Contacts » jusqu'au lot 8.
+  « Clients » et « Contacts » jusqu'au lot 8 (regroupement : CONTACT-051).
 
 - **CONTACT-017** — « Nouveau contact » (`contacts.create` et au moins une fonction créable) : type
   (Personne ou Entreprise), téléphone puis « Rechercher », identité, première fonction. Le numéro est
@@ -354,6 +355,28 @@ sur les ventes, commissions, comptabilité ou logistique.
   journalisé, origine `client_particulier`) sans supprimer l'entreprise ni ses interlocuteurs ; le
   nom du client redevient le nom du contact. Fiche Entreprise : fonction « Client » (avec
   `clients.read`) ; fiche Personne : mention « au nom de » (D10).
+- **CONTACT-050** — Menu Contacts (lot 8, L8-1) : « Entreprises » et « Personnes physiques » en tête,
+  puis l'intertitre « Par fonction » avec les écrans Clients, Fournisseurs, Prestataires,
+  Propriétaires et Parrains — permissions et modules inchangés, aucun écran ni URL retiré (cashback,
+  tarifs, dérogations, commissions, véhicules et comptes restent sur ces écrans) — puis
+  « Paramétrage » (Catégories de contacts).
+- **CONTACT-051** — Recherche globale du back-office (lot 8, L8-2) : avec `contacts.read`, un seul
+  groupe « Contacts » en tête remplace les groupes Clients, Propriétaires et Livreurs. Chaque
+  résultat porte un badge par fonction visible, avec le lien vers l'écran métier quand il existe
+  (fournisseur, prestataire : pas d'écran de consultation, badge sans lien). Rien n'est perdu : la
+  recherche porte aussi sur le nom et le téléphone écrits sur la fiche Client et sur la désignation
+  du livreur ; un client encore sans Personne reste retrouvable (lien vers sa fiche Client) ; le
+  groupe affiche autant de résultats que les groupes qu'il remplace (20 au plus). Un groupe dont la
+  fonction n'est pas lisible dans Contacts (module inactif) reste séparé ; sans `contacts.read`, les
+  groupes historiques restent. L'API `v1/search/global` (mobile) garde ses groupes : contrat
+  inchangé. Les listes Contacts retrouvent aussi une personne par le nom de sa fiche Client.
+- **CONTACT-052** — Création (lot 8, L8-3) : avec `contacts.create`, le bouton « Nouveau » des écrans
+  Fournisseurs et Prestataires ouvre le parcours « téléphone d'abord » de Contacts, fonction
+  présélectionnée (`?fonction=`, ignorée si l'utilisateur ne peut pas la créer) ; sinon le
+  formulaire de l'écran. Le parcours propose les sous-catégories Fournisseur, comme l'écran
+  Fournisseur. Client, Propriétaire et Parrain gardent leur formulaire (champs métier : nature,
+  cashback, dérogation, type de propriétaire…), le parcours Contacts ne créant que les fonctions
+  Fournisseur et Prestataire (CONTACT-017).
 
 ## Écrans (lot 2)
 
@@ -365,7 +388,8 @@ sur les ventes, commissions, comptabilité ou logistique.
 | `GET /backoffice/contacts/entreprises/{entreprise}` | Fiche : Informations, Fonctions, Interlocuteurs (lecture) |
 
 Menu : « Entreprises » et « Personnes physiques » en tête de Contacts, visibles avec
-`contacts.read` ; les cinq liens par fonction restent jusqu'au lot 8.
+`contacts.read` ; les cinq liens par fonction restent, sous l'intertitre « Par fonction » depuis le
+lot 8 (CONTACT-050).
 
 ## Écrans et routes (lot 3)
 
@@ -419,6 +443,17 @@ Formulaire Propriétaire : téléphone et NIF de l'entreprise, recherche et choi
 Formulaire Client : case et champs de l'entreprise dans la carte « Identité » existante (composant
 partagé `components/contacts/RattachementEntreprise.vue`, aussi utilisé par le formulaire
 Propriétaire) ; aucune carte ajoutée.
+
+## Routes (lot 8)
+
+Aucune route ajoutée, aucune migration.
+
+| Route | Changement |
+| --- | --- |
+| `GET /backoffice/search/global` | Groupe « Contacts » regroupé (CONTACT-051) ; résultats avec `href` et `badges` |
+| `GET /api/v1/search/global` | Inchangée (groupes historiques) ; le groupe « Contacts » y porte aussi `href` et `badges` |
+| `GET /backoffice/contacts/nouveau` | Paramètre `fonction` (présélection) ; props `fonction`, `sous_categories_fournisseur` |
+| `POST /backoffice/contacts/{personnes\|entreprises}`, `POST …/{id}/fonctions` | Champ `sous_categorie_ids[]` pour un fournisseur |
 
 ## Routes (lot 6a)
 

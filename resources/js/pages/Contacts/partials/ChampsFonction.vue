@@ -9,20 +9,35 @@ import MultiSelect from 'primevue/multiselect';
 import Textarea from 'primevue/textarea';
 import type { OptionFiltre } from './types';
 
-defineProps<{
-    fonctions: OptionFiltre[];
-    /** Lot 6b : qualifications du référentiel (valeur = id), plusieurs possibles. */
-    typesPrestataire: OptionFiltre[];
-    errors: Partial<
-        Record<'fonction' | 'qualification_ids' | 'type' | 'notes', string>
-    >;
-}>();
+withDefaults(
+    defineProps<{
+        fonctions: OptionFiltre[];
+        /** Lot 6b : qualifications du référentiel (valeur = id), plusieurs possibles. */
+        typesPrestataire: OptionFiltre[];
+        /** Lot 8 : sous-catégories Fournisseur (comme à l'écran Fournisseur), sans effet métier. */
+        sousCategoriesFournisseur?: OptionFiltre[];
+        errors: Partial<
+            Record<
+                | 'fonction'
+                | 'qualification_ids'
+                | 'sous_categorie_ids'
+                | 'type'
+                | 'notes',
+                string
+            >
+        >;
+    }>(),
+    { sousCategoriesFournisseur: () => [] },
+);
 
 const fonction = defineModel<string | null>('fonction', { required: true });
 const qualificationIds = defineModel<string[]>('qualificationIds', {
     required: true,
 });
 const notes = defineModel<string | null>('notes', { required: true });
+const sousCategorieIds = defineModel<string[]>('sousCategorieIds', {
+    default: () => [],
+});
 </script>
 
 <template>
@@ -69,6 +84,34 @@ const notes = defineModel<string | null>('notes', { required: true });
                 class="mt-1 text-xs text-destructive"
             >
                 {{ errors.qualification_ids ?? errors.type }}
+            </p>
+        </div>
+        <div
+            v-if="
+                fonction === 'fournisseur' &&
+                sousCategoriesFournisseur.length > 0
+            "
+        >
+            <Label for="sous_categorie_ids" class="mb-1.5 block"
+                >Sous-catégories</Label
+            >
+            <MultiSelect
+                v-model="sousCategorieIds"
+                input-id="sous_categorie_ids"
+                :options="sousCategoriesFournisseur"
+                option-label="label"
+                option-value="value"
+                display="chip"
+                placeholder="Aucune"
+                class="w-full"
+                :class="{ 'p-invalid': errors.sous_categorie_ids }"
+                data-testid="contact-sous-categories-fournisseur"
+            />
+            <p
+                v-if="errors.sous_categorie_ids"
+                class="mt-1 text-xs text-destructive"
+            >
+                {{ errors.sous_categorie_ids }}
             </p>
         </div>
         <div class="sm:col-span-2">

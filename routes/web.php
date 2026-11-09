@@ -1303,6 +1303,7 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Recherche globale (dashboard — session auth) ──────────────────────
         Route::get('search/global', GlobalSearchController::class)
+            ->defaults('regrouper_contacts', true)
             ->name('search.global');
     });
 });

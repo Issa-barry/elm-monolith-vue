@@ -171,6 +171,18 @@ final class VisibiliteContacts
                     ->whereNull('livreurs.deleted_at')
                     ->where('livreurs.nom_complet', 'like', $like));
             }
+            // Lot 8 : nom et téléphone écrits sur la fiche Client (copie qui peut différer de la
+            // Personne tant que la synchronisation n'est pas activée) — rien de ce que trouvait
+            // l'ancien groupe « Clients » de la recherche globale n'est perdu.
+            if ($this->peutLire($lecteur, 'client')) {
+                $q->orWhereExists(fn (QueryBuilder $s) => $s->from('clients')
+                    ->whereColumn('clients.personne_id', 'personnes.id')
+                    ->whereNull('clients.deleted_at')
+                    ->where(fn (QueryBuilder $c) => $c->where('clients.nom_complet', 'like', $like)
+                        ->orWhere('clients.nom', 'like', $like)
+                        ->orWhere('clients.prenom', 'like', $like)
+                        ->orWhere('clients.telephone', 'like', $like)));
+            }
         });
     }
 

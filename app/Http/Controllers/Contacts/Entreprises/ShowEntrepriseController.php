@@ -60,6 +60,8 @@ class ShowEntrepriseController extends Controller
             'fonctions_ajoutables' => $user->can('create', EntrepriseTierce::class) ? app(FonctionsContactEcriture::class)->fonctionsAjoutables($entreprise, $user) : [],
             // Lot 6b : qualifications Prestataire actives du référentiel (valeur = id).
             'types_prestataire' => QualificationsPrestataire::options($entreprise->organization_id),
+            // Lot 8 : sous-catégories proposées à l'ajout de la fonction Fournisseur.
+            'sous_categories_fournisseur' => ReferentielCategories::optionsSousCategoriesFournisseur($entreprise->organization_id),
             // Lot 4 : gestion des interlocuteurs (l'entreprise est déjà vérifiée visible ci-dessus).
             'peut_gerer_interlocuteurs' => $user->can('gererInterlocuteurs', EntrepriseTierce::class),
             // Lot 6a : catégories libres portées ; modifiables avec contacts.update (entreprise déjà vérifiée visible).

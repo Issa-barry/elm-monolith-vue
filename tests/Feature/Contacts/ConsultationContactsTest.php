@@ -404,7 +404,8 @@ class ConsultationContactsTest extends TestCase
         $items = collect($this->rechercher($user, 'Barry')['contacts']['items']);
 
         $this->assertEqualsCanonicalizing(['personnes/'.$p->id, 'entreprises/'.$entreprise->id], $items->pluck('id')->all());
-        $this->assertStringContainsString('Client', $items->firstWhere('id', 'personnes/'.$p->id)['subtitle']);
+        // Lot 8 : les fonctions sont des badges (avec le lien de l'écran métier), plus le sous-titre.
+        $this->assertSame('Client', $items->firstWhere('id', 'personnes/'.$p->id)['badges'][0]['libelle']);
     }
 
     // ── Lecture seule ───────────────────────────────────────────────────────

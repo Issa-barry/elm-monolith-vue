@@ -58,6 +58,8 @@ class ShowPersonneController extends Controller
             'fonctions_ajoutables' => $user->can('create', Personne::class) ? app(FonctionsContactEcriture::class)->fonctionsAjoutables($personne, $user) : [],
             // Lot 6b : qualifications Prestataire actives du référentiel (valeur = id).
             'types_prestataire' => QualificationsPrestataire::options($personne->organization_id),
+            // Lot 8 : sous-catégories proposées à l'ajout de la fonction Fournisseur.
+            'sous_categories_fournisseur' => ReferentielCategories::optionsSousCategoriesFournisseur($personne->organization_id),
             // Lot 6a : catégories libres portées ; modifiables avec contacts.update (fiche déjà vérifiée visible).
             'categories' => $portees = PresentationContacts::categoriesLibresDes('personne_contact_categories', 'personne_id', [$personne->id])[$personne->id],
             // Lot 7a : modifier l'identité de la fiche (contacts.update ; fiche déjà vérifiée visible).

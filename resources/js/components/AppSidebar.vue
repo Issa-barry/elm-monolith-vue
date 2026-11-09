@@ -84,23 +84,47 @@ const contactsItems = computed((): NavItem[] => {
             href: '/backoffice/contacts/personnes',
         });
     }
+    // Lot 8 (ADR 0060) : écrans métier de chaque fonction sous l'intertitre « Par fonction »,
+    // avec leurs permissions et modules inchangés.
+    const PAR_FONCTION = 'Par fonction';
     if (can('clients.read'))
-        sub.push({ title: 'Clients', href: '/backoffice/clients' });
+        sub.push({
+            title: 'Clients',
+            href: '/backoffice/clients',
+            group: PAR_FONCTION,
+        });
     // Les routes fournisseurs sont dans le groupe module:achats : sans le module, le lien
     // mènerait à un refus.
     if (canSee('fournisseurs.read', 'achats'))
-        sub.push({ title: 'Fournisseurs', href: '/backoffice/fournisseurs' });
+        sub.push({
+            title: 'Fournisseurs',
+            href: '/backoffice/fournisseurs',
+            group: PAR_FONCTION,
+        });
     if (canSee('prestataires.read', 'prestataires'))
-        sub.push({ title: 'Prestataires', href: '/backoffice/prestataires' });
+        sub.push({
+            title: 'Prestataires',
+            href: '/backoffice/prestataires',
+            group: PAR_FONCTION,
+        });
     if (canSee('proprietaires.read', 'vehicules'))
-        sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
+        sub.push({
+            title: 'Propriétaires',
+            href: '/backoffice/proprietaires',
+            group: PAR_FONCTION,
+        });
     if (canSee('parrains.read', 'vehicules'))
-        sub.push({ title: 'Parrains', href: '/backoffice/parrains' });
+        sub.push({
+            title: 'Parrains',
+            href: '/backoffice/parrains',
+            group: PAR_FONCTION,
+        });
     // Lot 6a (ADR 0060) : paramétrage du référentiel, distinct des catégories de produits.
     if (can('contacts.gerer_categories'))
         sub.push({
             title: 'Catégories de contacts',
             href: '/backoffice/contacts/categories',
+            group: 'Paramétrage',
         });
     return sub;
 });

@@ -32,6 +32,7 @@ final class FonctionsContactEcriture
     public function __construct(
         private readonly VisibiliteContacts $visibilite,
         private readonly QualificationsPrestataire $qualifications,
+        private readonly ReferentielCategories $referentiel,
     ) {}
 
     /** @return list<string> */
@@ -57,7 +58,7 @@ final class FonctionsContactEcriture
     }
 
     /**
-     * @param  array{type?: ?string, qualification_ids?: ?list<string>, notes?: ?string}  $donnees
+     * @param  array{type?: ?string, qualification_ids?: ?list<string>, sous_categorie_ids?: ?list<string>, notes?: ?string}  $donnees
      */
     public function ajouter(Personne|EntrepriseTierce $fiche, string $fonction, array $donnees, User $acteur): Fournisseur|Prestataire
     {
@@ -86,7 +87,13 @@ final class FonctionsContactEcriture
             ];
 
             if ($fonction === 'fournisseur') {
-                return Fournisseur::create($commun);
+                $fournisseur = Fournisseur::create($commun);
+                // Lot 8 : mêmes sous-catégories qu'à l'écran Fournisseur (lot 6a), sans effet métier.
+                if (($donnees['sous_categorie_ids'] ?? []) !== []) {
+                    $this->referentiel->synchroniserFournisseur($acteur, $fournisseur, $donnees['sous_categorie_ids']);
+                }
+
+                return $fournisseur;
             }
 
             // Lot 6b : qualifications (au moins une active) ; `type` en est la copie de compatibilité.

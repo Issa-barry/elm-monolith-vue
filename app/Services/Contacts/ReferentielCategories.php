@@ -281,6 +281,20 @@ final class ReferentielCategories
     }
 
     /**
+     * Sous-catégories Fournisseur d'un formulaire (écran Fournisseur, parcours Contacts — lot 8).
+     *
+     * @param  list<string>  $portees
+     * @return list<array{value: string, label: string, actif: bool}>
+     */
+    public static function optionsSousCategoriesFournisseur(?string $organizationId, array $portees = []): array
+    {
+        return self::options(
+            ContactSousCategorie::where('organization_id', $organizationId)->where('categorie', ContactCategorie::FOURNISSEUR->value)->get(),
+            $portees,
+        );
+    }
+
+    /**
      * Options d'un formulaire : éléments actifs, plus ceux déjà portés même désactivés.
      *
      * @param  Collection<int, ContactSousCategorie|CategorieLibre>  $elements

@@ -41,6 +41,9 @@ trait ReglesContact
             // Lot 6b : qualifications multiples ; l'ancien champ `type` (un code) reste accepté.
             'qualification_ids' => ['nullable', 'array', 'max:20'],
             'qualification_ids.*' => ['required', 'string', 'max:26'],
+            // Lot 8 : sous-catégories d'un fournisseur, comme à l'écran Fournisseur (lot 6a).
+            'sous_categorie_ids' => ['nullable', 'array', 'max:50'],
+            'sous_categorie_ids.*' => ['required', 'string', 'max:26'],
             'type' => ['nullable', Rule::enum(PrestataireType::class)],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
@@ -111,6 +114,7 @@ trait ReglesContact
         return [
             'type' => $this->input('type'),
             'qualification_ids' => $this->has('qualification_ids') ? array_values((array) $this->input('qualification_ids')) : null,
+            'sous_categorie_ids' => $this->input('fonction') === 'fournisseur' ? array_values((array) $this->input('sous_categorie_ids', [])) : [],
             'notes' => $this->input('notes'),
         ];
     }

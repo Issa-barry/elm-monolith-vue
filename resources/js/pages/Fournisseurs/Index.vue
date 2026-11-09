@@ -59,6 +59,13 @@ interface Fournisseur {
 const props = defineProps<{ fournisseurs: Fournisseur[] }>();
 
 const { can } = usePermissions();
+// Lot 8 (ADR 0060) : avec `contacts.create`, création par le parcours « téléphone d'abord » de
+// Contacts, fonction présélectionnée ; sinon le formulaire de l'écran.
+const urlCreation = computed(() =>
+    can('contacts.create')
+        ? '/backoffice/contacts/nouveau?type=entreprise&fonction=fournisseur'
+        : '/backoffice/fournisseurs/create',
+);
 const confirm = useConfirm();
 const toast = useToast();
 
@@ -160,10 +167,7 @@ function confirmDelete(f: Fournisseur) {
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Fournisseurs</span
                 >
-                <Link
-                    v-if="can('fournisseurs.create')"
-                    href="/backoffice/fournisseurs/create"
-                >
+                <Link v-if="can('fournisseurs.create')" :href="urlCreation">
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -278,10 +282,7 @@ function confirmDelete(f: Fournisseur) {
             >
                 <Truck class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun fournisseur trouvé.</p>
-                <Link
-                    v-if="can('fournisseurs.create')"
-                    href="/backoffice/fournisseurs/create"
-                >
+                <Link v-if="can('fournisseurs.create')" :href="urlCreation">
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Ajouter le premier fournisseur
@@ -304,10 +305,7 @@ function confirmDelete(f: Fournisseur) {
                         }}
                     </p>
                 </div>
-                <Link
-                    v-if="can('fournisseurs.create')"
-                    href="/backoffice/fournisseurs/create"
-                >
+                <Link v-if="can('fournisseurs.create')" :href="urlCreation">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau fournisseur
@@ -559,7 +557,7 @@ function confirmDelete(f: Fournisseur) {
                             <p class="text-sm">Aucun fournisseur trouvé.</p>
                             <Link
                                 v-if="can('fournisseurs.create')"
-                                href="/backoffice/fournisseurs/create"
+                                :href="urlCreation"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

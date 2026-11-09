@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\ContactCategorie;
-use App\Models\ContactSousCategorie;
 use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
 use App\Models\Personne;
@@ -199,10 +197,7 @@ class FournisseurController extends Controller
      */
     private function optionsSousCategories(?string $organizationId, array $portees = []): array
     {
-        return ReferentielCategories::options(
-            ContactSousCategorie::where('organization_id', $organizationId)->where('categorie', ContactCategorie::FOURNISSEUR->value)->get(),
-            $portees,
-        );
+        return ReferentielCategories::optionsSousCategoriesFournisseur($organizationId, $portees);
     }
 
     public function update(Request $request, Fournisseur $fournisseur, ReferentielCategories $referentiel): RedirectResponse

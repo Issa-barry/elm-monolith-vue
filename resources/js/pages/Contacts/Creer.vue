@@ -50,8 +50,11 @@ interface ResultatRecherche {
 
 const props = defineProps<{
     type: TypeFiche;
+    /** Lot 8 : fonction présélectionnée (bouton « Nouveau » d'un écran Fournisseurs ou Prestataires). */
+    fonction: string | null;
     fonctions_creables: OptionFiltre[];
     types_prestataire: OptionFiltre[];
+    sous_categories_fournisseur: OptionFiltre[];
 }>();
 
 const typeFiche = ref<TypeFiche>(props.type);
@@ -80,10 +83,12 @@ const form = useForm({
     adresse: '',
     latitude: '',
     longitude: '',
-    fonction: (props.fonctions_creables.length === 1
-        ? props.fonctions_creables[0].value
-        : null) as string | null,
+    fonction: (props.fonction ??
+        (props.fonctions_creables.length === 1
+            ? props.fonctions_creables[0].value
+            : null)) as string | null,
     qualification_ids: [] as string[],
+    sous_categorie_ids: [] as string[],
     notes: null as string | null,
 });
 
@@ -388,6 +393,7 @@ const urlAjoutFonction = computed(() => {
                     :nom-fiche="resultat.fiche.nom"
                     :fonctions="resultat.fiche.fonctions_ajoutables"
                     :types-prestataire="types_prestataire"
+                    :sous-categories-fournisseur="sous_categories_fournisseur"
                 />
             </section>
 
@@ -644,9 +650,13 @@ const urlAjoutFonction = computed(() => {
                     <ChampsFonction
                         v-model:fonction="form.fonction"
                         v-model:qualification-ids="form.qualification_ids"
+                        v-model:sous-categorie-ids="form.sous_categorie_ids"
                         v-model:notes="form.notes"
                         :fonctions="fonctions_creables"
                         :types-prestataire="types_prestataire"
+                        :sous-categories-fournisseur="
+                            sous_categories_fournisseur
+                        "
                         :errors="form.errors"
                     />
                 </section>

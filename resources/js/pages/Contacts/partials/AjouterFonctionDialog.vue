@@ -17,6 +17,7 @@ const props = defineProps<{
     nomFiche: string;
     fonctions: OptionFiltre[];
     typesPrestataire: OptionFiltre[];
+    sousCategoriesFournisseur?: OptionFiltre[];
 }>();
 
 const emit = defineEmits<{ 'update:visible': [boolean] }>();
@@ -26,6 +27,7 @@ const form = useForm({
         ? props.fonctions[0].value
         : null) as string | null,
     qualification_ids: [] as string[],
+    sous_categorie_ids: [] as string[],
     notes: null as string | null,
 });
 
@@ -68,9 +70,11 @@ function confirmer() {
             <ChampsFonction
                 v-model:fonction="form.fonction"
                 v-model:qualification-ids="form.qualification_ids"
+                v-model:sous-categorie-ids="form.sous_categorie_ids"
                 v-model:notes="form.notes"
                 :fonctions="fonctions"
                 :types-prestataire="typesPrestataire"
+                :sous-categories-fournisseur="sousCategoriesFournisseur ?? []"
                 :errors="form.errors"
             />
         </div>

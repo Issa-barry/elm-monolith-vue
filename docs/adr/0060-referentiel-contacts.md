@@ -195,6 +195,19 @@ sociale, recopiée au lien et à chaque renommage de l'entreprise ; les écrans 
 apparaît en mention secondaire sur la fiche Client ; sur les autres écrans, cette mention reste à
 faire. CONTACT-047 à CONTACT-049.
 
+## Lot 8 (bascule) — décisions du 09/11/2026
+
+(L8-1) Menu : intertitre « Par fonction » pour les cinq écrans par fonction, permissions et modules
+inchangés ; aucun écran métier retiré. (L8-2) Recherche globale du back-office : un seul groupe
+« Contacts », badge et lien par fonction, sans perte de résultat (nom de la fiche Client, désignation
+du livreur, client sans Personne, nombre de résultats) ; le regroupement ne s'applique qu'aux groupes
+dont la fonction est lisible dans Contacts, et seulement à la route du back-office — l'API
+`v1/search/global` garde ses groupes (contrat mobile). (L8-3) Création par le parcours « téléphone
+d'abord » avec `contacts.create`, fonction présélectionnée ; le parcours ne créant que Fournisseur et
+Prestataire, Client, Propriétaire et Parrain gardent leur formulaire, et le parcours reçoit les
+sous-catégories Fournisseur pour ne perdre aucun champ. Aucune migration. CONTACT-050 à
+CONTACT-052.
+
 ## Conséquences
 
 - Aucune entrée ajoutée au morph map : les comptes auxiliaires stockent le nom de classe des

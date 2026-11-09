@@ -143,7 +143,10 @@ export interface NavItem {
     isActive?: boolean;
     badge?: number;
     items?: NavItem[];
-    /** Groupe fonctionnel affiché comme label de section dans la sidebar (top-level uniquement). */
+    /**
+     * Groupe fonctionnel affiché comme label de section : dans la sidebar pour un lien de premier
+     * niveau, comme intertitre du sous-menu pour un sous-lien (ex. « Par fonction », lot 8 Contacts).
+     */
     group?: string;
 }
 
