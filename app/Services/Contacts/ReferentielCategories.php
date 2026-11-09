@@ -22,9 +22,9 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 /**
  * Paramétrage du référentiel Contacts (ADR 0060, lot 6a, CONTACT-033 à CONTACT-037).
  *
- * - Sous-catégories : seules celles des fournisseurs s'administrent au lot 6a (décision H) ; celles
- *   des clients et des prestataires restent en lecture seule tant que ventes, PDV et écran
- *   Prestataires affichent des libellés écrits en dur. Une sous-catégorie système ne se renomme
+ * - Sous-catégories : celles des fournisseurs (lot 6a) et des prestataires (lot 6b, qualifications)
+ *   s'administrent ; celles des clients restent en lecture seule tant que ventes et PDV affichent des
+ *   libellés écrits en dur. Une sous-catégorie système (Consultant, natures client) ne se renomme
  *   pas, ne se désactive pas et ne change jamais de code (décision C, D18).
  * - Catégories libres (ex. Partenaire) : créées, renommées, réordonnées, désactivées ; posées sur
  *   une fiche Personne ou Entreprise ; aucun effet sur les ventes, commissions, comptabilité,
@@ -37,8 +37,11 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 final class ReferentielCategories
 {
-    /** Fonctions dont les sous-catégories s'administrent au lot 6a. */
-    public const SOUS_CATEGORIES_ADMINISTRABLES = [ContactCategorie::FOURNISSEUR];
+    /**
+     * Fonctions dont les sous-catégories s'administrent : Fournisseur (lot 6a), Prestataire (lot 6b,
+     * décision Q3 — Consultant reste protégé). Client reste en lecture seule.
+     */
+    public const SOUS_CATEGORIES_ADMINISTRABLES = [ContactCategorie::FOURNISSEUR, ContactCategorie::PRESTATAIRE];
 
     /** Fonctions présentées sur l'écran, dans cet ordre. */
     public const FONCTIONS_AFFICHEES = [ContactCategorie::CLIENT, ContactCategorie::FOURNISSEUR, ContactCategorie::PRESTATAIRE];

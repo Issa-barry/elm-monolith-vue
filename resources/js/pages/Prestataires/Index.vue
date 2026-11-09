@@ -51,8 +51,10 @@ interface Prestataire {
     phone: string | null;
     code_phone_pays: string | null;
     ville: string | null;
-    type: string;
+    type: string | null;
     type_label: string;
+    /** Lot 6b : qualifications (badges de catégorie, pas de statut). */
+    qualifications: { code: string; libelle: string }[];
     is_active: boolean;
     /** D17 : aucune opération ne la référence (calculé par le serveur). */
     supprimable: boolean;
@@ -226,13 +228,15 @@ function confirmDelete(p: Prestataire) {
                             {{ p.email }}
                         </div>
                         <span
-                            class="mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                            v-for="q in p.qualifications"
+                            :key="q.code"
+                            class="mt-0.5 mr-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
                             :class="
-                                typeColor[p.type] ??
+                                typeColor[q.code] ??
                                 'bg-muted text-muted-foreground'
                             "
                         >
-                            {{ p.type_label }}
+                            {{ q.libelle }}
                         </span>
                     </div>
 
@@ -466,21 +470,25 @@ function confirmDelete(p: Prestataire) {
 
                     <!-- Type -->
                     <Column
-                        field="type"
-                        header="Type"
+                        field="type_label"
+                        header="Qualifications"
                         sortable
-                        style="width: 140px"
+                        style="width: 180px"
                     >
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="
-                                    typeColor[data.type] ??
-                                    'bg-muted text-muted-foreground'
-                                "
-                            >
-                                {{ data.type_label }}
-                            </span>
+                            <div class="flex flex-wrap gap-1">
+                                <span
+                                    v-for="q in data.qualifications"
+                                    :key="q.code"
+                                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="
+                                        typeColor[q.code] ??
+                                        'bg-muted text-muted-foreground'
+                                    "
+                                >
+                                    {{ q.libelle }}
+                                </span>
+                            </div>
                         </template>
                     </Column>
 

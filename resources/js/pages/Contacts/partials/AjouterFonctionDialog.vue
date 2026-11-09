@@ -25,7 +25,7 @@ const form = useForm({
     fonction: (props.fonctions.length === 1
         ? props.fonctions[0].value
         : null) as string | null,
-    type: null as string | null,
+    qualification_ids: [] as string[],
     notes: null as string | null,
 });
 
@@ -67,7 +67,7 @@ function confirmer() {
             </p>
             <ChampsFonction
                 v-model:fonction="form.fonction"
-                v-model:type="form.type"
+                v-model:qualification-ids="form.qualification_ids"
                 v-model:notes="form.notes"
                 :fonctions="fonctions"
                 :types-prestataire="typesPrestataire"

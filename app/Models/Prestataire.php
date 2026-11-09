@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 
 class Prestataire extends Model
 {
@@ -120,9 +121,62 @@ class Prestataire extends Model
         return $this->personne?->adresse ?? $this->entrepriseTierce?->adresse;
     }
 
+    /**
+     * Libellé des qualifications (lot 6b) : libellés du référentiel, dans leur ordre ; repli sur
+     * l'ancien `type` tant qu'aucune qualification n'est enregistrée.
+     */
     public function getTypeLabelAttribute(): string
     {
+        // Sans relation chargée : requête sans l'attacher, pour ne pas ajouter `sous_categories` à
+        // toutes les sérialisations du modèle (type_label est dans $appends).
+        $qualifications = ($this->relationLoaded('sousCategories') ? $this->sousCategories : ($this->exists ? $this->sousCategories()->get() : collect()))
+            ->sortBy([['ordre', 'asc'], ['libelle', 'asc']]);
+        if ($qualifications->isNotEmpty()) {
+            return $qualifications->pluck('libelle')->implode(', ');
+        }
+
         return $this->type instanceof PrestataireType ? $this->type->label() : '';
+    }
+
+    // ── Qualification Consultant (critère unique, ADR 0060 lot 6b) ───────────
+
+    /**
+     * Seule la qualification système Consultant ouvre l'éligibilité aux commissions consultant ;
+     * une qualification libre n'est jamais assimilée à Consultant. Repli transitoire (décision Q2) :
+     * un prestataire sans aucune qualification enregistrée est lu sur l'ancien `type`, le temps de
+     * la reprise des données au déploiement — jamais pour masquer des données manquantes.
+     */
+    public function qualifieConsultant(): bool
+    {
+        if ($this->relationLoaded('sousCategories')) {
+            return $this->sousCategories->isEmpty()
+                ? $this->type === PrestataireType::CONSULTANT
+                : $this->sousCategories->contains(fn (ContactSousCategorie $s) => $s->code === PrestataireType::CONSULTANT->value);
+        }
+
+        return static::whereKey($this->getKey())->withTrashed()->qualifiesConsultant()->exists();
+    }
+
+    public function scopeQualifiesConsultant(Builder $q): Builder
+    {
+        return $q->where(fn (Builder $sous) => static::conditionQualifieConsultant($sous->getQuery(), $q->getModel()->getTable()));
+    }
+
+    /**
+     * Même condition pour une requête Eloquent et une règle `Rule::exists('prestataires')`.
+     */
+    public static function conditionQualifieConsultant(QueryBuilder $q, string $table = 'prestataires'): QueryBuilder
+    {
+        $qualifications = fn (QueryBuilder $s) => $s->from('prestataire_sous_categories')
+            ->whereColumn('prestataire_sous_categories.prestataire_id', "{$table}.id");
+
+        return $q->where(fn (QueryBuilder $w) => $w
+            ->whereExists(fn (QueryBuilder $s) => $qualifications($s)
+                ->join('contact_sous_categories', 'contact_sous_categories.id', '=', 'prestataire_sous_categories.contact_sous_categorie_id')
+                ->where('contact_sous_categories.code', PrestataireType::CONSULTANT->value))
+            ->orWhere(fn (QueryBuilder $repli) => $repli
+                ->whereNotExists(fn (QueryBuilder $s) => $qualifications($s))
+                ->where("{$table}.type", PrestataireType::CONSULTANT->value)));
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
@@ -152,8 +206,9 @@ class Prestataire extends Model
     }
 
     /**
-     * Qualifications du référentiel Contacts (ADR 0060). Lues par aucune règle métier avant le
-     * lot 6 : `type` reste la seule source de la qualification consultant.
+     * Qualifications du référentiel Contacts (ADR 0060, lot 6b) : plusieurs, égales, sans
+     * principale. Source de vérité ; `type` en est une copie de compatibilité
+     * (App\Services\Contacts\QualificationsPrestataire).
      */
     public function sousCategories(): BelongsToMany
     {

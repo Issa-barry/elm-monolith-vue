@@ -83,7 +83,7 @@ const form = useForm({
     fonction: (props.fonctions_creables.length === 1
         ? props.fonctions_creables[0].value
         : null) as string | null,
-    type: null as string | null,
+    qualification_ids: [] as string[],
     notes: null as string | null,
 });
 
@@ -643,7 +643,7 @@ const urlAjoutFonction = computed(() => {
                     </h2>
                     <ChampsFonction
                         v-model:fonction="form.fonction"
-                        v-model:type="form.type"
+                        v-model:qualification-ids="form.qualification_ids"
                         v-model:notes="form.notes"
                         :fonctions="fonctions_creables"
                         :types-prestataire="types_prestataire"

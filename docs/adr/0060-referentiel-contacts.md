@@ -4,7 +4,7 @@
   `35abb314`) ; lot 2 réalisé le 07/11/2026 (commit `d7a1effb`) ; lot 3 réalisé le 07/11/2026
   (commit `ae3f8842`) ; lot 4 réalisé le 07/11/2026 (commit `48234f04`) ; lot 5 : décisions
   validées le 07/11/2026, plan technique validé et réalisé le 08/11/2026 (commit `d2c763e3`) ;
-  lot 6a réalisé le 08/11/2026 ; lot 6b à planifier.
+  lot 6a réalisé le 08/11/2026 (commit `f3e1508b`) ; lot 6b réalisé le 09/11/2026.
 - Documentation : [docs/contacts.md](../contacts.md)
 
 ## Contexte
@@ -147,6 +147,16 @@ organisation existante et nouvelle, idempotente ; (H) au 6a, seules les sous-cat
 et les catégories libres s'administrent ; (I) un contact sans fonction reste hors périmètre, les
 catégories libres ne s'attribuent qu'aux fiches visibles. Codes stables après renommage ; libellé
 unique sans distinction de casse. Règles CONTACT-033 à CONTACT-037 ; CONTACT-009 modifiée.
+
+Lot 6b (09/11/2026) : qualifications multiples des prestataires, table de liaison source de vérité ;
+critère unique `Prestataire::qualifieConsultant()` pour les dix lectures de la qualification
+Consultant (seule la qualification système ouvre l'éligibilité, aucune règle de calcul ni barème
+modifié) ; (Q1) au moins une qualification active ; (Q2) repli transitoire sur l'ancien `type` pour un
+prestataire sans qualification enregistrée, le temps de la reprise ; (Q3) sous-catégories Prestataire
+administrables, Consultant protégé ; (Q4) D15 limité au retrait de Consultant (affectation active ou
+barème actif, sous verrou, super_admin compris), désactivation du prestataire inchangée ; (Q5)
+`type` facultatif, copie de compatibilité sans priorité à Consultant. Reprise par migration de
+données au déploiement, rejouable, sans perte. Règles CONTACT-038 à CONTACT-041.
 
 ## Conséquences
 

@@ -232,8 +232,8 @@ final class VisibiliteContacts
                 fn (Fournisseur $f) => ['id' => $f->id, 'actif' => $f->is_active, 'sous_categorie' => null, 'reference' => $f->reference, 'sous_categories' => $this->libellesSousCategories($f)]);
         }
         if ($this->peutLire($lecteur, 'prestataire')) {
-            $ajouter('prestataire', Prestataire::whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
-                fn (Prestataire $p) => ['id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => $p->type?->value, 'reference' => $p->reference]);
+            $ajouter('prestataire', Prestataire::with('sousCategories')->whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
+                fn (Prestataire $p) => ['id' => $p->id, 'actif' => $p->is_active, 'reference' => $p->reference, ...$this->qualifications($p)]);
         }
         if ($this->peutLire($lecteur, 'proprietaire')) {
             // D10 (lot 5) : le contact d'un propriétaire entreprise garde la fonction, « au nom de »
@@ -282,8 +282,8 @@ final class VisibiliteContacts
             }
         }
         if ($this->peutLire($lecteur, 'prestataire')) {
-            foreach (Prestataire::whereIn('entreprise_tierce_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get() as $p) {
-                $resultat[$p->entreprise_tierce_id][] = ['fonction' => 'prestataire', 'id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => $p->type?->value, 'reference' => $p->reference];
+            foreach (Prestataire::with('sousCategories')->whereIn('entreprise_tierce_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get() as $p) {
+                $resultat[$p->entreprise_tierce_id][] = ['fonction' => 'prestataire', 'id' => $p->id, 'actif' => $p->is_active, 'reference' => $p->reference, ...$this->qualifications($p)];
             }
         }
         if ($this->peutLire($lecteur, 'proprietaire')) {
@@ -295,10 +295,25 @@ final class VisibiliteContacts
         return $resultat;
     }
 
-    /** Lot 6a : sous-catégories d'un fournisseur (sans effet métier), désactivées comprises. */
-    private function libellesSousCategories(Fournisseur $fournisseur): array
+    /**
+     * Lot 6b : qualifications d'un prestataire (libellés du référentiel) ; repli sur l'ancien
+     * `type` tant qu'aucune n'est enregistrée.
+     *
+     * @return array{sous_categorie: ?string, sous_categories?: list<string>}
+     */
+    private function qualifications(Prestataire $prestataire): array
     {
-        return $fournisseur->sousCategories->sortBy([['ordre', 'asc'], ['libelle', 'asc']])->pluck('libelle')->values()->all();
+        if ($prestataire->sousCategories->isEmpty()) {
+            return ['sous_categorie' => $prestataire->type?->value];
+        }
+
+        return ['sous_categorie' => null, 'sous_categories' => $this->libellesSousCategories($prestataire)];
+    }
+
+    /** Lot 6a : sous-catégories d'un fournisseur (sans effet métier), désactivées comprises. */
+    private function libellesSousCategories(Fournisseur|Prestataire $fonction): array
+    {
+        return $fonction->sousCategories->sortBy([['ordre', 'asc'], ['libelle', 'asc']])->pluck('libelle')->values()->all();
     }
 
     // ── Sous-requêtes ───────────────────────────────────────────────────────
@@ -322,7 +337,7 @@ final class VisibiliteContacts
         [$table, $colonneCode] = match ($fonction) {
             'client' => ['clients', 'type'],
             'fournisseur' => ['fournisseurs', null],
-            'prestataire' => ['prestataires', 'type'],
+            'prestataire' => ['prestataires', null],
             'proprietaire' => ['proprietaires', 'type'],
             'livreur' => ['livreurs', null],
             'employe' => ['employes', null],
@@ -354,15 +369,16 @@ final class VisibiliteContacts
             ->whereNull("{$table}.deleted_at");
 
         if ($code !== null) {
-            $this->filtrerSousCategorie($s, $table, $fonction, $fonction === 'prestataire' ? 'type' : null, $code);
+            $this->filtrerSousCategorie($s, $table, $fonction, null, $code);
         }
 
         return $s;
     }
 
     /**
-     * Sous-catégorie : nature client et qualification prestataire lues sur leur colonne (seule
-     * source jusqu'au lot 6, CONTACT-008) ; fournisseur sur sa table de liaison.
+     * Sous-catégorie : nature client lue sur sa colonne (CONTACT-008) ; fournisseur et prestataire
+     * (lot 6b) sur leur table de liaison, le prestataire avec le repli sur l'ancien `type` tant
+     * qu'aucune qualification n'est enregistrée.
      */
     private function filtrerSousCategorie(QueryBuilder $s, string $table, string $fonction, ?string $colonneCode, string $code): void
     {
@@ -377,6 +393,20 @@ final class VisibiliteContacts
                 ->join('contact_sous_categories', 'contact_sous_categories.id', '=', 'fournisseur_sous_categories.contact_sous_categorie_id')
                 ->whereColumn('fournisseur_sous_categories.fournisseur_id', 'fournisseurs.id')
                 ->where('contact_sous_categories.code', $code));
+
+            return;
+        }
+
+        if ($fonction === 'prestataire') {
+            $qualifications = fn (QueryBuilder $p) => $p->from('prestataire_sous_categories')
+                ->whereColumn('prestataire_sous_categories.prestataire_id', 'prestataires.id');
+            $s->where(fn (QueryBuilder $w) => $w
+                ->whereExists(fn (QueryBuilder $p) => $qualifications($p)
+                    ->join('contact_sous_categories', 'contact_sous_categories.id', '=', 'prestataire_sous_categories.contact_sous_categorie_id')
+                    ->where('contact_sous_categories.code', $code))
+                ->orWhere(fn (QueryBuilder $repli) => $repli
+                    ->whereNotExists(fn (QueryBuilder $p) => $qualifications($p))
+                    ->where('prestataires.type', $code)));
 
             return;
         }

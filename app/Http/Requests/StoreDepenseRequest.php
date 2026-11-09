@@ -3,9 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Enums\CategorieDepense;
-use App\Enums\PrestataireType;
 use App\Http\Requests\Concerns\ValideRattachementCommande;
 use App\Models\DepenseType;
+use App\Models\Prestataire;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -63,7 +63,8 @@ class StoreDepenseRequest extends FormRequest
 
         $existe = Rule::exists($categorie->beneficiaireTable(), 'id')->where('organization_id', $orgId)->whereNull('deleted_at');
         if ($categorie === CategorieDepense::CONSULTANT) {
-            $existe->where('type', PrestataireType::CONSULTANT->value);
+            // Lot 6b (ADR 0060) : qualification Consultant par le critère unique.
+            $existe->where(fn ($q) => Prestataire::conditionQualifieConsultant($q));
         }
 
         return ['required', 'ulid', $existe];

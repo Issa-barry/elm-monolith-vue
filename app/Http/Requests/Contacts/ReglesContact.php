@@ -38,7 +38,10 @@ trait ReglesContact
     {
         return [
             'fonction' => ['required', 'string', Rule::in(app(FonctionsContactEcriture::class)->fonctionsCreables($this->user()))],
-            'type' => ['nullable', 'required_if:fonction,prestataire', Rule::enum(PrestataireType::class)],
+            // Lot 6b : qualifications multiples ; l'ancien champ `type` (un code) reste accepté.
+            'qualification_ids' => ['nullable', 'array', 'max:20'],
+            'qualification_ids.*' => ['required', 'string', 'max:26'],
+            'type' => ['nullable', Rule::enum(PrestataireType::class)],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
     }
@@ -53,7 +56,7 @@ trait ReglesContact
             'email.email' => "L'adresse e-mail est invalide.",
             'fonction.required' => 'Choisissez la fonction.',
             'fonction.in' => 'Vous ne pouvez pas créer cette fonction.',
-            'type.required_if' => 'Choisissez la qualification du prestataire.',
+            'type.enum' => 'Qualification inconnue.',
         ];
     }
 
@@ -61,6 +64,9 @@ trait ReglesContact
     public function after(): array
     {
         return [function (Validator $validator) {
+            if ($this->input('fonction') === 'prestataire' && empty($this->input('qualification_ids')) && empty($this->input('type'))) {
+                $validator->errors()->add('qualification_ids', 'Choisissez au moins une qualification du prestataire.');
+            }
             if ($validator->errors()->has('telephone')) {
                 return;
             }
@@ -102,6 +108,10 @@ trait ReglesContact
     /** @return array{type: ?string, notes: ?string} */
     public function donneesFonction(): array
     {
-        return ['type' => $this->input('type'), 'notes' => $this->input('notes')];
+        return [
+            'type' => $this->input('type'),
+            'qualification_ids' => $this->has('qualification_ids') ? array_values((array) $this->input('qualification_ids')) : null,
+            'notes' => $this->input('notes'),
+        ];
     }
 }

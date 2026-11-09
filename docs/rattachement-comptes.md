@@ -27,7 +27,8 @@ identifiants habituels, et le rattachement lui donne les données de la fiche.
   l'accès sans supprimer le compte.
 - **COMPTE-006 — Interlocuteur.** Personne physique qui représente une entreprise tierce. Elle n'est jamais
   bénéficiaire : les commissions restent attribuées au prestataire de l'entreprise. L'accès exige
-  `acces_commissions`, désactivé par défaut. Il se limite aux prestataires de type consultant, jamais aux
+  `acces_commissions`, désactivé par défaut. Il se limite aux prestataires qualifiés Consultant
+  (`Prestataire::qualifieConsultant()`, référentiel Contacts lot 6b), jamais aux
   achats d'une société également fournisseur.
 - **COMPTE-007 — Historique.** Un parrain ou un consultant désactivé ou remplacé garde l'accès à son propre
   historique, sans les opérations de ses remplaçants.

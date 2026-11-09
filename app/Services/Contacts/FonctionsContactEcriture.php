@@ -2,7 +2,6 @@
 
 namespace App\Services\Contacts;
 
-use App\Enums\PrestataireType;
 use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
 use App\Models\Personne;
@@ -30,7 +29,10 @@ final class FonctionsContactEcriture
 {
     public const CREABLES = ['fournisseur', 'prestataire'];
 
-    public function __construct(private readonly VisibiliteContacts $visibilite) {}
+    public function __construct(
+        private readonly VisibiliteContacts $visibilite,
+        private readonly QualificationsPrestataire $qualifications,
+    ) {}
 
     /** @return list<string> */
     public function fonctionsCreables(User $user): array
@@ -55,7 +57,7 @@ final class FonctionsContactEcriture
     }
 
     /**
-     * @param  array{type?: ?string, notes?: ?string}  $donnees
+     * @param  array{type?: ?string, qualification_ids?: ?list<string>, notes?: ?string}  $donnees
      */
     public function ajouter(Personne|EntrepriseTierce $fiche, string $fonction, array $donnees, User $acteur): Fournisseur|Prestataire
     {
@@ -66,7 +68,7 @@ final class FonctionsContactEcriture
             throw new AuthorizationException("Vous ne pouvez pas créer la fonction {$fonction}.");
         }
 
-        return DB::transaction(function () use ($fiche, $fonction, $donnees) {
+        return DB::transaction(function () use ($fiche, $fonction, $donnees, $acteur) {
             $fiche::whereKey($fiche->getKey())->lockForUpdate()->first();
 
             if (in_array($fonction, $this->fonctionsPortees($fiche), true)) {
@@ -83,9 +85,19 @@ final class FonctionsContactEcriture
                 'is_active' => true,
             ];
 
-            return $fonction === 'fournisseur'
-                ? Fournisseur::create($commun)
-                : Prestataire::create([...$commun, 'type' => PrestataireType::from((string) ($donnees['type'] ?? ''))->value]);
+            if ($fonction === 'fournisseur') {
+                return Fournisseur::create($commun);
+            }
+
+            // Lot 6b : qualifications (au moins une active) ; `type` en est la copie de compatibilité.
+            $ids = $this->qualifications->idsDemandes($fiche->organization_id, $donnees['qualification_ids'] ?? null, $donnees['type'] ?? null);
+            if ($ids === null) {
+                throw ValidationException::withMessages(['qualification_ids' => 'Choisissez au moins une qualification du prestataire.']);
+            }
+            $prestataire = Prestataire::create($commun);
+            $this->qualifications->synchroniser($acteur, $prestataire, $ids);
+
+            return $prestataire->refresh();
         });
     }
 

@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\Contacts\Entreprises;
 
-use App\Enums\PrestataireType;
 use App\Http\Controllers\Controller;
 use App\Models\CategorieLibre;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\EntrepriseTierce;
 use App\Services\Contacts\FonctionsContactEcriture;
+use App\Services\Contacts\QualificationsPrestataire;
 use App\Services\Contacts\ReferentielCategories;
 use App\Services\Contacts\VisibiliteContacts;
 use App\Support\Contacts\PresentationContacts;
@@ -58,7 +58,8 @@ class ShowEntrepriseController extends Controller
             'interlocuteurs' => $interlocuteurs,
             // Lot 3 : fonctions que l'utilisateur peut ajouter et que la fiche ne porte pas encore.
             'fonctions_ajoutables' => $user->can('create', EntrepriseTierce::class) ? app(FonctionsContactEcriture::class)->fonctionsAjoutables($entreprise, $user) : [],
-            'types_prestataire' => PrestataireType::options(),
+            // Lot 6b : qualifications Prestataire actives du référentiel (valeur = id).
+            'types_prestataire' => QualificationsPrestataire::options($entreprise->organization_id),
             // Lot 4 : gestion des interlocuteurs (l'entreprise est déjà vérifiée visible ci-dessus).
             'peut_gerer_interlocuteurs' => $user->can('gererInterlocuteurs', EntrepriseTierce::class),
             // Lot 6a : catégories libres portées ; modifiables avec contacts.update (entreprise déjà vérifiée visible).

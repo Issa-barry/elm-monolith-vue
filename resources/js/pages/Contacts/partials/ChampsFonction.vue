@@ -5,17 +5,23 @@
  */
 import { Label } from '@/components/ui/label';
 import Dropdown from 'primevue/dropdown';
+import MultiSelect from 'primevue/multiselect';
 import Textarea from 'primevue/textarea';
 import type { OptionFiltre } from './types';
 
 defineProps<{
     fonctions: OptionFiltre[];
+    /** Lot 6b : qualifications du référentiel (valeur = id), plusieurs possibles. */
     typesPrestataire: OptionFiltre[];
-    errors: Partial<Record<'fonction' | 'type' | 'notes', string>>;
+    errors: Partial<
+        Record<'fonction' | 'qualification_ids' | 'type' | 'notes', string>
+    >;
 }>();
 
 const fonction = defineModel<string | null>('fonction', { required: true });
-const type = defineModel<string | null>('type', { required: true });
+const qualificationIds = defineModel<string[]>('qualificationIds', {
+    required: true,
+});
 const notes = defineModel<string | null>('notes', { required: true });
 </script>
 
@@ -41,22 +47,28 @@ const notes = defineModel<string | null>('notes', { required: true });
             </p>
         </div>
         <div v-if="fonction === 'prestataire'">
-            <Label for="type" class="mb-1.5 block"
-                >Qualification <span class="text-destructive">*</span></Label
+            <Label for="qualification_ids" class="mb-1.5 block"
+                >Qualifications <span class="text-destructive">*</span></Label
             >
-            <Dropdown
-                v-model="type"
-                input-id="type"
+            <MultiSelect
+                v-model="qualificationIds"
+                input-id="qualification_ids"
                 :options="typesPrestataire"
                 option-label="label"
                 option-value="value"
+                display="chip"
                 placeholder="Machiniste, mécanicien, consultant…"
                 class="w-full"
-                :class="{ 'p-invalid': errors.type }"
+                :class="{
+                    'p-invalid': errors.qualification_ids || errors.type,
+                }"
                 data-testid="contact-type-prestataire"
             />
-            <p v-if="errors.type" class="mt-1 text-xs text-destructive">
-                {{ errors.type }}
+            <p
+                v-if="errors.qualification_ids || errors.type"
+                class="mt-1 text-xs text-destructive"
+            >
+                {{ errors.qualification_ids ?? errors.type }}
             </p>
         </div>
         <div class="sm:col-span-2">

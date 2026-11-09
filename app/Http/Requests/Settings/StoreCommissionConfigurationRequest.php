@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests\Settings;
 
-use App\Enums\PrestataireType;
 use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\CommissionCibleType;
+use App\Models\Prestataire;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -50,7 +50,7 @@ class StoreCommissionConfigurationRequest extends FormRequest
                 'string',
                 Rule::exists('prestataires', 'id')
                     ->where('organization_id', $organizationId)
-                    ->where('type', PrestataireType::CONSULTANT->value)
+                    ->where(fn ($q) => Prestataire::conditionQualifieConsultant($q))
                     ->where('is_active', true),
             ],
             'lignes.*.montants_standard' => ['nullable', 'array'],

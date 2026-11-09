@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\Contacts;
 
-use App\Enums\PrestataireType;
 use App\Http\Controllers\Controller;
 use App\Models\Personne;
 use App\Services\Contacts\FonctionsContactEcriture;
+use App\Services\Contacts\QualificationsPrestataire;
 use App\Support\Contacts\PresentationContacts;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -27,7 +27,8 @@ class CreateContactController extends Controller
         return Inertia::render('Contacts/Creer', [
             'type' => $request->query('type') === 'entreprise' ? 'entreprise' : 'personne',
             'fonctions_creables' => array_map(fn (string $f) => ['value' => $f, 'label' => PresentationContacts::LIBELLES_FONCTIONS[$f]], $creables),
-            'types_prestataire' => PrestataireType::options(),
+            // Lot 6b : qualifications Prestataire actives du référentiel (valeur = id).
+            'types_prestataire' => QualificationsPrestataire::options($request->user()->organization_id),
         ]);
     }
 }

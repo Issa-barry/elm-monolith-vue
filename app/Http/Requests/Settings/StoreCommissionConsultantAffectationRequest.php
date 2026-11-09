@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\Settings;
 
-use App\Enums\PrestataireType;
+use App\Models\Prestataire;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -21,7 +21,7 @@ class StoreCommissionConsultantAffectationRequest extends FormRequest
             // autre organisation.
             'prestataire_id' => ['required', 'string', Rule::exists('prestataires', 'id')
                 ->where('organization_id', $this->user()->organization_id)
-                ->where('type', PrestataireType::CONSULTANT->value)
+                ->where(fn ($q) => Prestataire::conditionQualifieConsultant($q))
                 ->where('is_active', true),
             ],
         ];

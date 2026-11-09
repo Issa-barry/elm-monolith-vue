@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\Contacts\Personnes;
 
-use App\Enums\PrestataireType;
 use App\Http\Controllers\Controller;
 use App\Models\CategorieLibre;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\Personne;
 use App\Services\Contacts\FonctionsContactEcriture;
+use App\Services\Contacts\QualificationsPrestataire;
 use App\Services\Contacts\ReferentielCategories;
 use App\Services\Contacts\VisibiliteContacts;
 use App\Support\Contacts\PresentationContacts;
@@ -56,7 +56,8 @@ class ShowPersonneController extends Controller
             'entreprises' => $entreprises,
             // Lot 3 : fonctions que l'utilisateur peut ajouter et que la fiche ne porte pas encore.
             'fonctions_ajoutables' => $user->can('create', Personne::class) ? app(FonctionsContactEcriture::class)->fonctionsAjoutables($personne, $user) : [],
-            'types_prestataire' => PrestataireType::options(),
+            // Lot 6b : qualifications Prestataire actives du référentiel (valeur = id).
+            'types_prestataire' => QualificationsPrestataire::options($personne->organization_id),
             // Lot 6a : catégories libres portées ; modifiables avec contacts.update (fiche déjà vérifiée visible).
             'categories' => $portees = PresentationContacts::categoriesLibresDes('personne_contact_categories', 'personne_id', [$personne->id])[$personne->id],
             'peut_modifier_categories' => $peut = $user->can('modifierCategories', Personne::class),

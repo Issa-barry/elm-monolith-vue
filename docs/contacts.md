@@ -18,7 +18,7 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 4 — Interlocuteurs | Gestion depuis l'onglet Interlocuteurs de la fiche Entreprise : ajout « téléphone d'abord », fonction et notes, principal, désactivation, réactivation, journal | Fait (07/11/2026, commit `48234f04`) |
 | 5 — Propriétaire entreprise | Lien vers une fiche Entreprise, contact devenu interlocuteur, reprise des données réversible (ADR 0060, décisions D1 à D10) | Codé (08/11/2026), non commité |
 | 6a — Catégories de contacts | Écran de paramétrage, sous-catégories Fournisseur multiples, catégories libres (Partenaire) et filtre, sous-catégories système en lecture seule | Codé (08/11/2026), non commité |
-| 6b — Qualifications Prestataire | Qualifications multiples, `qualifieConsultant()`, D15, reprise des qualifications | À planifier après stabilisation du 6a |
+| 6b — Qualifications Prestataire | Qualifications multiples, `qualifieConsultant()`, D15, reprise des qualifications | Codé (09/11/2026), non commité |
 | 7 à 9 | Client, bascule, fusion | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
@@ -63,8 +63,9 @@ sur les ventes, commissions, comptabilité ou logistique.
 - **CONTACT-008** — Sous-catégories (`contact_sous_categories`) : code stable, unique par
   organisation et catégorie. Les codes système reprennent les valeurs déjà stockées : natures client
   `externe`, `revendeur`, `distributeur`, `grossiste` (`clients.type`) et `consultant`
-  (`prestataires.type`). Ces colonnes restent la seule source lue par les prix, le PDV et les
-  commissions.
+  (`prestataires.type`). `clients.type` reste la seule source lue par les prix, le PDV et les
+  commissions ; depuis le lot 6b, la qualification Consultant se lit sur les qualifications du
+  prestataire (CONTACT-039), `prestataires.type` n'étant plus qu'une copie de compatibilité.
 - **CONTACT-009** — Une sous-catégorie système (les 4 natures client, Consultant — D18) ne change ni
   de code ni de catégorie, ne se renomme pas et ne se désactive pas ; seul son ordre se modifie
   (lot 6a, décision C : le libellé reste en lecture seule tant que ventes, PDV et factures ne lisent
@@ -76,8 +77,9 @@ sur les ventes, commissions, comptabilité ou logistique.
   rejouable sans doublon ni écrasement d'un libellé renommé.
 - **CONTACT-011** — Qualifications multiples : un prestataire peut être machiniste, mécanicien et
   consultant sur une seule fiche (`prestataire_sous_categories`), un fournisseur porter plusieurs
-  sous-catégories (`fournisseur_sous_categories`). Ces tables sont créées au lot 1 et ne sont lues par
-  aucune règle avant le lot 6 (décision 7 bis).
+  sous-catégories (`fournisseur_sous_categories`). Créées au lot 1 ; les sous-catégories fournisseur
+  sont saisies au lot 6a (sans effet métier), les qualifications prestataire font foi depuis le lot 6b
+  (décision 7 bis).
 - **CONTACT-012** — Règle R1 : la fiche Personne fera foi pour l'identité d'un client, les colonnes
   d'identité de `clients` en devenant une copie (service `ClientIdentiteSynchronisation`, une
   transaction, contrôle d'unicité du téléphone et de l'e-mail). **Non branchée** : jusqu'au lot 7 et
@@ -229,10 +231,10 @@ sur les ventes, commissions, comptabilité ou logistique.
 
 - **CONTACT-033** — Écran « Catégories de contacts » (lot 6a), menu Contacts : consultation et
   administration réservées à `contacts.gerer_categories`, revérifiée à chaque requête ; un élément
-  d'une autre organisation répond 404. Sous-catégories par fonction : seules celles des
-  fournisseurs s'administrent ; celles des clients et des prestataires sont affichées en lecture
-  seule (décision H : leurs libellés sont encore écrits en dur dans ventes, PDV et Prestataires ;
-  l'administration des qualifications prestataire arrive au lot 6b). Rien ne se supprime.
+  d'une autre organisation répond 404. Sous-catégories par fonction : celles des fournisseurs
+  (lot 6a) et des prestataires (lot 6b, décision Q3 — Consultant reste protégé) s'administrent ;
+  celles des clients sont affichées en lecture seule (leurs libellés sont encore écrits en dur dans
+  ventes et PDV). Rien ne se supprime.
 - **CONTACT-034** — Code et libellé : le code est généré une fois depuis le libellé (minuscules,
   sans accents, `_2`, `_3`… en cas de collision) et ne change plus, même après renommage. Libellé
   unique, sans distinction de casse, par organisation et par fonction (sous-catégories) ou par
@@ -257,6 +259,32 @@ sur les ventes, commissions, comptabilité ou logistique.
   s'ajoute pas. Filtre « Catégorie » sur les deux listes. Un contact sans fonction reste invisible
   (CONTACT-014 inchangée) : le cas « partenaire seul » est hors lot 6a. Journal d'audit : ids
   ajoutés et retirés seulement.
+
+- **CONTACT-038** — Qualifications d'un prestataire (lot 6b) : plusieurs, égales, sans principale,
+  enregistrées dans `prestataire_sous_categories`, qui fait foi. Saisie sur le formulaire Prestataire
+  et à la création depuis Contacts : au moins une qualification active (Q1) ; une qualification
+  désactivée se garde mais ne s'ajoute pas ; une qualification d'une autre fonction ou organisation
+  est refusée. L'ancien champ `type` (un code) reste accepté par les formulaires et reçoit l'erreur
+  « au moins une qualification » quand aucune n'est envoyée. Journal d'audit : ids ajoutés et retirés.
+- **CONTACT-039** — Critère unique `Prestataire::qualifieConsultant()` (scope
+  `qualifiesConsultant()`, condition partagée pour `Rule::exists`) : seule la qualification système
+  Consultant ouvre l'éligibilité ; une qualification libre n'est jamais assimilée à Consultant ni ne
+  déclenche de règle. Il remplace les dix lectures de `type = consultant` : générateur de
+  commissions (consultant actif), consultants éligibles du barème, validation du barème et de
+  l'affectation, concerné « Consultant » des dépenses (serveur et navigateur), activités du compte,
+  rattachement de compte, fiches rattachables. Aucune règle de calcul ni aucun barème ne change.
+  Repli transitoire (Q2) : un prestataire sans aucune qualification enregistrée est lu sur l'ancien
+  `type`, le temps de la reprise au déploiement ; dès qu'une qualification existe, elle fait foi.
+- **CONTACT-040** — D15 : retirer la qualification Consultant d'un prestataire est refusé tant qu'une
+  affectation consultant active ou un barème actif (en cours ou à venir) le désigne, contrôlé côté
+  serveur dans une transaction, sous verrou du prestataire, super_admin compris ; message vers
+  Paramètres → Commissions. Désactiver un prestataire garde son comportement actuel (Q4).
+- **CONTACT-041** — `prestataires.type` devient facultatif et reste une copie de compatibilité (Q5) :
+  l'ancienne valeur est gardée si elle figure encore parmi les qualifications, sinon la première des
+  trois anciennes valeurs portée (ordre du référentiel), sinon vide ; Consultant n'a aucune priorité.
+  Reprise au déploiement par migration de données : une qualification par prestataire d'après son
+  `type` (supprimés logiquement compris), rejouable sans doublon, sans retirer ni modifier aucune
+  valeur ; les prestataires restés sans qualification sont signalés dans le journal applicatif.
 
 ## Écrans (lot 2)
 
@@ -321,6 +349,9 @@ Formulaire Propriétaire : téléphone et NIF de l'entreprise, recherche et choi
 | `PUT /backoffice/contacts/{personnes\|entreprises}/{id}/categories` | Catégories libres d'une fiche (`contacts.update`, fiche visible) |
 | `POST`/`PUT /backoffice/fournisseurs` (existantes) | Champ `sous_categorie_ids[]` |
 
+Lot 6b : formulaire Prestataire et création depuis Contacts — champ « Qualifications » (choix
+multiple, `qualification_ids[]`) ; liste des prestataires — un badge par qualification.
+
 Menu Contacts : lien « Catégories de contacts » (avec `contacts.gerer_categories`). Fiches
 Personne et Entreprise : bloc « Catégories » dans l'onglet Informations. Listes : filtre
 « Catégorie ».
@@ -383,4 +414,8 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   `EntrepriseTierce::categoriesLibres()`, initialisation `CategoriesLibresParDefaut`, policy
   `CategorieLibrePolicy`, contrôleurs `App\Http\Controllers\Contacts\Categories\*`, page
   `Contacts/Categories/Index.vue`, bloc `partials/BlocCategories.vue`.
+- Qualifications (lot 6b) : service `App\Services\Contacts\QualificationsPrestataire` (saisie, Q1,
+  D15, synchronisation de `type`), critère `Prestataire::qualifieConsultant()` /
+  `scopeQualifiesConsultant()` / `conditionQualifieConsultant()`, migrations `2026_11_09_100000`
+  (`type` facultatif) et `2026_11_09_100100` (reprise).
 - Tests : `tests/Feature/Contacts/`.

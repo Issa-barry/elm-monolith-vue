@@ -13,17 +13,18 @@ référentiel du bénéficiaire, imputation, message d'impact) ; colonne `depens
 | Interne | aucun | — | aucune | charge (compte du type ou 628800) |
 | Prestataire | tout prestataire (consultant, machiniste, mécanicien…) | `prestataire` | fiche Consultant (mois) | non comptabilisée (cf. ci-dessous) |
 | Client | client | `client` | cashback du client | charge |
-| **Consultant** | prestataire de type **consultant** uniquement | `prestataire` | fiche Consultant (mois) | comme Prestataire |
+| **Consultant** | prestataire **qualifié Consultant** uniquement | `prestataire` | fiche Consultant (mois) | comme Prestataire |
 | **Parrain** | parrain de l'organisation | `parrain` | fiche Parrain (quinzaine), PARRAIN-026 | avance 467220 |
 
 ## Consultant et Parrain (03/11/2026)
 
-- **Consultant** est un **raccourci** vers Prestataire : il ne propose que les prestataires de type
-  consultant (référentiel `prestataires`, `type = consultant`) et la dépense est enregistrée comme
+- **Consultant** est un **raccourci** vers Prestataire : il ne propose que les prestataires qualifiés
+  Consultant (critère unique `Prestataire::qualifieConsultant()`, lot 6b du référentiel Contacts —
+  [contacts.md](contacts.md), CONTACT-039) et la dépense est enregistrée comme
   une dépense prestataire (`CategorieDepense::beneficiaireType()`). Elle est donc déduite de la même
   fiche Consultant et visible sur Commission consultant, sans second chemin. Le concerné Prestataire
-  reste disponible pour tous les prestataires, consultants compris. Un prestataire d'un autre type
-  choisi avec un type « Consultant » est refusé par le serveur.
+  reste disponible pour tous les prestataires, consultants compris. Un prestataire non qualifié
+  Consultant choisi avec le concerné « Consultant » est refusé par le serveur.
 - **Parrain** : référentiel `parrains` de l'organisation (un parrain d'une autre organisation est
   refusé). Imputation `commission_parrain` à la quinzaine, retenue sur la fiche Parrain, avance
   467220 soldée à la validation de la fiche — cf. [parrainage-vehicule.md](parrainage-vehicule.md),

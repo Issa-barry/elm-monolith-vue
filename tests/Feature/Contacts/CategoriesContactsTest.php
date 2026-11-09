@@ -132,7 +132,8 @@ class CategoriesContactsTest extends TestCase
                 ->where('sections.1.categorie', 'fournisseur')
                 ->where('sections.1.administrable', true)
                 ->where('sections.2.categorie', 'prestataire')
-                ->where('sections.2.administrable', false)
+                // Lot 6b (décision Q3) : les qualifications Prestataire s'administrent.
+                ->where('sections.2.administrable', true)
                 ->where('libres.0.code', 'partenaire'));
     }
 
@@ -155,18 +156,17 @@ class CategoriesContactsTest extends TestCase
         $this->assertTrue(ContactSousCategorie::where('organization_id', $this->org->id)->where('code', 'emballages_2')->exists());
     }
 
-    public function test_client_et_prestataire_restent_en_lecture_seule(): void
+    /** Lot 6b (décision Q3) : seules les natures client restent en lecture seule. */
+    public function test_les_natures_client_restent_en_lecture_seule(): void
     {
         $user = $this->utilisateur(self::GESTION);
-        $machiniste = ContactSousCategorie::where('organization_id', $this->org->id)->where('code', 'machiniste')->firstOrFail();
+        $grossiste = ContactSousCategorie::where('organization_id', $this->org->id)->where('code', 'grossiste')->firstOrFail();
 
-        foreach (['client', 'prestataire'] as $categorie) {
-            $this->actingAs($user)->post(route('contacts.categories.sous-categories.store'), ['categorie' => $categorie, 'libelle' => 'Nouvelle'])->assertSessionHasErrors('categorie');
-        }
-        $this->actingAs($user)->patch(route('contacts.categories.sous-categories.update', $machiniste), ['libelle' => 'Engins', 'is_active' => false])->assertSessionHasErrors('categorie');
+        $this->actingAs($user)->post(route('contacts.categories.sous-categories.store'), ['categorie' => 'client', 'libelle' => 'Nouvelle'])->assertSessionHasErrors('categorie');
+        $this->actingAs($user)->patch(route('contacts.categories.sous-categories.update', $grossiste), ['libelle' => 'Gros', 'is_active' => false])->assertSessionHasErrors('categorie');
 
-        $this->assertSame('Machiniste', $machiniste->fresh()->libelle);
-        $this->assertTrue($machiniste->fresh()->is_active);
+        $this->assertSame('Grossiste', $grossiste->fresh()->libelle);
+        $this->assertTrue($grossiste->fresh()->is_active);
         $this->assertSame(7, ContactSousCategorie::where('organization_id', $this->org->id)->count());
     }
 
@@ -232,8 +232,8 @@ class CategoriesContactsTest extends TestCase
 
         // Liste incomplète, ou liste non administrable : refus.
         $this->actingAs($user)->post(route('contacts.categories.ordre'), ['liste' => 'libres', 'ids' => [$institutionnel->id]])->assertSessionHasErrors('ids');
-        $consultant = ContactSousCategorie::where('organization_id', $this->org->id)->where('code', 'consultant')->firstOrFail();
-        $this->actingAs($user)->post(route('contacts.categories.ordre'), ['liste' => 'prestataire', 'ids' => [$consultant->id]])->assertSessionHasErrors('categorie');
+        $grossiste = ContactSousCategorie::where('organization_id', $this->org->id)->where('code', 'grossiste')->firstOrFail();
+        $this->actingAs($user)->post(route('contacts.categories.ordre'), ['liste' => 'client', 'ids' => [$grossiste->id]])->assertSessionHasErrors('categorie');
     }
 
     // ── Sous-catégories d'un fournisseur ────────────────────────────────────
@@ -396,6 +396,9 @@ class CategoriesContactsTest extends TestCase
             'Models/Prestataire.php', 'Models/FonctionSousCategorie.php',
             'Policies/CategorieLibrePolicy.php', 'Support/Contacts/', 'Services/Contacts/',
             'Http/Controllers/Contacts/', 'Http/Controllers/FournisseurController.php',
+            // Lot 6b : affichage et saisie des qualifications Prestataire (la règle consultant passe
+            // par Prestataire::qualifieConsultant(), dans le modèle).
+            'Http/Controllers/PrestataireController.php',
         ];
         $fautifs = [];
         foreach ((new Finder)->files()->in(app_path())->name('*.php') as $fichier) {

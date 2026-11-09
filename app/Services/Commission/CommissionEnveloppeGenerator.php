@@ -8,7 +8,6 @@ use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionMotifNonGeneration;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\OrigineCommissionPart;
-use App\Enums\PrestataireType;
 use App\Enums\StatutCommission;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
@@ -1097,7 +1096,7 @@ class CommissionEnveloppeGenerator
 
                     $consultantActif = Prestataire::whereKey($consultantId)
                         ->where('organization_id', $ctx->organizationId)
-                        ->where('type', PrestataireType::CONSULTANT->value)
+                        ->qualifiesConsultant()
                         ->where('is_active', true)
                         ->exists();
 
