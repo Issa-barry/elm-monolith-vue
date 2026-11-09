@@ -11,6 +11,7 @@ use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
 use App\Services\Ventes\FacturePayeeCascade;
 use App\Services\Ventes\SaisieEncaissementVente;
+use App\Support\Database\TransactionAnnulee;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +20,8 @@ use Illuminate\Validation\ValidationException;
 
 class StoreEncaissementVenteController extends Controller
 {
+    public const MESSAGE_TRANSACTION_ANNULEE = 'Encaissement non enregistré : une autre opération utilisait la base au même moment. Rien n\'a été enregistré, vous pouvez réessayer.';
+
     public function __construct(
         private readonly AuditLogService $auditService,
         private readonly SaisieEncaissementVente $saisie,
@@ -162,6 +165,12 @@ class StoreEncaissementVenteController extends Controller
                 EncaissementVente::factureUtilisantReferenceMobileMoney($facture_vente->organization_id, $data['reference_paiement']),
             );
         } catch (\RuntimeException $e) {
+            // Deadlock ou connexion perdue : la base a tout annulé, rien n'est enregistré
+            // (incident VTE-081126-134, cf. App\Support\Database\TransactionAnnulee).
+            if (TransactionAnnulee::estCompromise($e)) {
+                return back()->withErrors(['comptabilisation' => self::MESSAGE_TRANSACTION_ANNULEE]);
+            }
+
             return back()->withErrors(['comptabilisation' => "Encaissement non enregistré : {$e->getMessage()}"]);
         }
 

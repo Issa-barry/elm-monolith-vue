@@ -34,11 +34,9 @@ use App\Services\Notification\NotificationDispatcher;
 use App\Services\Notification\PushBodyFormatter;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
+use App\Support\Database\TransactionAnnulee;
 use Carbon\Carbon;
-use Illuminate\Database\ConcurrencyErrorDetector;
-use Illuminate\Database\DeadlockException;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\LostConnectionDetector;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -457,7 +455,7 @@ class CommissionEnveloppeGenerator
                 // délai de verrou ou connexion perdue — MySQL a pu annuler TOUTE la transaction,
                 // la tentative ne serait pas réellement enregistrée. On laisse remonter : l'appelant
                 // annule l'opération entière (approbation comprise) et l'utilisateur réessaie.
-                if (self::transactionCompromise($e)) {
+                if (TransactionAnnulee::estCompromise($e)) {
                     throw $e;
                 }
 
@@ -497,13 +495,6 @@ class CommissionEnveloppeGenerator
                 // reste "à régulariser", jamais rollbackée.
             }
         });
-    }
-
-    private static function transactionCompromise(Throwable $e): bool
-    {
-        return $e instanceof DeadlockException
-            || (new ConcurrencyErrorDetector)->causedByConcurrencyError($e)
-            || (new LostConnectionDetector)->causedByLostConnection($e);
     }
 
     /**
