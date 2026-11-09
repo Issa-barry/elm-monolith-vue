@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Clients;
 
 use App\Enums\ClientType;
+use App\Enums\StatutCommandeVente;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\CommandeVente;
 use App\Models\Parametre;
 use App\Support\Clients\ClientCashbackSoldeFormatter;
 use App\Traits\PhoneHandlerTrait;
@@ -57,6 +59,14 @@ class EditClientController extends Controller
                     'chauffeur_code_pays' => $v->chauffeur_code_pays,
                 ]),
             'cashback_solde' => ClientCashbackSoldeFormatter::pour($client),
+            // D14 (ADR 0060, lot 7c) : commandes non terminées, qui garderont leur nature si elle change.
+            'commandes_en_cours' => CommandeVente::where('organization_id', $client->organization_id)
+                ->where('client_id', $client->id)
+                ->whereNotIn('statut', array_map(fn (StatutCommandeVente $s) => $s->value, array_filter(StatutCommandeVente::cases(), fn (StatutCommandeVente $s) => $s->isTerminal())))
+                ->orderByDesc('created_at')
+                ->limit(10)
+                ->pluck('reference')
+                ->values(),
         ]);
     }
 }

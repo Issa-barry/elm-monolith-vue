@@ -833,7 +833,7 @@ class CommandeVenteService
             $errors[] = 'La commande doit contenir au moins une ligne produit.';
         }
 
-        if (! $commande->vehicule_id && $commande->client?->type !== ClientType::EXTERNE) {
+        if (! $commande->vehicule_id && $commande->natureClient() !== ClientType::EXTERNE) {
             $errors[] = 'Un véhicule doit être assigné avant de confirmer la commande.';
         }
 

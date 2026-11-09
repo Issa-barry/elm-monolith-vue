@@ -798,7 +798,15 @@ COMMISSION qui change.
   source unique partagée par `CommissionEnveloppeGenerator::genererPourCommandeVente()` ET
   `CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure()`) :
   - `nature_operation = distribution_client` → `CODE_DISTRIBUTION_CLIENT`, priorité, inchangé.
-  - `client.type = GROSSISTE` **ET** `mode_remise_grossiste = LIVRAISON` → `CODE_TRANSFERT_GROSSISTE`.
+  - nature du client **de la commande** `= GROSSISTE` **ET** `mode_remise_grossiste = LIVRAISON` →
+    `CODE_TRANSFERT_GROSSISTE`. Depuis le 09/11/2026 (référentiel Contacts, lot 7c, D12 à D14 —
+    [contacts.md](contacts.md), CONTACT-042), la nature lue est `commandes_ventes.nature_client`,
+    enregistrée à la création de la commande (`CommandeVente::natureClient()`), et non plus la
+    nature actuelle du client : une commission générée ou relancée après un changement de nature du
+    client garde le processus de la commande. Commandes antérieures (colonne vide) : repli sur la
+    nature actuelle du client, comportement d'avant inchangé (D13). Même lecture pour le suivi des
+    commissions non générées, la liste et l'export des ventes, l'écran de modification et les
+    précommandes.
   - **Grossiste + Enlèvement reste sur `CODE_VENTE`**, décision produit explicite du 05/09/2026 :
     Transfert grossiste ne s'applique qu'aux véhicules d'usage Grossiste — un Enlèvement
     n'a structurellement aucun véhicule/équipe, la question ne se pose donc pas. Ne pas généraliser.

@@ -19,7 +19,8 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 5 — Propriétaire entreprise | Lien vers une fiche Entreprise, contact devenu interlocuteur, reprise des données réversible (ADR 0060, décisions D1 à D10) | Codé (08/11/2026), non commité |
 | 6a — Catégories de contacts | Écran de paramétrage, sous-catégories Fournisseur multiples, catégories libres (Partenaire) et filtre, sous-catégories système en lecture seule | Codé (08/11/2026), non commité |
 | 6b — Qualifications Prestataire | Qualifications multiples, `qualifieConsultant()`, D15, reprise des qualifications | Codé (09/11/2026), non commité |
-| 7 à 9 | Client, bascule, fusion | À venir |
+| 7c — Nature du client sur la commande | `commandes_ventes.nature_client` figée à la création, lue par les commissions, listes et exports (D12 à D14) | Codé (09/11/2026), non commité |
+| 7a, 7b, 8, 9 | Identité client, client professionnel, bascule, fusion | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
@@ -285,6 +286,18 @@ sur les ventes, commissions, comptabilité ou logistique.
   Reprise au déploiement par migration de données : une qualification par prestataire d'après son
   `type` (supprimés logiquement compris), rejouable sans doublon, sans retirer ni modifier aucune
   valeur ; les prestataires restés sans qualification sont signalés dans le journal applicatif.
+
+- **CONTACT-042** — Nature du client sur la commande (lot 7c, D12 à D14) : chaque nouvelle commande
+  enregistre la nature de son client à sa création (`commandes_ventes.nature_client`, quel que soit
+  le point d'entrée : back-office, PDV, précommande) ; si le client de la commande est remplacé, la
+  nature suit le nouveau client. Un changement de nature d'un client ne vaut que pour ses nouvelles
+  commandes (D14) : la fiche Client l'indique sous le champ et cite les commandes non terminées.
+  Commandes antérieures : colonne vide, repli sur la nature actuelle du client (D13), comportement
+  inchangé. Lue par le générateur de commissions (processus Vente ou Transfert grossiste), le suivi
+  des commissions non générées, la liste et l'export des ventes, la modification d'une vente, les
+  précommandes et le contrôle de confirmation. Les prix et les communications lisent toujours la
+  nature actuelle du client (aucun calcul de prix modifié). Règle de commission mise à jour dans
+  [commissions.md](commissions.md) (COMM-011).
 
 ## Écrans (lot 2)
 

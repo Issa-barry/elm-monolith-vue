@@ -112,7 +112,8 @@ class CommissionEnveloppeGenerator
         // calcul indépendant qui pourrait diverger.
         $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
             $commande->nature_operation,
-            $commande->client?->type,
+            // D12 (lot 7c) : nature du client enregistrée sur la commande, repli D13.
+            $commande->natureClient(),
             $commande->mode_remise_grossiste,
         );
 
@@ -160,7 +161,8 @@ class CommissionEnveloppeGenerator
 
         $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
             $commande->nature_operation,
-            $commande->client?->type,
+            // D12 (lot 7c) : nature du client enregistrée sur la commande, repli D13.
+            $commande->natureClient(),
             $commande->mode_remise_grossiste,
         );
         $identite = CommissionProcessus::firstOrCreate(
@@ -205,7 +207,8 @@ class CommissionEnveloppeGenerator
     {
         $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
             $commande->nature_operation,
-            $commande->client?->type,
+            // D12 (lot 7c) : nature du client enregistrée sur la commande, repli D13.
+            $commande->natureClient(),
             $commande->mode_remise_grossiste,
         );
         $identite = CommissionProcessus::firstOrCreate(

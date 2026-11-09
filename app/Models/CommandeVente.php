@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ClientType;
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\ModeRemiseGrossiste;
 use App\Enums\ModeTarification;
@@ -54,6 +55,7 @@ class CommandeVente extends Model
         'mode_tarification_snapshot',
         'commission_eligible_snapshot',
         'nature_operation',
+        'nature_client',
         'mode_remise_grossiste',
         'statut',
         'motif_annulation',
@@ -85,6 +87,7 @@ class CommandeVente extends Model
             'mode_tarification_snapshot' => ModeTarification::class,
             'commission_eligible_snapshot' => 'boolean',
             'nature_operation' => NatureOperation::class,
+            'nature_client' => ClientType::class,
             'mode_remise_grossiste' => ModeRemiseGrossiste::class,
             'statut' => StatutCommandeVente::class,
             'annulee_at' => 'datetime',
@@ -118,6 +121,11 @@ class CommandeVente extends Model
             if (empty($c->statut)) {
                 $c->statut = StatutCommandeVente::BROUILLON;
             }
+            // D12 (ADR 0060, lot 7c) : la nature du client est figée sur la commande à sa création,
+            // quel que soit le point d'entrée (back-office, PDV, précommande, scripts).
+            if ($c->nature_client === null && $c->client_id !== null) {
+                $c->nature_client = self::natureActuelle($c->client_id);
+            }
             if (Auth::check()) {
                 $c->created_by = Auth::id();
                 $c->updated_by = Auth::id();
@@ -127,6 +135,11 @@ class CommandeVente extends Model
         static::updating(function (CommandeVente $c) {
             if (Auth::check()) {
                 $c->updated_by = Auth::id();
+            }
+            // Client remplacé sur la commande : la nature suit le nouveau client. Un changement de
+            // nature du MÊME client ne touche jamais une commande existante (D14).
+            if ($c->isDirty('client_id')) {
+                $c->nature_client = $c->client_id !== null ? self::natureActuelle($c->client_id) : null;
             }
         });
     }
@@ -175,6 +188,25 @@ class CommandeVente extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    /**
+     * Nature du client pour cette commande (D12, D13) : celle enregistrée à la création ; pour une
+     * commande antérieure au lot 7c (colonne vide), repli sur la nature actuelle du client —
+     * exactement le comportement d'avant. Lue par les commissions, listes et exports.
+     */
+    public function natureClient(): ?ClientType
+    {
+        return $this->nature_client ?? $this->client?->type;
+    }
+
+    /**
+     * Nature actuelle d'un client, lue brute : une valeur inconnue (donnée ancienne hors des quatre
+     * natures) n'est pas enregistrée, la commande garde alors le repli sur la fiche client (D13).
+     */
+    private static function natureActuelle(string $clientId): ?ClientType
+    {
+        return ClientType::tryFrom((string) Client::whereKey($clientId)->toBase()->value('type'));
     }
 
     public function clientVehicule(): BelongsTo

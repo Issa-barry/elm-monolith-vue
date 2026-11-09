@@ -4,7 +4,8 @@
   `35abb314`) ; lot 2 réalisé le 07/11/2026 (commit `d7a1effb`) ; lot 3 réalisé le 07/11/2026
   (commit `ae3f8842`) ; lot 4 réalisé le 07/11/2026 (commit `48234f04`) ; lot 5 : décisions
   validées le 07/11/2026, plan technique validé et réalisé le 08/11/2026 (commit `d2c763e3`) ;
-  lot 6a réalisé le 08/11/2026 (commit `f3e1508b`) ; lot 6b réalisé le 09/11/2026.
+  lot 6a réalisé le 08/11/2026 (commit `f3e1508b`) ; lot 6b réalisé le 09/11/2026 (commit
+  `059e64dd`) ; lot 7c réalisé le 09/11/2026.
 - Documentation : [docs/contacts.md](../contacts.md)
 
 ## Contexte
@@ -157,6 +158,22 @@ administrables, Consultant protégé ; (Q4) D15 limité au retrait de Consultant
 barème actif, sous verrou, super_admin compris), désactivation du prestataire inchangée ; (Q5)
 `type` facultatif, copie de compatibilité sans priorité à Consultant. Reprise par migration de
 données au déploiement, rejouable, sans perte. Règles CONTACT-038 à CONTACT-041.
+
+## Lot 7 (client) — décisions du 09/11/2026 et lot 7c
+
+Découpage 7c (nature sur la commande), 7a (identité : la fiche Personne fait foi, rapport des
+écarts et arbitrage), 7b (client professionnel rattaché à une Entreprise). Décisions : (L7-1) seuls
+les champs vides sont complétés automatiquement, un conflit de valeurs est arbitré client par
+client, jamais de choix automatique ; (L7-2) la raison sociale de l'entreprise est le nom principal
+d'un client professionnel (ventes, PDV, factures, espace client), le contact en mention
+secondaire ; (L7-3) règles du lot 5 reprises pour le client professionnel, sans rattachement
+automatique des clients existants.
+
+Lot 7c : D12 modifie la règle des commissions relancées — le processus d'une vente (Vente ou
+Transfert grossiste) suit la nature du client enregistrée sur la commande à sa création, et non
+plus sa nature actuelle ; D13 : commandes antérieures sans valeur, comportement d'avant ; D14 : un
+changement de nature ne vaut que pour les nouvelles commandes, la fiche Client liste les commandes
+en cours pour information. Prix et barèmes inchangés. CONTACT-042, COMM-011 mis à jour.
 
 ## Conséquences
 

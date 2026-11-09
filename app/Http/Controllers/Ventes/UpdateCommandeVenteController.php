@@ -49,8 +49,11 @@ class UpdateCommandeVenteController extends Controller
         // ainsi basculer en Livraison) contournait entièrement la vérification de partage équipe et
         // de barème Transfert grossiste appliquée par store() : la commande n'est jamais recréée,
         // seulement modifiée, donc jamais revalidée sans cet appel explicite.
+        // D12/D14 (lot 7c) : même client → la nature enregistrée sur la commande ; client remplacé →
+        // celle du nouveau client (recopiée à l'enregistrement par CommandeVente::booted()).
+        $natureClient = ($data['client_id'] ?? null) === $vente->client_id ? $vente->natureClient() : $client?->type;
         $this->formBuilder->ensurePartageLivraisonCategorieConfigure(
-            $vente->nature_operation, $vehiculePourValidation, $data['lignes'] ?? [], $client?->type, $modeRemiseGrossiste,
+            $vente->nature_operation, $vehiculePourValidation, $data['lignes'] ?? [], $natureClient, $modeRemiseGrossiste,
         );
 
         $vente->load(['lignes.variante.produit', 'vehicule', 'client']);

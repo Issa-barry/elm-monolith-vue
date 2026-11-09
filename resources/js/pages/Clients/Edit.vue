@@ -56,6 +56,8 @@ const props = defineProps<{
     types: TypeOption[];
     vehicules: ClientVehicule[];
     cashback_solde: CashbackSolde | null;
+    /** D14 (lot 7c) : références des commandes non terminées (10 au plus). */
+    commandes_en_cours: string[];
 }>();
 
 useFlashToast();
@@ -251,6 +253,20 @@ function destroyVehicule(vehiculeId: number) {
                         >Gérer →</a
                     >
                 </div>
+            </div>
+
+            <!-- D14 (lot 7c) : la nature ne change que pour les nouvelles commandes. -->
+            <div
+                v-if="form.type !== client.type"
+                class="mx-4 mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:mx-6 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+                data-testid="client-nature-commandes-en-cours"
+            >
+                Le changement de nature ne vaut que pour les nouvelles commandes
+                ; les commandes déjà créées gardent leur nature.
+                <template v-if="commandes_en_cours.length > 0">
+                    Commandes en cours concernées :
+                    {{ commandes_en_cours.join(', ') }}.
+                </template>
             </div>
 
             <ClientForm
