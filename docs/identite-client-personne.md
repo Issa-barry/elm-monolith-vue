@@ -16,6 +16,10 @@ indépendant, cf. `TelephoneOwnerLookupService`, désormais obsolète sur ce poi
 > inversée — les colonnes d'identité de `clients` deviennent une copie de la Personne, recopiée à
 > chaque modification de celle-ci quel que soit l'écran ([contacts.md](contacts.md),
 > CONTACT-043 à CONTACT-046).
+>
+> **Lot 7b (09/11/2026, L7-2)** — exception pour un client professionnel (relié à une fiche
+> Entreprise) : `clients.nom_complet` porte la raison sociale de l'entreprise, jamais le nom de la
+> Personne, qui reste celui du contact (CONTACT-048).
 
 - **CLIENTPERSONNE-001** — Une identité correspond à une seule `Personne` par organisation.
   Une même `Personne` peut porter plusieurs rôles (`Client`, `Parrain`, `Proprietaire`,

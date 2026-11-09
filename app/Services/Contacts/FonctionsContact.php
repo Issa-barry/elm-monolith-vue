@@ -69,8 +69,8 @@ final class FonctionsContact
     }
 
     /**
-     * Fonctions d'une entreprise : Fournisseur, Prestataire, Propriétaire entreprise (lot 5) ; Client
-     * s'y ajoutera au lot 7 (rattachement par `entreprise_tierce_id`).
+     * Fonctions d'une entreprise : Fournisseur, Prestataire, Propriétaire entreprise (lot 5), Client
+     * professionnel (lot 7b), toutes rattachées par `entreprise_tierce_id`.
      *
      * @return list<Fonction>
      */
@@ -88,6 +88,9 @@ final class FonctionsContact
         }
         foreach (Proprietaire::where('entreprise_tierce_id', $entreprise->id)->orderBy('created_at')->get() as $proprietaire) {
             $fonctions[] = $this->ligne('proprietaire', $proprietaire->id, $proprietaire->is_active, null);
+        }
+        foreach (Client::where('entreprise_tierce_id', $entreprise->id)->orderBy('created_at')->get() as $client) {
+            $fonctions[] = $this->ligne('client', $client->id, $client->is_active, $client->type?->value);
         }
 
         return $fonctions;

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Proprietaires;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\Proprietaire;
 use App\Services\Contacts\ProprietaireEntreprise;
 use App\Traits\PhoneHandlerTrait;
@@ -11,9 +12,10 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * « Rechercher » du formulaire Propriétaire, type entreprise (ADR 0060, lot 5) : entreprises de
- * l'organisation qui ont le même téléphone, le même NIF ou la même raison sociale normalisée.
- * Lecture seule ; réservé à qui peut créer un propriétaire (ou modifier celui désigné). Seules les
+ * « Rechercher » des formulaires Propriétaire (type entreprise, lot 5) et Client (professionnel,
+ * lot 7b) — ADR 0060 : entreprises de l'organisation qui ont le même téléphone, le même NIF ou la même
+ * raison sociale normalisée. La fonction vient de la route (`fonction` : proprietaire ou client).
+ * Lecture seule ; réservé à qui peut créer une fiche de cette fonction (ou modifier celle désignée). Seules les
  * entreprises visibles du lecteur sont renvoyées ; un téléphone ou un NIF d'une entreprise non
  * visible renvoie « indisponible » avec un message neutre, sans aucune donnée (D6).
  */
@@ -32,15 +34,18 @@ class EntreprisesCorrespondantesController extends Controller
             'identifiant_fiscal' => ['nullable', 'string', 'max:50'],
             'code_pays' => ['nullable', Rule::in(array_keys(static::supportedPays()))],
             'proprietaire' => ['nullable', 'string', 'max:26'],
+            'client' => ['nullable', 'string', 'max:26'],
         ]);
 
-        $proprietaire = null;
-        if (! empty($data['proprietaire'])) {
-            $proprietaire = Proprietaire::where('organization_id', $user->organization_id)->find($data['proprietaire']);
-            abort_if($proprietaire === null, 404);
-            $this->authorize('update', $proprietaire);
+        $fonction = $request->route('fonction') === 'client' ? 'client' : 'proprietaire';
+        $classe = $fonction === 'client' ? Client::class : Proprietaire::class;
+        $fiche = null;
+        if (! empty($data[$fonction])) {
+            $fiche = $classe::where('organization_id', $user->organization_id)->find($data[$fonction]);
+            abort_if($fiche === null, 404);
+            $this->authorize('update', $fiche);
         } else {
-            $this->authorize('create', Proprietaire::class);
+            $this->authorize('create', $classe);
         }
 
         $data = $this->resolveCountryData($data);
@@ -51,7 +56,7 @@ class EntreprisesCorrespondantesController extends Controller
             'raison_sociale' => $data['raison_sociale'] ?? null,
             'telephone' => $telephone,
             'identifiant_fiscal' => $data['identifiant_fiscal'] ?? null,
-        ], $proprietaire?->id);
+        ], $fiche?->id, $classe);
 
         if ($vue['bloque'] !== null) {
             return response()->json([

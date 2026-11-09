@@ -481,6 +481,10 @@ Route::prefix('backoffice')->group(function () {
         Route::get('clients/verifier-telephone', VerifierTelephoneClientController::class)
             ->name('clients.verifier-telephone');
         Route::get('clients', IndexClientController::class)->name('clients.index');
+        // Lot 7b (ADR 0060) : recherche des entreprises d'un client professionnel, avant {client}.
+        Route::get('clients/entreprises-correspondantes', EntreprisesCorrespondantesController::class)
+            ->defaults('fonction', 'client')
+            ->name('clients.entreprises-correspondantes');
         Route::get('clients/create', CreateClientController::class)->name('clients.create');
         Route::post('clients', StoreClientController::class)->name('clients.store');
         Route::get('clients/{client}', ShowClientController::class)->name('clients.show');
@@ -728,6 +732,7 @@ Route::prefix('backoffice')->group(function () {
             Route::delete('parrains/{parrain}/compte', [CompteParrainController::class, 'destroy'])->name('parrains.compte.destroy');
             // Lot 5 du référentiel Contacts (ADR 0060) : déclarée avant la ressource (joker {proprietaire}).
             Route::get('proprietaires/entreprises-correspondantes', EntreprisesCorrespondantesController::class)
+                ->defaults('fonction', 'proprietaire')
                 ->name('proprietaires.entreprises-correspondantes');
             Route::resource('proprietaires', ProprietaireController::class);
             Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])

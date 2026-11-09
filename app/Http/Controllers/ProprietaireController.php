@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\TypePieceIdentite;
 use App\Enums\TypeProprietaire;
+use App\Http\Controllers\Concerns\SaisieEntrepriseLiee;
 use App\Models\Depense;
 use App\Models\Personne;
 use App\Models\PieceIdentite;
@@ -23,7 +24,7 @@ use Inertia\Response;
 
 class ProprietaireController extends Controller
 {
-    use PhoneHandlerTrait;
+    use PhoneHandlerTrait, SaisieEntrepriseLiee;
 
     public function index(): Response
     {
@@ -325,10 +326,7 @@ class ProprietaireController extends Controller
     {
         $this->authorize('update', $proprietaire);
 
-        $data = $request->validate([
-            ...$this->regles(),
-            'confirmer_modification_entreprise' => 'boolean',
-        ], $this->validationMessages());
+        $data = $request->validate($this->regles(), $this->validationMessages());
         $raisonSocialeSaisie = (string) ($data['raison_sociale'] ?? '');
 
         $data = $this->resolveCountryData($data);
@@ -416,39 +414,8 @@ class ProprietaireController extends Controller
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
             // Lot 5 (ADR 0060) : téléphone et NIF facultatifs de l'entreprise (D2), choix explicite
-            // d'une entreprise qui correspond (son id) ou « nouvelle ».
-            'telephone_entreprise' => ['nullable', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
-            'identifiant_fiscal' => 'nullable|string|max:50',
-            'entreprise_choix' => 'nullable|string|max:30',
-        ];
-    }
-
-    /**
-     * Identité de l'entreprise saisie dans le formulaire. Le téléphone de l'entreprise n'est jamais
-     * celui du contact (D2) ; sans indicatif, il prend celui du pays choisi.
-     *
-     * @return array{raison_sociale: string, raison_sociale_saisie: string, telephone: ?string, identifiant_fiscal: ?string}
-     */
-    private function identiteEntreprise(array $data, string $raisonSocialeSaisie): array
-    {
-        $telephone = null;
-        $brut = trim((string) ($data['telephone_entreprise'] ?? ''));
-        if ($brut !== '') {
-            if (! str_starts_with($brut, '+')) {
-                try {
-                    $this->validateLocalPhoneLength(['telephone' => $brut, 'code_pays' => $data['code_pays'] ?? null]);
-                } catch (ValidationException $e) {
-                    throw ValidationException::withMessages(['telephone_entreprise' => $e->errors()['telephone'][0]]);
-                }
-            }
-            $telephone = $this->buildInternationalPhone($brut, $data['code_phone_pays'] ?? null);
-        }
-
-        return [
-            'raison_sociale' => (string) $data['raison_sociale'],
-            'raison_sociale_saisie' => trim($raisonSocialeSaisie),
-            'telephone' => $telephone,
-            'identifiant_fiscal' => isset($data['identifiant_fiscal']) ? trim((string) $data['identifiant_fiscal']) : null,
+            // d'une entreprise qui correspond (son id) ou « nouvelle », confirmation D7.
+            ...$this->reglesEntrepriseLiee(),
         ];
     }
 

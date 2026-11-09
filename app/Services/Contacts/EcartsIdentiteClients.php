@@ -214,10 +214,15 @@ final class EcartsIdentiteClients
         foreach (ClientIdentiteSynchronisation::COLONNES as $champ) {
             $cotePersonne = $valeursPersonne[$champ];
             // Complétion de la Personne : une seule valeur proposée par ses clients, sinon conflit.
-            $propositions = $clients->map(fn (Client $c) => $c->getAttribute($champ))->filter(fn ($v) => ! blank($v))
+            $propositions = $clients->reject(fn (Client $c) => $champ === 'nom_complet' && $c->entreprise_tierce_id !== null)
+                ->map(fn (Client $c) => $c->getAttribute($champ))->filter(fn ($v) => ! blank($v))
                 ->unique(fn ($v) => $this->cle($champ, $v));
 
             foreach ($clients as $client) {
+                // Client professionnel (lot 7b) : son nom vient de l'entreprise, pas de son contact.
+                if ($champ === 'nom_complet' && $client->entreprise_tierce_id !== null) {
+                    continue;
+                }
                 $coteClient = $client->getAttribute($champ);
                 $base = [
                     'client_id' => $client->id, 'personne_id' => $personne->id, 'nom' => $client->nom_complet,

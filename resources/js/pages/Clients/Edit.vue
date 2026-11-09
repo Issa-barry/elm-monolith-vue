@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { EntrepriseReliee } from '@/components/contacts/RattachementEntreprise.vue';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useFlashToast } from '@/composables/useFlashToast';
@@ -28,6 +29,11 @@ interface ClientData {
     type_label: string;
     cashback_eligible: boolean;
     cashback_montant_par_pack: number | null;
+    /** Lot 7b : client professionnel ; `nom_complet` est alors le nom du contact. */
+    client_professionnel: boolean;
+    raison_sociale: string | null;
+    telephone_entreprise: string | null;
+    identifiant_fiscal: string | null;
 }
 
 interface CashbackSolde {
@@ -58,7 +64,13 @@ const props = defineProps<{
     cashback_solde: CashbackSolde | null;
     /** D14 (lot 7c) : références des commandes non terminées (10 au plus). */
     commandes_en_cours: string[];
+    entreprise: EntrepriseReliee | null;
 }>();
+
+// L7-2 : le nom principal d'un client professionnel est la raison sociale de son entreprise.
+const nomAffiche = computed(
+    () => props.client.raison_sociale || props.client.nom_complet,
+);
 
 useFlashToast();
 
@@ -66,7 +78,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Clients', href: '/backoffice/clients' },
     {
-        title: props.client.nom_complet,
+        title: props.client.raison_sociale || props.client.nom_complet,
         href: '#',
     },
 ];
@@ -84,6 +96,12 @@ const form = useForm({
     type: props.client.type,
     cashback_eligible: Boolean(props.client.cashback_eligible),
     cashback_montant_par_pack: props.client.cashback_montant_par_pack,
+    client_professionnel: Boolean(props.client.client_professionnel),
+    raison_sociale: props.client.raison_sociale,
+    telephone_entreprise: props.client.telephone_entreprise,
+    identifiant_fiscal: props.client.identifiant_fiscal,
+    entreprise_choix: null as string | null,
+    confirmer_modification_entreprise: false,
 });
 
 watch(
@@ -102,6 +120,12 @@ watch(
             type: c.type,
             cashback_eligible: Boolean(c.cashback_eligible),
             cashback_montant_par_pack: c.cashback_montant_par_pack,
+            client_professionnel: Boolean(c.client_professionnel),
+            raison_sociale: c.raison_sociale,
+            telephone_entreprise: c.telephone_entreprise,
+            identifiant_fiscal: c.identifiant_fiscal,
+            entreprise_choix: null,
+            confirmer_modification_entreprise: false,
         }).reset();
     },
 );
@@ -142,7 +166,7 @@ function destroyVehicule(vehiculeId: number) {
 </script>
 
 <template>
-    <Head :title="`Modifier — ${client.nom_complet}`" />
+    <Head :title="`Modifier — ${nomAffiche}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Header mobile -->
@@ -161,7 +185,7 @@ function destroyVehicule(vehiculeId: number) {
                         Modifier
                     </h1>
                     <p class="text-[11px] text-muted-foreground">
-                        {{ client.nom_complet }}
+                        {{ nomAffiche }}
                     </p>
                 </div>
             </div>
@@ -174,7 +198,7 @@ function destroyVehicule(vehiculeId: number) {
                         Modifier le client
                     </h1>
                     <p class="mt-1 text-sm font-medium text-muted-foreground">
-                        {{ client.nom_complet }}
+                        {{ nomAffiche }}
                     </p>
                 </div>
             </div>
@@ -275,6 +299,7 @@ function destroyVehicule(vehiculeId: number) {
                 :processing="form.processing"
                 :types="types"
                 :client-id="client.id"
+                :entreprise="entreprise"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

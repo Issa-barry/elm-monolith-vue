@@ -4,6 +4,7 @@ namespace App\Services\Contacts;
 
 use App\Enums\AuditEvent;
 use App\Enums\TypeProprietaire;
+use App\Models\Client;
 use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
 use App\Models\Personne;
@@ -19,7 +20,8 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Propriétaire de type entreprise relié à sa fiche Entreprise (ADR 0060, lot 5, CONTACT-027 à 032).
+ * Propriétaire de type entreprise (lot 5, CONTACT-027 à 032) ou client professionnel (lot 7b,
+ * CONTACT-047 à 049) relié à sa fiche Entreprise (ADR 0060) — mêmes règles pour les deux fonctions.
  *
  * - `personne_id` reste le contact du propriétaire (D1) ; il devient interlocuteur de l'entreprise,
  *   principal seulement si elle n'en a aucun (D9), sans doublon de lien.
@@ -109,7 +111,7 @@ final class ProprietaireEntreprise
      * @param  array{raison_sociale?: ?string, telephone?: ?string, identifiant_fiscal?: ?string}  $identite
      * @return array{bloque: ?array{champ: string, message: string}, correspondances: list<array<string, mixed>>}
      */
-    public function correspondancesPour(User $lecteur, array $identite, ?string $proprietaireId = null): array
+    public function correspondancesPour(User $lecteur, array $identite, ?string $exclureId = null, string $fonction = Proprietaire::class): array
     {
         $brutes = $this->correspondancesBrutes((string) $lecteur->organization_id, $identite);
         if ($brutes === []) {
@@ -135,8 +137,9 @@ final class ProprietaireEntreprise
         }
 
         $ids = array_keys(array_intersect_key($brutes, $visibles));
-        $dejaProprietaire = Proprietaire::whereIn('entreprise_tierce_id', $ids)
-            ->when($proprietaireId, fn ($q, string $id) => $q->whereKeyNot($id))
+        // « Déjà pris » : l'entreprise porte déjà cette fonction (une seule par entreprise).
+        $dejaPris = $fonction::whereIn('entreprise_tierce_id', $ids)
+            ->when($exclureId, fn ($q, string $id) => $q->whereKeyNot($id))
             ->pluck('entreprise_tierce_id')
             ->flip()
             ->all();
@@ -152,8 +155,8 @@ final class ProprietaireEntreprise
                 'ville' => $e->ville,
                 'is_active' => $e->is_active,
                 'criteres' => $brutes[$e->id],
-                'deja_proprietaire' => isset($dejaProprietaire[$e->id]),
-                'selectionnable' => $e->is_active && ! isset($dejaProprietaire[$e->id]),
+                'deja_pris' => isset($dejaPris[$e->id]),
+                'selectionnable' => $e->is_active && ! isset($dejaPris[$e->id]),
             ])
             ->values()
             ->all();
@@ -171,11 +174,11 @@ final class ProprietaireEntreprise
      * @param  array{raison_sociale: string, telephone?: ?string, identifiant_fiscal?: ?string}  $identite  téléphone au format international
      * @return array{entreprise: EntrepriseTierce, entreprise_creee: bool, valeurs_avant: array{entreprise_tierce_id: ?string, raison_sociale: ?string}, interlocuteur_id: string, interlocuteur_etat_avant: string, principal_pose: bool}
      */
-    public function rattacherDepuisFormulaire(Proprietaire $proprietaire, array $identite, ?string $choix, User $acteur): array
+    public function rattacherDepuisFormulaire(Proprietaire|Client $proprietaire, array $identite, ?string $choix, User $acteur): array
     {
         $this->assertMemeOrganisation($proprietaire->organization_id, $acteur);
 
-        $vue = $this->correspondancesPour($acteur, $identite, $proprietaire->id);
+        $vue = $this->correspondancesPour($acteur, $identite, $proprietaire->id, $proprietaire::class);
         if ($vue['bloque'] !== null) {
             throw ValidationException::withMessages([$vue['bloque']['champ'] => $vue['bloque']['message']]);
         }
@@ -200,21 +203,24 @@ final class ProprietaireEntreprise
         return ['entreprise' => $entreprise, ...$this->lier($proprietaire, $entreprise, $acteur, false, self::ORIGINE_FORMULAIRE)];
     }
 
-    /** L'entreprise porte-t-elle une autre fonction que ce propriétaire (active ou non) ? */
-    public function estPartagee(EntrepriseTierce $entreprise, ?Proprietaire $proprietaire = null): bool
+    /** L'entreprise porte-t-elle une autre fonction que celle-ci (active ou non) ? */
+    public function estPartagee(EntrepriseTierce $entreprise, Proprietaire|Client|null $fonction = null): bool
     {
         return Fournisseur::where('entreprise_tierce_id', $entreprise->id)->exists()
             || Prestataire::where('entreprise_tierce_id', $entreprise->id)->exists()
             || Proprietaire::where('entreprise_tierce_id', $entreprise->id)
-                ->when($proprietaire, fn ($q, Proprietaire $p) => $q->whereKeyNot($p->id))
+                ->when($fonction instanceof Proprietaire, fn ($q) => $q->whereKeyNot($fonction->id))
+                ->exists()
+            || Client::where('entreprise_tierce_id', $entreprise->id)
+                ->when($fonction instanceof Client, fn ($q) => $q->whereKeyNot($fonction->id))
                 ->exists();
     }
 
-    /** D7 : droit de modifier, depuis l'écran Propriétaire, l'identité de l'entreprise reliée. */
-    public function peutModifierIdentite(Proprietaire $proprietaire, User $user): bool
+    /** D7 : droit de modifier, depuis l'écran de la fonction, l'identité de l'entreprise reliée. */
+    public function peutModifierIdentite(Proprietaire|Client $proprietaire, User $user): bool
     {
         $entreprise = $proprietaire->entrepriseTierce;
-        if ($entreprise === null || ! $user->can('proprietaires.update')) {
+        if ($entreprise === null || ! $user->can($this->permission($proprietaire))) {
             return false;
         }
 
@@ -229,7 +235,7 @@ final class ProprietaireEntreprise
      * @param  array{raison_sociale: string, raison_sociale_saisie: string, telephone?: ?string, identifiant_fiscal?: ?string}  $identite
      * @return list<string> champs modifiés
      */
-    public function modifierIdentite(Proprietaire $proprietaire, array $identite, bool $confirme, User $acteur): array
+    public function modifierIdentite(Proprietaire|Client $proprietaire, array $identite, bool $confirme, User $acteur): array
     {
         $this->assertMemeOrganisation($proprietaire->organization_id, $acteur);
         $entreprise = $proprietaire->entrepriseTierce;
@@ -251,8 +257,8 @@ final class ProprietaireEntreprise
                 'identifiant_fiscal' => 'identifiant_fiscal',
                 default => 'telephone_entreprise',
             };
-            if (! $acteur->can('proprietaires.update')) {
-                throw new AuthorizationException('Vous ne pouvez pas modifier ce propriétaire.');
+            if (! $acteur->can($this->permission($proprietaire))) {
+                throw new AuthorizationException('Vous ne pouvez pas modifier cette fiche.');
             }
             if ($this->estPartagee($entreprise, $proprietaire)) {
                 if (! $acteur->can('contacts.update')) {
@@ -275,7 +281,7 @@ final class ProprietaireEntreprise
             $this->journal->record($entreprise, AuditEvent::UPDATED, $acteur, null, null, [
                 'champs_modifies' => $champs,
                 'origine' => self::ORIGINE_FORMULAIRE,
-                'proprietaire_id' => $proprietaire->id,
+                ($proprietaire instanceof Client ? 'client_id' : 'proprietaire_id') => $proprietaire->id,
             ]);
 
             return $champs;
@@ -290,35 +296,39 @@ final class ProprietaireEntreprise
      *
      * @return array{entreprise_creee: bool, valeurs_avant: array{entreprise_tierce_id: ?string, raison_sociale: ?string}, interlocuteur_id: string, interlocuteur_etat_avant: string, principal_pose: bool}
      */
-    public function lier(Proprietaire $proprietaire, EntrepriseTierce $entreprise, User $acteur, bool $entrepriseCreee, string $origine, array $meta = []): array
+    public function lier(Proprietaire|Client $proprietaire, EntrepriseTierce $entreprise, User $acteur, bool $entrepriseCreee, string $origine, array $meta = []): array
     {
         $this->assertMemeOrganisation($proprietaire->organization_id, $acteur);
         if ($entreprise->organization_id !== $proprietaire->organization_id) {
-            throw new AuthorizationException("Cette entreprise n'appartient pas à l'organisation du propriétaire.");
+            throw new AuthorizationException("Cette entreprise n'appartient pas à l'organisation de la fiche.");
         }
 
         return DB::transaction(function () use ($proprietaire, $entreprise, $acteur, $entrepriseCreee, $origine, $meta) {
             EntrepriseTierce::whereKey($entreprise->id)->lockForUpdate()->first();
-            /** @var Proprietaire $verrouille */
-            $verrouille = Proprietaire::withTrashed()->whereKey($proprietaire->id)->lockForUpdate()->firstOrFail();
+            $classe = $proprietaire::class;
+            $libelle = $proprietaire instanceof Client ? 'Client' : 'Propriétaire';
+            /** @var Proprietaire|Client $verrouille */
+            $verrouille = $classe::withTrashed()->whereKey($proprietaire->id)->lockForUpdate()->firstOrFail();
 
-            if ($verrouille->type !== TypeProprietaire::ENTREPRISE) {
+            if ($verrouille instanceof Proprietaire && $verrouille->type !== TypeProprietaire::ENTREPRISE) {
                 throw ValidationException::withMessages(['type' => 'Seul un propriétaire de type entreprise se relie à une fiche Entreprise.']);
             }
             if ($verrouille->entreprise_tierce_id !== null) {
-                throw ValidationException::withMessages(['entreprise_choix' => 'Ce propriétaire est déjà relié à une entreprise.']);
+                throw ValidationException::withMessages(['entreprise_choix' => 'Cette fiche est déjà reliée à une entreprise.']);
             }
-            if (Proprietaire::where('entreprise_tierce_id', $entreprise->id)->whereKeyNot($verrouille->id)->exists()) {
-                throw ValidationException::withMessages(['entreprise_choix' => "Cette entreprise est déjà propriétaire : une entreprise ne porte qu'une fonction Propriétaire."]);
+            if ($classe::where('entreprise_tierce_id', $entreprise->id)->whereKeyNot($verrouille->id)->exists()) {
+                throw ValidationException::withMessages(['entreprise_choix' => "Cette entreprise porte déjà la fonction {$libelle} : une entreprise n'en porte qu'une."]);
             }
             $contact = $verrouille->personne;
             if ($contact === null) {
-                throw ValidationException::withMessages(['telephone' => "Ce propriétaire n'a pas de contact : il ne peut pas être relié à une entreprise."]);
+                throw ValidationException::withMessages(['telephone' => "Cette fiche n'a pas de contact : elle ne peut pas être reliée à une entreprise."]);
             }
 
-            $avant = ['entreprise_tierce_id' => $verrouille->entreprise_tierce_id, 'raison_sociale' => $verrouille->raison_sociale];
-            $verrouille->forceFill(['entreprise_tierce_id' => $entreprise->id, 'raison_sociale' => $entreprise->raison_sociale])->save();
-            $proprietaire->forceFill(['entreprise_tierce_id' => $entreprise->id, 'raison_sociale' => $entreprise->raison_sociale])->syncOriginal();
+            // Nom recopié de l'entreprise (D5 / L7-2) : raison sociale du propriétaire, nom principal du client.
+            $colonne = $this->colonneNom($verrouille);
+            $avant = ['entreprise_tierce_id' => $verrouille->entreprise_tierce_id, $colonne => $verrouille->getAttribute($colonne)];
+            $verrouille->forceFill(['entreprise_tierce_id' => $entreprise->id, $colonne => $entreprise->raison_sociale])->save();
+            $proprietaire->forceFill(['entreprise_tierce_id' => $entreprise->id, $colonne => $entreprise->raison_sociale])->syncOriginal();
             $proprietaire->setRelation('entrepriseTierce', $entreprise);
 
             $lien = $this->interlocuteurs->rattacherContact($entreprise, $contact, $acteur, $origine);
@@ -352,7 +362,7 @@ final class ProprietaireEntreprise
      *
      * @param  array{raison_sociale?: ?string}  $valeurs
      */
-    public function delier(Proprietaire $proprietaire, User $acteur, string $origine, array $valeurs = [], array $meta = []): void
+    public function delier(Proprietaire|Client $proprietaire, User $acteur, string $origine, array $valeurs = [], array $meta = []): void
     {
         $this->assertMemeOrganisation($proprietaire->organization_id, $acteur);
         $ancienne = $proprietaire->entreprise_tierce_id;
@@ -375,7 +385,7 @@ final class ProprietaireEntreprise
      *
      * @param  array{raison_sociale: string, telephone?: ?string, identifiant_fiscal?: ?string}  $identite
      */
-    public function creerEntreprise(Proprietaire $proprietaire, array $identite): EntrepriseTierce
+    public function creerEntreprise(Proprietaire|Client $proprietaire, array $identite): EntrepriseTierce
     {
         $telephone = $this->texte($identite['telephone'] ?? null);
         $normalise = $telephone !== null ? Personne::normaliserTelephone($telephone) : '';
@@ -395,6 +405,17 @@ final class ProprietaireEntreprise
     }
 
     // ── Interne ─────────────────────────────────────────────────────────────
+
+    /** Colonne qui porte le nom recopié de l'entreprise. */
+    private function colonneNom(Proprietaire|Client $fonction): string
+    {
+        return $fonction instanceof Client ? 'nom_complet' : 'raison_sociale';
+    }
+
+    private function permission(Proprietaire|Client $fonction): string
+    {
+        return $fonction instanceof Client ? 'clients.update' : 'proprietaires.update';
+    }
 
     private function entrepriseChoisie(string $id, User $acteur): EntrepriseTierce
     {

@@ -55,6 +55,10 @@ class EntrepriseTierce extends Model
                 Proprietaire::withTrashed()
                     ->where('entreprise_tierce_id', $entreprise->id)
                     ->update(['raison_sociale' => $entreprise->raison_sociale]);
+                // Lot 7b (L7-2) : la raison sociale est le nom principal du client professionnel.
+                Client::withTrashed()
+                    ->where('entreprise_tierce_id', $entreprise->id)
+                    ->update(['nom_complet' => $entreprise->raison_sociale]);
             }
         });
     }
@@ -93,6 +97,12 @@ class EntrepriseTierce extends Model
     public function proprietaires(): HasMany
     {
         return $this->hasMany(Proprietaire::class);
+    }
+
+    /** Au plus un, garanti par App\Services\Contacts\ProprietaireEntreprise (ADR 0060, lot 7b). */
+    public function clients(): HasMany
+    {
+        return $this->hasMany(Client::class);
     }
 
     /** Catégories libres du référentiel Contacts (ADR 0060, lot 6a), sans effet métier. */

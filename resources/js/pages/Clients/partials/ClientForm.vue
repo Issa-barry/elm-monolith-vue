@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import RattachementEntreprise, {
+    type EntrepriseReliee,
+} from '@/components/contacts/RattachementEntreprise.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -31,6 +34,13 @@ interface FormData {
     type: string;
     cashback_eligible: boolean;
     cashback_montant_par_pack: number | null;
+    // Lot 7b (ADR 0060) : client professionnel relié à une fiche Entreprise.
+    client_professionnel?: boolean;
+    raison_sociale?: string | null;
+    telephone_entreprise?: string | null;
+    identifiant_fiscal?: string | null;
+    entreprise_choix?: string | null;
+    confirmer_modification_entreprise?: boolean;
 }
 
 interface TypeOption {
@@ -48,6 +58,8 @@ const props = withDefaults(
         // Renseigné uniquement en édition — exclut le client courant de la vérification de
         // doublon téléphone (sinon son propre numéro se signalerait lui-même).
         clientId?: number;
+        /** Entreprise déjà reliée (modification d'un client professionnel). */
+        entreprise?: EntrepriseReliee | null;
     }>(),
     {
         readonly: false,
@@ -62,6 +74,15 @@ const props = withDefaults(
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 const isReadOnly = computed(() => props.readonly);
+const isProfessionnel = computed(
+    () => props.form.client_professionnel === true,
+);
+// D8 : décocher un client déjà relié retire le lien (entreprise et interlocuteurs conservés).
+const lienRetire = computed(() => !!props.entreprise && !isProfessionnel.value);
+
+function maj(champs: Partial<FormData>) {
+    emit('update:form', { ...props.form, ...champs });
+}
 // Un Revendeur est automatiquement éligible au cashback (règle métier) — le toggle Cashback est
 // donc verrouillé sur "Oui" pour cette nature, jamais de valeur contradictoire possible côté UI.
 const isRevendeur = computed(() => props.form.type === 'revendeur');
@@ -252,10 +273,54 @@ function onSubmit() {
             >
                 Identité
             </h3>
-            <div class="grid gap-5">
-                <div>
+            <div class="grid gap-5 sm:grid-cols-2">
+                <div class="sm:col-span-2">
+                    <div class="flex items-center gap-2">
+                        <Checkbox
+                            id="client_professionnel"
+                            :model-value="isProfessionnel"
+                            :disabled="isReadOnly"
+                            @update:model-value="
+                                maj({ client_professionnel: $event === true })
+                            "
+                        />
+                        <Label for="client_professionnel" class="cursor-pointer"
+                            >Client professionnel (entreprise)</Label
+                        >
+                    </div>
+                    <p
+                        v-if="lienRetire"
+                        class="mt-1.5 text-xs text-amber-700 dark:text-amber-400"
+                    >
+                        Le lien avec l'entreprise «
+                        {{ entreprise?.raison_sociale }} » sera retiré.
+                        L'entreprise et ses interlocuteurs sont conservés dans
+                        les Contacts.
+                    </p>
+                </div>
+                <RattachementEntreprise
+                    v-if="isProfessionnel"
+                    :valeurs="{
+                        raison_sociale: form.raison_sociale ?? null,
+                        telephone_entreprise: form.telephone_entreprise ?? null,
+                        identifiant_fiscal: form.identifiant_fiscal ?? null,
+                        entreprise_choix: form.entreprise_choix ?? null,
+                        confirmer_modification_entreprise:
+                            form.confirmer_modification_entreprise ?? false,
+                        code_pays: form.code_pays,
+                    }"
+                    :errors="errors"
+                    :entreprise="entreprise"
+                    url-recherche="/backoffice/clients/entreprises-correspondantes"
+                    :parametres="clientId ? { client: String(clientId) } : {}"
+                    libelle-deja-pris="Déjà client"
+                    @maj="maj"
+                />
+                <div class="sm:col-span-2">
                     <Label for="nom_complet" class="mb-1.5 block"
-                        >Nom complet
+                        >{{
+                            isProfessionnel ? 'Nom du contact' : 'Nom complet'
+                        }}
                         <span class="text-destructive">*</span></Label
                     >
                     <InputText

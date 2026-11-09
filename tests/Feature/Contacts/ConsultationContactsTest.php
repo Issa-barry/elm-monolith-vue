@@ -204,7 +204,8 @@ class ConsultationContactsTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->has('personnes.data.0.fonctions', 1)
                 ->where('personnes.data.0.fonctions.0.fonction', 'client')
-                ->where('options.fonctions', [['value' => 'client', 'label' => 'Client']])
+                // Lot 7b : une entreprise cliente est visible avec clients.read, d'où le filtre Interlocuteur.
+                ->where('options.fonctions', [['value' => 'client', 'label' => 'Client'], ['value' => 'interlocuteur', 'label' => 'Interlocuteur']])
                 ->where('options.sous_categories', fn ($options) => collect($options)->every(fn ($o) => str_starts_with($o['value'], 'client:'))));
 
         $this->actingAs($user)->get(route('contacts.personnes.show', $p))

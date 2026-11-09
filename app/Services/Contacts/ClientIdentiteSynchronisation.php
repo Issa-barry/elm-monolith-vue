@@ -3,6 +3,7 @@
 namespace App\Services\Contacts;
 
 use App\Models\Client;
+use App\Models\EntrepriseTierce;
 use App\Models\Organization;
 use App\Models\Personne;
 use App\Support\Clients\ClientUniqueness;
@@ -47,6 +48,11 @@ final class ClientIdentiteSynchronisation
             $modifies = 0;
             foreach ($clients as $client) {
                 $identite = $this->identite($personne);
+                // Client professionnel (lot 7b, L7-2) : le nom principal reste la raison sociale de
+                // son entreprise ; la Personne est son contact.
+                if ($client->entreprise_tierce_id !== null) {
+                    $identite['nom_complet'] = EntrepriseTierce::whereKey($client->entreprise_tierce_id)->value('raison_sociale') ?? $client->nom_complet;
+                }
 
                 if (! empty($identite['telephone'])) {
                     ClientUniqueness::assertPhoneUniqueInOrg($identite['telephone'], $client->organization_id, $client->id);

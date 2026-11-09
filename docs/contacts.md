@@ -16,12 +16,13 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 2 — Consultation | Listes et fiches Personnes physiques / Entreprises, recherche globale « Contacts », liens de menu — lecture seule | Fait (07/11/2026, commit `d7a1effb`) |
 | 3 — Création | Parcours « téléphone d'abord », ajout explicite d'une fonction, une fonction par catégorie, fin de la reprise silencieuse (Fournisseur, Prestataire), D17 | Fait (07/11/2026, commit `ae3f8842`) |
 | 4 — Interlocuteurs | Gestion depuis l'onglet Interlocuteurs de la fiche Entreprise : ajout « téléphone d'abord », fonction et notes, principal, désactivation, réactivation, journal | Fait (07/11/2026, commit `48234f04`) |
-| 5 — Propriétaire entreprise | Lien vers une fiche Entreprise, contact devenu interlocuteur, reprise des données réversible (ADR 0060, décisions D1 à D10) | Codé (08/11/2026), non commité |
-| 6a — Catégories de contacts | Écran de paramétrage, sous-catégories Fournisseur multiples, catégories libres (Partenaire) et filtre, sous-catégories système en lecture seule | Codé (08/11/2026), non commité |
-| 6b — Qualifications Prestataire | Qualifications multiples, `qualifieConsultant()`, D15, reprise des qualifications | Codé (09/11/2026), non commité |
-| 7c — Nature du client sur la commande | `commandes_ventes.nature_client` figée à la création, lue par les commissions, listes et exports (D12 à D14) | Codé (09/11/2026), non commité |
-| 7a — Identité client | La fiche Personne fait foi (R1) ; rapport, arbitrage et activation par organisation (D16) ; modification de l'identité depuis Contacts | Codé (09/11/2026), non commité |
-| 7b, 8, 9 | Client professionnel, bascule, fusion | À venir |
+| 5 — Propriétaire entreprise | Lien vers une fiche Entreprise, contact devenu interlocuteur, reprise des données réversible (ADR 0060, décisions D1 à D10) | Fait (08/11/2026, commit `d2c763e3`) |
+| 6a — Catégories de contacts | Écran de paramétrage, sous-catégories Fournisseur multiples, catégories libres (Partenaire) et filtre, sous-catégories système en lecture seule | Fait (08/11/2026, commit `f3e1508b`) |
+| 6b — Qualifications Prestataire | Qualifications multiples, `qualifieConsultant()`, D15, reprise des qualifications | Fait (09/11/2026, commit `059e64dd`) |
+| 7c — Nature du client sur la commande | `commandes_ventes.nature_client` figée à la création, lue par les commissions, listes et exports (D12 à D14) | Fait (09/11/2026, commit `74db6f7a`) |
+| 7a — Identité client | La fiche Personne fait foi (R1) ; rapport, arbitrage et activation par organisation (D16) ; modification de l'identité depuis Contacts | Fait (09/11/2026, commit `d268ffe8`) |
+| 7b — Client professionnel | Client relié à une fiche Entreprise (règles du lot 5), raison sociale comme nom principal (L7-2) | Codé (09/11/2026), non commité |
+| 8, 9 | Bascule, fusion | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
@@ -332,6 +333,27 @@ sur les ventes, commissions, comptabilité ou logistique.
   tel quel. `--activer` démarre la synchronisation de l'organisation, refusée tant qu'un conflit ou
   une complétion reste, puis aligne l'écriture de chaque client sur sa Personne ; journalisée, une
   seule fois.
+- **CONTACT-047** — Client professionnel (lot 7b, L7-3) : case « Client professionnel (entreprise) »
+  du formulaire Client. Cochée, le client est relié à une fiche Entreprise
+  (`clients.entreprise_tierce_id`) avec les règles du propriétaire entreprise : raison sociale
+  obligatoire, téléphone et NIF de l'entreprise facultatifs et jamais ceux du contact (D2), recherche
+  des entreprises qui correspondent et choix explicite ou « nouvelle » (D3), entreprise non visible
+  jamais révélée (D6), contact (`personne_id`) devenu interlocuteur, principal seulement si
+  l'entreprise n'en a aucun (D9). Une entreprise porte au plus un client ; elle peut porter en même
+  temps les fonctions Fournisseur, Prestataire et Propriétaire. Aucun client existant n'est relié
+  automatiquement : il l'est à sa prochaine modification, case cochée.
+- **CONTACT-048** — Nom d'un client professionnel (L7-2) : `clients.nom_complet` porte la raison
+  sociale de l'entreprise, recopiée au lien puis à chaque renommage de l'entreprise quel que soit
+  l'écran (`EntrepriseTierce::booted()`, comme CONTACT-029), et conservée par la synchronisation
+  d'identité (CONTACT-043). Ventes, PDV, factures et espace client, qui lisent ce nom, affichent donc
+  la raison sociale. Le champ « Nom du contact » du formulaire modifie la Personne. La fiche Client
+  affiche le contact en mention secondaire ; les autres écrans ne l'affichent pas encore.
+- **CONTACT-049** — Modification et retrait (lot 7b) : modifier raison sociale, téléphone ou NIF de
+  l'entreprise depuis le formulaire Client suit D7 (`clients.update` ; entreprise qui porte une autre
+  fonction : `contacts.update` et confirmation explicite). Décocher la case retire le lien (D8,
+  journalisé, origine `client_particulier`) sans supprimer l'entreprise ni ses interlocuteurs ; le
+  nom du client redevient le nom du contact. Fiche Entreprise : fonction « Client » (avec
+  `clients.read`) ; fiche Personne : mention « au nom de » (D10).
 
 ## Écrans (lot 2)
 
@@ -385,6 +407,19 @@ ligne (Modifier la fonction et les notes, Définir comme principal, Désactiver 
 Formulaire Propriétaire : téléphone et NIF de l'entreprise, recherche et choix dans la carte
 « Entreprise » existante ; aucune carte ajoutée.
 
+## Routes (lot 7)
+
+| Route / commande | Rôle |
+| --- | --- |
+| `PATCH /backoffice/contacts/personnes/{personne}`, `PATCH /backoffice/contacts/entreprises/{entreprise}` | Modification de l'identité d'une fiche (lot 7a, CONTACT-044) |
+| `contacts:ecarts-clients` | Rapport, arbitrage, annulation et activation de la synchronisation (lot 7a, CONTACT-045, CONTACT-046) |
+| `GET /backoffice/clients/entreprises-correspondantes` | Recherche des entreprises du formulaire Client (lot 7b ; `clients.create`, ou `clients.update` sur le client désigné par `client`) |
+| `POST /backoffice/clients`, `PUT /backoffice/clients/{client}` | Existantes : champs `client_professionnel`, `raison_sociale`, `telephone_entreprise`, `identifiant_fiscal`, `entreprise_choix`, `confirmer_modification_entreprise` |
+
+Formulaire Client : case et champs de l'entreprise dans la carte « Identité » existante (composant
+partagé `components/contacts/RattachementEntreprise.vue`, aussi utilisé par le formulaire
+Propriétaire) ; aucune carte ajoutée.
+
 ## Routes (lot 6a)
 
 | Route | Rôle |
@@ -433,7 +468,7 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   `EntrepriseTierce::interlocuteurPrincipal()`, `Personne::interlocutions()`.
 - Catalogue : `App\Support\Contacts\SousCategoriesSysteme`, enum `ContactCategorie`.
 - Services : `App\Services\Contacts\InterlocuteurService`, `FonctionsContact`,
-  `ClientIdentiteSynchronisation` (non branché), `VisibiliteContacts` (source unique de la
+  `ClientIdentiteSynchronisation` (branché au lot 7a), `VisibiliteContacts` (source unique de la
   visibilité des listes, fiches et recherche — lot 2).
 - Création (lot 3) : services `CreationContact`, `FonctionsContactEcriture`,
   `RechercheTelephoneContact` ; requêtes `App\Http\Requests\Contacts\*` ; règle D17
@@ -471,4 +506,8 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   `UpdatePersonneContactRequest` / `UpdateEntrepriseContactRequest`, contrôleurs
   `UpdatePersonneController` / `UpdateEntrepriseController`, dialogue `ModifierIdentiteDialog.vue`,
   modèle `ContactsRepriseValeur`, migration `2026_11_09_220000`.
+- Client professionnel (lot 7b) : `ProprietaireEntreprise` étendu au client (`Proprietaire|Client`),
+  règles de saisie `App\Http\Controllers\Concerns\SaisieEntrepriseLiee`, relations
+  `Client::entrepriseTierce()` / `EntrepriseTierce::clients()`, migration `2026_11_09_230000`,
+  composant `components/contacts/RattachementEntreprise.vue`.
 - Tests : `tests/Feature/Contacts/`.

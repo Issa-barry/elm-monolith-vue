@@ -186,6 +186,15 @@ Personne, recopiés par `Personne::booted()`). Modification de l'identité depui
 (`contacts.update`). CLIENTPERSONNE-002 inversée après activation ; ADR 0051 et ADR 0056 inchangés.
 CONTACT-043 à CONTACT-046.
 
+Lot 7b : client professionnel relié à une fiche Entreprise (`clients.entreprise_tierce_id`) avec le
+même service que le propriétaire entreprise (`ProprietaireEntreprise`, étendu aux deux fonctions) :
+D2, D3, D6, D7, D8, D9 et D10 s'appliquent tels quels, une entreprise porte au plus un client, aucun
+client existant n'est relié automatiquement (L7-3). L7-2 : `clients.nom_complet` porte la raison
+sociale, recopiée au lien et à chaque renommage de l'entreprise ; les écrans qui lisent ce nom
+(ventes, PDV, factures, espace client) affichent donc la raison sociale sans modification. Le contact
+apparaît en mention secondaire sur la fiche Client ; sur les autres écrans, cette mention reste à
+faire. CONTACT-047 à CONTACT-049.
+
 ## Conséquences
 
 - Aucune entrée ajoutée au morph map : les comptes auxiliaires stockent le nom de classe des

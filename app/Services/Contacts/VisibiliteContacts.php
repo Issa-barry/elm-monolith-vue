@@ -42,8 +42,8 @@ final class VisibiliteContacts
     /** Condition toujours fausse : aucune ligne visible. */
     private const AUCUN = '1 = 0';
 
-    /** Fonctions qu'une entreprise peut porter aujourd'hui (propriétaire : lot 5 ; client : lot 7). */
-    public const FONCTIONS_ENTREPRISE = ['fournisseur', 'prestataire', 'proprietaire'];
+    /** Fonctions qu'une entreprise peut porter (propriétaire : lot 5 ; client professionnel : lot 7b). */
+    public const FONCTIONS_ENTREPRISE = ['fournisseur', 'prestataire', 'proprietaire', 'client'];
 
     /** @var array<string, list<string>> */
     private array $lisibles = [];
@@ -68,7 +68,7 @@ final class VisibiliteContacts
             'employe' => $lecteur->can('rh-employes.read') && $module(ModuleFeature::RH),
         ];
         // Un lien d'interlocuteur n'a de sens que si son entreprise peut être visible.
-        $regles['interlocuteur'] = $lecteur->can('contacts.read') && ($regles['fournisseur'] || $regles['prestataire'] || $regles['proprietaire']);
+        $regles['interlocuteur'] = $lecteur->can('contacts.read') && ($regles['fournisseur'] || $regles['prestataire'] || $regles['proprietaire'] || $regles['client']);
 
         return $this->lisibles[$lecteur->id] = array_keys(array_filter($regles));
     }
@@ -224,8 +224,10 @@ final class VisibiliteContacts
         };
 
         if ($this->peutLire($lecteur, 'client')) {
-            $ajouter('client', Client::whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
-                fn (Client $c) => ['id' => $c->id, 'actif' => $c->is_active, 'sous_categorie' => $c->type?->value, 'reference' => null]);
+            // Lot 7b : un client professionnel apparaît sur la fiche de son contact « au nom de » l'entreprise.
+            $ajouter('client', Client::with('entrepriseTierce:id,raison_sociale')->whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
+                fn (Client $c) => ['id' => $c->id, 'actif' => $c->is_active, 'sous_categorie' => $c->type?->value, 'reference' => null,
+                    ...($c->entreprise_tierce_id !== null ? ['entreprise_tierce_id' => $c->entreprise_tierce_id, 'au_nom_de' => $c->entrepriseTierce?->raison_sociale] : [])]);
         }
         if ($this->peutLire($lecteur, 'fournisseur')) {
             $ajouter('fournisseur', Fournisseur::with('sousCategories')->whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
@@ -289,6 +291,11 @@ final class VisibiliteContacts
         if ($this->peutLire($lecteur, 'proprietaire')) {
             foreach (Proprietaire::whereIn('entreprise_tierce_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get() as $p) {
                 $resultat[$p->entreprise_tierce_id][] = ['fonction' => 'proprietaire', 'id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => null, 'reference' => null];
+            }
+        }
+        if ($this->peutLire($lecteur, 'client')) {
+            foreach (Client::whereIn('entreprise_tierce_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get() as $c) {
+                $resultat[$c->entreprise_tierce_id][] = ['fonction' => 'client', 'id' => $c->id, 'actif' => $c->is_active, 'sous_categorie' => $c->type?->value, 'reference' => null];
             }
         }
 
@@ -361,6 +368,7 @@ final class VisibiliteContacts
             'fournisseur' => 'fournisseurs',
             'prestataire' => 'prestataires',
             'proprietaire' => 'proprietaires',
+            'client' => 'clients',
         };
 
         $s->from($table)
@@ -369,7 +377,7 @@ final class VisibiliteContacts
             ->whereNull("{$table}.deleted_at");
 
         if ($code !== null) {
-            $this->filtrerSousCategorie($s, $table, $fonction, null, $code);
+            $this->filtrerSousCategorie($s, $table, $fonction, $fonction === 'client' ? 'type' : null, $code);
         }
 
         return $s;

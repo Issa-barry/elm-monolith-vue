@@ -34,6 +34,11 @@ const form = useForm({
     // au cashback, montant obligatoire (cf. ClientForm.vue/CashbackEligibiliteService).
     cashback_eligible: true,
     cashback_montant_par_pack: null as number | null,
+    client_professionnel: false,
+    raison_sociale: null as string | null,
+    telephone_entreprise: null as string | null,
+    identifiant_fiscal: null as string | null,
+    entreprise_choix: null as string | null,
 });
 
 function submit() {
