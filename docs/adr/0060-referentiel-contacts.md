@@ -208,6 +208,27 @@ Prestataire, Client, Propriétaire et Parrain gardent leur formulaire, et le par
 sous-catégories Fournisseur pour ne perdre aucun champ. Aucune migration. CONTACT-050 à
 CONTACT-052.
 
+## Lot 9 (fusion des doublons) — décisions du 09/11/2026 et lot 9a
+
+Audit : aucun historique métier ne pointe vers une fiche Personne ou Entreprise — commandes,
+cashback, achats, factures, paiements, commissions, fiches de paiement, dépenses, paie et comptes
+auxiliaires pointent vers les fonctions. Une fusion d'identités repointerait seulement les
+`personne_id` / `entreprise_tierce_id` des fonctions, le compte, les interlocuteurs, le contact
+d'une entreprise, les catégories libres et les pièces d'identité. Décisions : (F1) fusion refusée si
+les deux fiches portent la même fonction — les fonctions ne sont jamais fusionnées ; (F2) refusée si
+chacune a un compte ; un seul compte : la simulation liste les fonctions qui lui seront rattachées
+(visibles dans l'espace client), la confirmation explicite l'autorise et elle est journalisée ;
+(F3) le téléphone de la fiche absorbée passe en téléphone secondaire s'il est libre, sinon il est
+noté au journal, et il est libéré ; (F4) permission `contacts.fusionner`, attribuée à aucun rôle par
+défaut ; (F5) commande seule (simulation, application, annulation), sans écran ; l'annulation ne
+restaure que ce qui n'a pas changé depuis et signale le reste pour arbitrage ; (F6) détection (9a)
+livrée et lancée en production en lecture seule avant de décider du périmètre de la fusion (9b).
+
+Lot 9a : `contacts:doublons`, lecture seule (aucune écriture, vérifié par test). Rapprochements
+seulement — même e-mail, même nom dans la même ville, même NIF, même raison sociale — avec blocages
+F1/F2 et rattachements ADR 0056 par paire ; export CSV. Aucune migration, aucune permission ajoutée
+(`contacts.fusionner` viendra avec la fusion). CONTACT-053, CONTACT-054.
+
 ## Conséquences
 
 - Aucune entrée ajoutée au morph map : les comptes auxiliaires stockent le nom de classe des

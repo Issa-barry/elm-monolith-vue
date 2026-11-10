@@ -22,8 +22,9 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 7c — Nature du client sur la commande | `commandes_ventes.nature_client` figée à la création, lue par les commissions, listes et exports (D12 à D14) | Fait (09/11/2026, commit `74db6f7a`) |
 | 7a — Identité client | La fiche Personne fait foi (R1) ; rapport, arbitrage et activation par organisation (D16) ; modification de l'identité depuis Contacts | Fait (09/11/2026, commit `d268ffe8`) |
 | 7b — Client professionnel | Client relié à une fiche Entreprise (règles du lot 5), raison sociale comme nom principal (L7-2) | Fait (09/11/2026, commit `ee322eb0`) |
-| 8 — Bascule | Menu « Par fonction », groupe « Contacts » unique dans la recherche du back-office, création Fournisseur / Prestataire par le parcours Contacts (L8-1 à L8-3) | Codé (09/11/2026), non commité |
-| 9 | Fusion | À venir |
+| 8 — Bascule | Menu « Par fonction », groupe « Contacts » unique dans la recherche du back-office, création Fournisseur / Prestataire par le parcours Contacts (L8-1 à L8-3) | Fait (09/11/2026, commit `0b06d1c6`) |
+| 9a — Détection des doublons | Commande `contacts:doublons` en lecture seule : paires probables, blocages F1/F2, rattachements ADR 0056 | Codé (09/11/2026), non commité |
+| 9b — Fusion | Périmètre décidé après la détection en production (F6) | À venir |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
@@ -377,6 +378,21 @@ sur les ventes, commissions, comptabilité ou logistique.
   Fournisseur. Client, Propriétaire et Parrain gardent leur formulaire (champs métier : nature,
   cashback, dérogation, type de propriétaire…), le parcours Contacts ne créant que les fonctions
   Fournisseur et Prestataire (CONTACT-017).
+- **CONTACT-053** — Doublons probables (lot 9a) : `contacts:doublons --acteur=<id>` (droit
+  `contacts.read`, organisation de l'acteur) liste les paires de fiches qui se ressemblent, **en
+  lecture seule** : aucune fusion, aucun rattachement, aucune écriture en base. Un même téléphone ne
+  pouvant être porté par deux fiches, ce sont des rapprochements, jamais des certitudes. Personnes :
+  même e-mail ; même nom dans la même ville (sans tenir compte de la casse, des accents ni des
+  espaces ; fiche sans nom ou sans ville jamais rapprochée par le nom). Entreprises : même NIF,
+  même raison sociale normalisée, même e-mail. Fiches supprimées et autres organisations ignorées.
+  `--export=<fichier.csv>` écrit une ligne par paire (séparateur « ; »).
+- **CONTACT-054** — Pour chaque paire, le rapport donne les fonctions et comptes des deux fiches et
+  ce qui bloquerait la fusion (décisions F1, F2 du lot 9) : **même fonction** des deux côtés (les
+  fonctions ne sont jamais fusionnées, aucun historique métier n'est touché) ; **un compte de chaque
+  côté** (compte unique, ADR 0055 ; compte = compte qui porte la fiche ou déjà relié à l'une de ses
+  fonctions). Quand un seul côté a un compte, il liste une à une les fonctions de l'autre côté qui
+  lui seraient rattachées d'office par une fusion (ADR 0056 : livreur, propriétaire, parrain,
+  consultant personne physique, interlocuteur), donc visibles dans l'espace client.
 
 ## Écrans (lot 2)
 
@@ -454,6 +470,12 @@ Aucune route ajoutée, aucune migration.
 | `GET /api/v1/search/global` | Inchangée (groupes historiques) ; le groupe « Contacts » y porte aussi `href` et `badges` |
 | `GET /backoffice/contacts/nouveau` | Paramètre `fonction` (présélection) ; props `fonction`, `sous_categories_fournisseur` |
 | `POST /backoffice/contacts/{personnes\|entreprises}`, `POST …/{id}/fonctions` | Champ `sous_categorie_ids[]` pour un fournisseur |
+
+## Commande (lot 9a)
+
+| Commande | Rôle |
+| --- | --- |
+| `contacts:doublons --acteur=<id> [--export=<fichier.csv>]` | Doublons probables, blocages et rattachements, en lecture seule (CONTACT-053, CONTACT-054) |
 
 ## Routes (lot 6a)
 
@@ -541,6 +563,8 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   `UpdatePersonneContactRequest` / `UpdateEntrepriseContactRequest`, contrôleurs
   `UpdatePersonneController` / `UpdateEntrepriseController`, dialogue `ModifierIdentiteDialog.vue`,
   modèle `ContactsRepriseValeur`, migration `2026_11_09_220000`.
+- Doublons (lot 9a) : service `App\Services\Contacts\DetectionDoublons`, commande
+  `ContactsDoublonsCommand`.
 - Client professionnel (lot 7b) : `ProprietaireEntreprise` étendu au client (`Proprietaire|Client`),
   règles de saisie `App\Http\Controllers\Concerns\SaisieEntrepriseLiee`, relations
   `Client::entrepriseTierce()` / `EntrepriseTierce::clients()`, migration `2026_11_09_230000`,
