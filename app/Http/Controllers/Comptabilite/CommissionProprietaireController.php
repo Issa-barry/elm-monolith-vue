@@ -85,6 +85,7 @@ class CommissionProprietaireController extends Controller
         $query = CommissionEnveloppePart::with([
             'enveloppe.source.site:id,nom',
             'enveloppe.source.vehicule:id,site_id,nom_vehicule,immatriculation',
+            'enveloppe.processus',
         ])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
@@ -867,9 +868,10 @@ class CommissionProprietaireController extends Controller
     {
         $nomsSites = Site::whereIn('id', $parts->map(fn (CommissionEnveloppePart $p) => $p->enveloppe?->siteResponsableId())->filter()->unique()->values())
             ->pluck('nom', 'id');
-        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriodes, $nomsSites) {
+        $beneficiairesPrecharges = CommissionEnveloppePart::beneficiairesPrecharges($parts);
+        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $propParts, string $proprioId) use ($beneficiairesPrecharges, $fraisParProprio, $motifsParProprio, $filtrePeriodes, $nomsSites) {
             $first = $propParts->first();
-            $beneficiaire = $first->resoudreBeneficiaire();
+            $beneficiaire = $beneficiairesPrecharges[$first->beneficiaire_type.'|'.$first->beneficiaire_id] ?? null;
             $partsValidees = $propParts->filter(
                 fn (CommissionEnveloppePart $part) => $part->statut !== StatutCommission::CREEE
             );

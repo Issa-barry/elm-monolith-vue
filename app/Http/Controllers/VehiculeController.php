@@ -199,7 +199,7 @@ class VehiculeController extends Controller
         ])->validate();
 
         $orgId = auth()->user()->organization_id;
-        $modeles = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur', 'capacites.categorie'])
+        $modeles = Vehicule::with(['typeVehicule', 'site', 'proprietaire.personne', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur.personne', 'capacites.categorie'])
             ->where('organization_id', $orgId)
             ->orderBy('nom_vehicule')
             ->get();

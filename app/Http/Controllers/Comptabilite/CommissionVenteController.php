@@ -97,6 +97,7 @@ class CommissionVenteController extends Controller
             'enveloppe.source.vehicule.proprietaire:id,personne_id',
             'enveloppe.source.vehicule.proprietaire.personne',
             'enveloppe.source.vehicule.capacites.categorie',
+            'enveloppe.processus',
         ])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
             // Une commission CREEE existe déjà en base et doit rester visible (décision produit
@@ -176,10 +177,12 @@ class CommissionVenteController extends Controller
             $filtrePeriodes,
         );
 
+        $beneficiairesPrecharges = CommissionEnveloppePart::beneficiairesPrecharges($allParts);
+
         $beneficiaires = $partsParLivreur->map(function (Collection $parts, string $livreurId) use (
             $agencesParLivreur, $vehiculesParLivreur, $fraisDepensesParLivreur,
             $premiereEcheanceParLivreur, $periodesParDate, $labelsParStatut, $teamStatusParPeriode,
-            $fichesPayables,
+            $fichesPayables, $beneficiairesPrecharges,
         ) {
             $premier = $parts->first();
             $fraisDepenses = $fraisDepensesParLivreur[$livreurId] ?? 0.0;
@@ -243,7 +246,7 @@ class CommissionVenteController extends Controller
             $fiche = $fichesPayables->get($livreurId);
             $resolved['can_pay'] = $fiche !== null;
 
-            $beneficiaire = $premier->resoudreBeneficiaire();
+            $beneficiaire = $beneficiairesPrecharges[$premier->beneficiaire_type.'|'.$premier->beneficiaire_id] ?? null;
 
             return [
                 'beneficiaire_id' => $livreurId,
@@ -893,9 +896,10 @@ class CommissionVenteController extends Controller
     {
         $nomsSites = Site::whereIn('id', $parts->map(fn (CommissionEnveloppePart $p) => $p->enveloppe?->siteResponsableId())->filter()->unique()->values())
             ->pluck('nom', 'id');
-        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $livParts) use ($filtrePeriodes, $fraisDepensesParLivreur, $nomsSites) {
+        $beneficiairesPrecharges = CommissionEnveloppePart::beneficiairesPrecharges($parts);
+        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $livParts) use ($beneficiairesPrecharges, $filtrePeriodes, $fraisDepensesParLivreur, $nomsSites) {
             $first = $livParts->first();
-            $beneficiaire = $first->resoudreBeneficiaire();
+            $beneficiaire = $beneficiairesPrecharges[$first->beneficiaire_type.'|'.$first->beneficiaire_id] ?? null;
             $fraisDepenses = $fraisDepensesParLivreur[(string) $first->beneficiaire_id] ?? 0.0;
             // Même règle que index() : le résumé porte sur toutes les parts actives retenues
             // (CREEE incluse sans filtre Statut), seul le statut reste conditionné par la payabilité.
