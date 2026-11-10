@@ -7,9 +7,10 @@ use App\Services\Contacts\DetectionDoublons;
 use Illuminate\Console\Command;
 
 /**
- * Doublons probables du référentiel Contacts (ADR 0060, lot 9a). **Lecture seule** : aucune fusion,
- * aucun rattachement, aucune écriture en base. Rapport à l'écran et, avec --export, fichier CSV
- * (une ligne par paire) pour l'analyse avant de décider du périmètre de la fusion (lot 9b).
+ * Doublons probables d'entreprises du référentiel Contacts (ADR 0060, lot 9a). **Lecture seule** :
+ * aucune fusion, aucun rattachement, aucune écriture en base. Les personnes ne sont jamais
+ * rapprochées : deux numéros différents désignent deux personnes (CONTACT-053). Rapport à l'écran et,
+ * avec --export, fichier CSV (une ligne par paire).
  */
 class ContactsDoublonsCommand extends Command
 {
@@ -17,7 +18,7 @@ class ContactsDoublonsCommand extends Command
         {--acteur= : Id de l\'utilisateur au nom duquel la commande est lancée (organisation analysée)}
         {--export= : Chemin d\'un fichier CSV à écrire (une ligne par paire)}';
 
-    protected $description = 'Doublons probables de personnes et d\'entreprises, avec ce qui bloquerait leur fusion (lecture seule).';
+    protected $description = 'Doublons probables d\'entreprises, avec ce qui bloquerait leur fusion (lecture seule).';
 
     public function handle(DetectionDoublons $detection): int
     {
@@ -35,22 +36,19 @@ class ContactsDoublonsCommand extends Command
 
         $analyse = $detection->analyser((string) $acteur->organization_id);
         $resume = $analyse['resume'];
+        $paires = $analyse['entreprises'];
 
-        $this->info('Doublons probables (lecture seule, rien n\'est modifié)');
+        $this->info('Doublons probables d\'entreprises (lecture seule, rien n\'est modifié)');
+        $this->line('Personnes : jamais rapprochées, deux numéros différents désignent deux personnes.');
         $this->table(['Mesure', 'Nombre'], [
-            ['Paires de personnes', $resume['paires_personnes']],
             ['Paires d\'entreprises', $resume['paires_entreprises']],
             ['Fusionnables sans blocage', $resume['fusionnables']],
             ['Bloquées : même fonction des deux côtés (F1)', $resume['bloquees_meme_fonction']],
-            ['Bloquées : un compte de chaque côté (F2)', $resume['bloquees_deux_comptes']],
-            ['Rattachement de fonctions à un compte à confirmer (ADR 0056)', $resume['avec_rattachement']],
         ]);
 
-        $paires = [...$analyse['personnes'], ...$analyse['entreprises']];
         if ($paires !== []) {
-            $this->table(['Type', 'Fiche A', 'Fiche B', 'Critères', 'Fonctions A', 'Fonctions B', 'Blocages / rattachement'],
+            $this->table(['Entreprise A', 'Entreprise B', 'Critères', 'Fonctions A', 'Fonctions B', 'Blocages'],
                 array_map(fn (array $p) => [
-                    $p['type'],
                     $this->libelleFiche($p['a']),
                     $this->libelleFiche($p['b']),
                     $this->criteres($p),
@@ -71,7 +69,7 @@ class ContactsDoublonsCommand extends Command
 
     private function libelleFiche(array $fiche): string
     {
-        return trim("{$fiche['nom']} · ".($fiche['telephone'] ?? 'sans téléphone')." · {$fiche['id']}");
+        return trim("{$fiche['nom']} · ".($fiche['identifiant_fiscal'] ?? 'sans NIF')." · {$fiche['id']}");
     }
 
     private function criteres(array $paire): string
@@ -84,20 +82,13 @@ class ContactsDoublonsCommand extends Command
         $liste = array_map(fn (array $f) => $f['fonction'] === 'interlocuteurs'
             ? "{$f['id']} interlocuteur(s)"
             : $f['fonction'].($f['reference'] ? " {$f['reference']}" : '').($f['actif'] === false ? ' (inactif)' : ''), $fiche['fonctions']);
-        $comptes = count($fiche['comptes']);
 
-        return implode(', ', $liste ?: ['aucune']).($comptes > 0 ? " — {$comptes} compte(s)" : '');
+        return implode(', ', $liste ?: ['aucune']);
     }
 
     private function blocages(array $paire): string
     {
-        $lignes = array_column($paire['blocages'], 'detail');
-        if ($paire['rattachement'] !== null) {
-            $lignes[] = 'Rattachées au compte '.$paire['rattachement']['compte'].' si fusion : '
-                .implode(', ', array_map(fn (array $f) => $f['fonction'].($f['reference'] ? " {$f['reference']}" : " {$f['id']}"), $paire['rattachement']['fonctions']));
-        }
-
-        return implode(' | ', $lignes ?: ['aucun']);
+        return implode(' | ', array_column($paire['blocages'], 'detail') ?: ['aucun']);
     }
 
     /** @param  list<array<string, mixed>>  $paires */
@@ -105,14 +96,14 @@ class ContactsDoublonsCommand extends Command
     {
         $flux = fopen($chemin, 'w');
         fwrite($flux, "\xEF\xBB\xBF");
-        fputcsv($flux, ['type', 'criteres', 'a_id', 'a_nom', 'a_telephone', 'a_ville', 'a_fonctions', 'b_id', 'b_nom', 'b_telephone', 'b_ville', 'b_fonctions', 'blocages', 'rattachement'], ';');
+        fputcsv($flux, ['criteres', 'a_id', 'a_raison_sociale', 'a_nif', 'a_telephone', 'a_email', 'a_ville', 'a_fonctions', 'b_id', 'b_raison_sociale', 'b_nif', 'b_telephone', 'b_email', 'b_ville', 'b_fonctions', 'blocages'], ';');
         foreach ($paires as $p) {
+            $fiche = fn (array $f) => [$f['id'], $f['nom'], $f['identifiant_fiscal'], $f['telephone'], $f['email'], $f['ville'], $this->fonctions($f)];
             fputcsv($flux, [
-                $p['type'], $this->criteres($p),
-                $p['a']['id'], $p['a']['nom'], $p['a']['telephone'], $p['a']['ville'], $this->fonctions($p['a']),
-                $p['b']['id'], $p['b']['nom'], $p['b']['telephone'], $p['b']['ville'], $this->fonctions($p['b']),
+                $this->criteres($p),
+                ...$fiche($p['a']),
+                ...$fiche($p['b']),
                 implode(' | ', array_column($p['blocages'], 'detail')),
-                $p['rattachement'] === null ? '' : $this->blocages(['blocages' => [], 'rattachement' => $p['rattachement']]),
             ], ';');
         }
         fclose($flux);
