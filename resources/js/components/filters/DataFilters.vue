@@ -276,18 +276,18 @@ function fieldOptions(field: FilterField): FilterOption[] {
     return field.options ?? [];
 }
 
-// ── Période personnalisée : les deux dates, dans l'ordre ──────────────────────
+// ── Période personnalisée : date de début obligatoire, fin vide = aujourd'hui ─
 // Même règle que le serveur (Periode::regles) : rien n'est envoyé tant qu'elle n'est pas
-// respectée, et une erreur renvoyée par le serveur reste affichée sous le champ.
+// respectée, et une erreur renvoyée par le serveur reste affichée sous le champ. « Aujourd'hui »
+// est résolu par le serveur (ADR 0057), jamais par l'horloge du navigateur.
 
 function erreurLocalePeriode(field: FilterField): string | null {
     if (localValues.value[field.key] !== PERIODE_PERSONNALISEE) return null;
     const [sk, ek] = periodKeys(field);
     const debut = (localValues.value[sk] as string) || '';
     const fin = (localValues.value[ek] as string) || '';
-    if (!debut && !fin) return 'Renseignez la date de début et la date de fin.';
-    if (!debut) return 'Renseignez aussi la date de début.';
-    if (!fin) return 'Renseignez aussi la date de fin.';
+    if (!debut) return 'Renseignez la date de début.';
+    if (!fin) return null;
     return debut > fin
         ? 'La date de fin doit être postérieure ou égale à la date de début.'
         : null;
@@ -300,6 +300,32 @@ function erreurPeriode(field: FilterField): string | null {
         {}) as Record<string, string>;
     const [sk, ek] = periodKeys(field);
     return errors[field.key] ?? errors[sk] ?? errors[ek] ?? null;
+}
+
+/** L'écran propose des dates libres (sinon : raccourcis seuls, voir `REGISTRE_SANS_DATES`). */
+function accepteDates(field: FilterField): boolean {
+    return fieldOptions(field).some(
+        (o) => String(o.value) === PERIODE_PERSONNALISEE,
+    );
+}
+
+function choisirPeriode(field: FilterField, choix: unknown) {
+    localValues.value[field.key] = choix ?? '';
+    if (choix === PERIODE_PERSONNALISEE) return;
+    const [sk, ek] = periodKeys(field);
+    localValues.value[sk] = '';
+    localValues.value[ek] = '';
+}
+
+// Saisir une date bascule sur « Période personnalisée » ; vider les deux revient au défaut.
+function saisirDatePeriode(field: FilterField, borne: 0 | 1, date: unknown) {
+    const [sk, ek] = periodKeys(field);
+    localValues.value[borne === 0 ? sk : ek] = (date as string) ?? '';
+    if (localValues.value[sk] || localValues.value[ek]) {
+        localValues.value[field.key] = PERIODE_PERSONNALISEE;
+    } else if (localValues.value[field.key] === PERIODE_PERSONNALISEE) {
+        localValues.value[field.key] = field.defaultValue ?? '';
+    }
 }
 
 const periodeInvalide = computed(() =>
@@ -620,14 +646,16 @@ const hasActiveFilters = computed(
                         field.label
                     }}</span>
                     <Select
-                        v-model="localValues[field.key]"
+                        :model-value="localValues[field.key]"
                         :options="fieldOptions(field)"
                         option-label="label"
                         option-value="value"
                         :aria-label="field.label"
                         :disabled="field.disabled ?? false"
+                        scroll-height="26rem"
                         size="small"
                         class="h-9 w-[200px] text-sm"
+                        @update:model-value="choisirPeriode(field, $event)"
                     />
                 </div>
                 <template
@@ -638,8 +666,15 @@ const hasActiveFilters = computed(
                             >Du</span
                         >
                         <input
-                            v-model="localValues[periodKeys(field)[0]]"
+                            :value="localValues[periodKeys(field)[0]]"
                             type="date"
+                            @input="
+                                saisirDatePeriode(
+                                    field,
+                                    0,
+                                    ($event.target as HTMLInputElement).value,
+                                )
+                            "
                             aria-label="Date de début"
                             :data-testid="`filter-inline-${field.key}-debut`"
                             class="h-9 w-[150px] rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -647,11 +682,18 @@ const hasActiveFilters = computed(
                     </div>
                     <div class="flex flex-col gap-1">
                         <span class="text-xs font-medium text-muted-foreground"
-                            >Au</span
+                            >Au (vide = aujourd'hui)</span
                         >
                         <input
-                            v-model="localValues[periodKeys(field)[1]]"
+                            :value="localValues[periodKeys(field)[1]]"
                             type="date"
+                            @input="
+                                saisirDatePeriode(
+                                    field,
+                                    1,
+                                    ($event.target as HTMLInputElement).value,
+                                )
+                            "
                             aria-label="Date de fin"
                             :data-testid="`filter-inline-${field.key}-fin`"
                             class="h-9 w-[150px] rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -884,20 +926,24 @@ const hasActiveFilters = computed(
                                 class="space-y-1.5"
                             >
                                 <Label>{{ field.label }}</Label>
+                                <!-- append-to="self" : la liste reste dans le panneau modal, sinon ses choix ne sont pas cliquables -->
                                 <Select
-                                    v-model="localValues[field.key]"
+                                    :model-value="localValues[field.key]"
                                     :options="fieldOptions(field)"
                                     option-label="label"
                                     option-value="value"
                                     :aria-label="field.label"
+                                    append-to="self"
+                                    scroll-height="26rem"
                                     class="w-full"
                                     fluid
-                                />
-                                <div
-                                    v-if="
-                                        localValues[field.key] ===
-                                        PERIODE_PERSONNALISEE
+                                    @update:model-value="
+                                        choisirPeriode(field, $event)
                                     "
+                                />
+                                <!-- Dates toujours visibles : en saisir une passe en « Période personnalisée » -->
+                                <div
+                                    v-if="accepteDates(field)"
                                     class="grid grid-cols-2 gap-2"
                                 >
                                     <div class="space-y-1">
@@ -906,32 +952,50 @@ const hasActiveFilters = computed(
                                             >Du</span
                                         >
                                         <Input
-                                            v-model="
-                                                localValues[
-                                                    periodKeys(field)[0]
-                                                ] as string | number | undefined
+                                            :model-value="
+                                                String(
+                                                    localValues[
+                                                        periodKeys(field)[0]
+                                                    ] ?? '',
+                                                )
                                             "
                                             type="date"
                                             aria-label="Date de début"
                                             :data-testid="`filter-field-${field.key}-debut`"
                                             class="h-9"
+                                            @update:model-value="
+                                                saisirDatePeriode(
+                                                    field,
+                                                    0,
+                                                    $event,
+                                                )
+                                            "
                                         />
                                     </div>
                                     <div class="space-y-1">
                                         <span
                                             class="text-xs text-muted-foreground"
-                                            >Au</span
+                                            >Au (vide = aujourd'hui)</span
                                         >
                                         <Input
-                                            v-model="
-                                                localValues[
-                                                    periodKeys(field)[1]
-                                                ] as string | number | undefined
+                                            :model-value="
+                                                String(
+                                                    localValues[
+                                                        periodKeys(field)[1]
+                                                    ] ?? '',
+                                                )
                                             "
                                             type="date"
                                             aria-label="Date de fin"
                                             :data-testid="`filter-field-${field.key}-fin`"
                                             class="h-9"
+                                            @update:model-value="
+                                                saisirDatePeriode(
+                                                    field,
+                                                    1,
+                                                    $event,
+                                                )
+                                            "
                                         />
                                     </div>
                                 </div>
@@ -997,6 +1061,7 @@ const hasActiveFilters = computed(
                                     ]"
                                     option-label="label"
                                     option-value="value"
+                                    append-to="self"
                                     class="w-full"
                                     fluid
                                 />

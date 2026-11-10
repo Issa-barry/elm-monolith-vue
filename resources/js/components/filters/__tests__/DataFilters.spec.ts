@@ -618,7 +618,22 @@ describe('DataFilters — période standard (ADR 0057)', () => {
         );
     });
 
-    it("bloque l'application et explique tant qu'une seule date est saisie", async () => {
+    it("bloque l'application et explique tant que la date de début manque", async () => {
+        const wrapper = monterStandard();
+        await choisirPersonnalisee(wrapper);
+        await wrapper
+            .get('[data-testid="filter-inline-periode-fin"]')
+            .setValue('2026-11-04');
+
+        expect(
+            wrapper.get('[data-testid="filter-periode-erreur"]').text(),
+        ).toBe('Renseignez la date de début.');
+        expect(wrapper.get(appliquer).attributes('disabled')).toBeDefined();
+        await wrapper.get(appliquer).trigger('click');
+        expect(routerGet).not.toHaveBeenCalled();
+    });
+
+    it("envoie la date de début seule : le serveur prend aujourd'hui comme fin", async () => {
         const wrapper = monterStandard();
         await choisirPersonnalisee(wrapper);
         await wrapper
@@ -626,11 +641,14 @@ describe('DataFilters — période standard (ADR 0057)', () => {
             .setValue('2026-11-01');
 
         expect(
-            wrapper.get('[data-testid="filter-periode-erreur"]').text(),
-        ).toBe('Renseignez aussi la date de fin.');
-        expect(wrapper.get(appliquer).attributes('disabled')).toBeDefined();
+            wrapper.find('[data-testid="filter-periode-erreur"]').exists(),
+        ).toBe(false);
         await wrapper.get(appliquer).trigger('click');
-        expect(routerGet).not.toHaveBeenCalled();
+        expect(routerGet).toHaveBeenCalledWith(
+            '/liste',
+            { date_debut: '2026-11-01' },
+            expect.anything(),
+        );
     });
 
     it('refuse une date de fin antérieure à la date de début', async () => {
@@ -652,13 +670,116 @@ describe('DataFilters — période standard (ADR 0057)', () => {
     });
 
     it('affiche l’erreur renvoyée par le serveur sous le champ', () => {
-        partage.errors.date_fin = 'Renseignez aussi la date de fin.';
+        partage.errors.date_debut =
+            "Sans date de fin, la date de début ne peut pas dépasser aujourd'hui.";
 
         const wrapper = monterStandard({ periode: 'tout' });
 
         expect(
             wrapper.get('[data-testid="filter-periode-erreur"]').text(),
-        ).toBe('Renseignez aussi la date de fin.');
+        ).toBe(
+            "Sans date de fin, la date de début ne peut pas dépasser aujourd'hui.",
+        );
+    });
+});
+
+describe('DataFilters — période dans le panneau Filtres', () => {
+    const champPeriode = (options?: FilterField['options']): FilterField[] => [
+        {
+            key: 'periode',
+            label: 'Période',
+            type: 'period',
+            defaultValue: 'tout',
+            ...(options ? { options } : {}),
+        },
+    ];
+
+    const monterPanneau = (
+        values: Record<string, unknown> = {},
+        options?: FilterField['options'],
+    ) =>
+        shallowMount(DataFilters, {
+            props: {
+                url: '/backoffice/ventes',
+                values,
+                fields: champPeriode(options),
+                resultCount: 0,
+                triggerOnly: true,
+            },
+            global: { renderStubDefaultSlot: true },
+        });
+
+    beforeEach(() => routerGet.mockClear());
+
+    it('ouvre la liste dans le panneau, sinon ses choix ne sont pas cliquables', () => {
+        const select = monterPanneau().findComponent(Select);
+
+        expect(select.vm.$attrs['append-to']).toBe('self');
+    });
+
+    it('affiche Du / Au directement et passe en période personnalisée à la saisie', async () => {
+        const wrapper = monterPanneau({ periode: 'tout' });
+        const [debut, fin] = wrapper.findAllComponents({ name: 'Input' });
+
+        debut.vm.$emit('update:modelValue', '2026-11-01');
+        fin.vm.$emit('update:modelValue', '2026-11-04');
+        await nextTick();
+
+        expect(wrapper.findComponent(Select).vm.$attrs['model-value']).toBe(
+            'personnalisee',
+        );
+        wrapper.getComponent(FilterDrawer).vm.$emit('apply');
+        expect(routerGet).toHaveBeenCalledWith(
+            '/backoffice/ventes',
+            { date_debut: '2026-11-01', date_fin: '2026-11-04' },
+            expect.anything(),
+        );
+    });
+
+    it('efface les dates quand on choisit un raccourci', async () => {
+        const wrapper = monterPanneau({
+            periode: 'personnalisee',
+            date_debut: '2026-11-01',
+            date_fin: '2026-11-04',
+        });
+
+        wrapper.findComponent(Select).vm.$emit('update:modelValue', 'ce_mois');
+        await nextTick();
+        wrapper.getComponent(FilterDrawer).vm.$emit('apply');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/backoffice/ventes',
+            { periode: 'ce_mois' },
+            expect.anything(),
+        );
+    });
+
+    it('revient au défaut quand les deux dates sont vidées', async () => {
+        const wrapper = monterPanneau({
+            periode: 'personnalisee',
+            date_debut: '2026-11-01',
+            date_fin: '2026-11-04',
+        });
+        const [debut, fin] = wrapper.findAllComponents({ name: 'Input' });
+
+        debut.vm.$emit('update:modelValue', '');
+        fin.vm.$emit('update:modelValue', '');
+        await nextTick();
+
+        expect(wrapper.findComponent(Select).vm.$attrs['model-value']).toBe(
+            'tout',
+        );
+    });
+
+    it("n'affiche pas de dates quand l'écran ne propose que des raccourcis", () => {
+        const wrapper = monterPanneau({}, [
+            { value: 'aujourd_hui', label: "Aujourd'hui" },
+            { value: 'hier', label: 'Hier' },
+        ]);
+
+        expect(
+            wrapper.find('[data-testid="filter-field-periode-debut"]').exists(),
+        ).toBe(false);
     });
 });
 
