@@ -138,9 +138,10 @@ calculé (prop `situation_periode` : `cle`, `date_debut`, `date_fin`, `options`)
 - Les périodes rapides sont résolues **côté serveur** (fuseau et locale de l'application) : elles
   restent relatives dans un favori, et « aujourd'hui » ne dépend pas de l'horloge du navigateur.
   `mois_precedent` / `annee_precedente` ne débordent jamais (31 mars → février).
-- Période personnalisée : les **deux** dates sont obligatoires et `date_debut` ≤ `date_fin` ; une
-  valeur invalide (une seule date, ordre inversé, format ou date impossible) est **refusée avec un
-  message** (ADR 0057), plus de repli silencieux. Les anciens noms `date_from`/`date_to` restent
+- Période personnalisée : `date_debut` obligatoire, `date_fin` facultative (vide = jusqu'à
+  aujourd'hui, résolu par le serveur) et `date_debut` ≤ `date_fin` ; une valeur invalide (date de
+  fin seule, ordre inversé, format ou date impossible) est **refusée avec un message** (ADR 0057),
+  plus de repli silencieux. Les anciens noms `date_from`/`date_to` restent
   acceptés pour les liens existants.
 - Côté interface : sélecteur de période (PrimeVue `Select`) ; « Période personnalisée » affiche
   `Du [date] → Au [date]` (champs date natifs, comme `DataFilters`), préremplis avec les bornes

@@ -161,11 +161,38 @@ class CommandeVenteIndexFilterTest extends TestCase
             );
     }
 
-    public function test_une_seule_date_est_refusee(): void
+    /** ADR 0057 (décision du 10/11/2026) : sans date de fin, la période va jusqu'à aujourd'hui. */
+    public function test_date_de_debut_seule_va_jusqu_a_aujourd_hui(): void
+    {
+        $avant = $this->makeCommande();
+        $avant->created_at = now()->subDays(10);
+        $avant->saveQuietly();
+
+        $dansLaPeriode = $this->makeCommande();
+        $dansLaPeriode->created_at = now()->subDays(2);
+        $dansLaPeriode->saveQuietly();
+
+        $aujourdhui = $this->makeCommande();
+        $aujourdhui->created_at = now();
+        $aujourdhui->saveQuietly();
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.index', ['date_debut' => now()->subDays(5)->toDateString()]))
+            ->assertOk()
+            ->assertSessionHasNoErrors()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('commandes', 2)
+                ->where('filters.periode', 'personnalisee')
+                ->where('filters.date_debut', now()->subDays(5)->toDateString())
+                ->where('filters.date_fin', null),
+            );
+    }
+
+    public function test_date_de_fin_seule_est_refusee(): void
     {
         $this->actingAs($this->user)
-            ->get(route('ventes.index', ['date_debut' => '2026-11-01']))
-            ->assertSessionHasErrors('date_fin');
+            ->get(route('ventes.index', ['date_fin' => '2026-11-04']))
+            ->assertSessionHasErrors('date_debut');
     }
 
     public function test_ancienne_cle_today_reste_acceptee(): void
