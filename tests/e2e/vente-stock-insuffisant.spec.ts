@@ -244,8 +244,11 @@ async function remplirPremiereLigne(
  */
 async function payerFactureIntegralement(page: Page): Promise<void> {
     // Le bouton « Encaisser » vit sous l'onglet Facturation de la fiche commande (l'onglet par
-    // défaut, Informations, ne l'affiche pas) — onglets = <button> simples, pas role="tab".
-    await page.getByRole('button', { name: /^facturation$/i }).click();
+    // défaut, Informations, ne l'affiche pas) — onglets ARIA : <button role="tab"> dans un tablist.
+    await page
+        .getByTestId('vente-tabs')
+        .getByRole('tab', { name: /^facturation$/i })
+        .click();
 
     const encaisserBtn = page.getByRole('button', { name: /^encaisser/i });
     await encaisserBtn.waitFor({ state: 'visible', timeout: 15_000 });
