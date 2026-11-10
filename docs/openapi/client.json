@@ -28,7 +28,7 @@
         "/v1/mobile/activite": {
             "get": {
                 "operationId": "client.activite.mine",
-                "description": "M\u00e9lange deux mod\u00e8les \u00e0 vocabulaire de statut distinct (`StatutCommandeVente` pour `type=vente`, `StatutTransfert` pour `type=logistique`) \u2014 aucune correspondance n'est invent\u00e9e entre les deux. `statut` **exige `type`** (422 explicite sinon, message \"Le filtre statut n\u00e9cessite de pr\u00e9ciser type\"). `type` omis = les deux m\u00e9lang\u00e9s, tri\u00e9s par date d\u00e9croissante, mais alors sans filtre `statut` possible. `periode` (p\u00e9riode rapide r\u00e9solue par le serveur) exclut `date_debut`/`date_fin` (422 sinon). P\u00e9riode comptable : `annee` + `mois` + `quinzaine` (`P1` du 1er au 15, `P2` du 16 \u00e0 la fin du mois, `TOUT` ou omise = le mois), bornes calcul\u00e9es par le serveur, exclut `periode` et `date_debut`/`date_fin`.",
+                "description": "Liste unique des op\u00e9rations du compte : une vente concernant le compte \u00e0 plusieurs titres n'appara\u00eet qu'une fois. Chaque ligne porte `nature` (ce qu'est l'op\u00e9ration), `liens` (`client`, `livreur`, `proprietaire` : pourquoi ce compte la voit) et `avancement` (vocabulaire commun, calcul\u00e9 par le serveur). Le paiement reste ind\u00e9pendant de l'avancement et vaut null pour un compte seulement livreur. `lien` (`client`, `livreur`, `proprietaire`) ne garde que les op\u00e9rations vues \u00e0 ce titre, chaque ligne gardant tous ses liens. `statut` et `statut_label` r\u00e9p\u00e8tent `avancement`, retir\u00e9s apr\u00e8s le d\u00e9ploiement du front. `compte_a_des_operations` ignore les filtres et distingue un compte sans aucune op\u00e9ration d'une p\u00e9riode vide. `periode` (p\u00e9riode rapide r\u00e9solue par le serveur) exclut `date_debut`/`date_fin` (422 sinon). P\u00e9riode comptable : `annee` + `mois` + `quinzaine` (`P1` du 1er au 15, `P2` du 16 \u00e0 la fin du mois, `TOUT` ou omise = le mois), bornes calcul\u00e9es par le serveur, exclut `periode` et `date_debut`/`date_fin`.",
                 "tags": [
                     "Activity"
                 ],
@@ -49,12 +49,18 @@
                         }
                     },
                     {
-                        "name": "statut",
+                        "name": "lien",
                         "in": "query",
                         "schema": {
                             "type": [
                                 "string",
                                 "null"
+                            ],
+                            "enum": [
+                                "client",
+                                "livreur",
+                                "proprietaire",
+                                null
                             ]
                         }
                     },
@@ -245,7 +251,7 @@
                                                     "type": "object",
                                                     "properties": {
                                                         "type": {},
-                                                        "statut": {},
+                                                        "lien": {},
                                                         "vehicule_id": {},
                                                         "periode": {},
                                                         "annee": {
@@ -281,7 +287,7 @@
                                                     },
                                                     "required": [
                                                         "type",
-                                                        "statut",
+                                                        "lien",
                                                         "vehicule_id",
                                                         "periode",
                                                         "annee",
@@ -290,13 +296,17 @@
                                                         "date_debut",
                                                         "date_fin"
                                                     ]
+                                                },
+                                                "compte_a_des_operations": {
+                                                    "type": "boolean"
                                                 }
                                             },
                                             "required": [
                                                 "data",
                                                 "links",
                                                 "meta",
-                                                "filters"
+                                                "filters",
+                                                "compte_a_des_operations"
                                             ]
                                         },
                                         {
@@ -363,7 +373,7 @@
                                                     "type": "object",
                                                     "properties": {
                                                         "type": {},
-                                                        "statut": {},
+                                                        "lien": {},
                                                         "vehicule_id": {},
                                                         "periode": {},
                                                         "annee": {
@@ -399,7 +409,7 @@
                                                     },
                                                     "required": [
                                                         "type",
-                                                        "statut",
+                                                        "lien",
                                                         "vehicule_id",
                                                         "periode",
                                                         "annee",
@@ -408,13 +418,17 @@
                                                         "date_debut",
                                                         "date_fin"
                                                     ]
+                                                },
+                                                "compte_a_des_operations": {
+                                                    "type": "boolean"
                                                 }
                                             },
                                             "required": [
                                                 "data",
                                                 "links",
                                                 "meta",
-                                                "filters"
+                                                "filters",
+                                                "compte_a_des_operations"
                                             ]
                                         }
                                     ]
@@ -427,6 +441,90 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/v1/mobile/activite/{type}/{id}": {
+            "get": {
+                "operationId": "client.activite.show",
+                "description": "R\u00e9ponse wrapp\u00e9e `{\"data\": {...}}`. Le contenu d\u00e9pend des `liens` du compte : prix, total et paiement pour le client, quantit\u00e9s et paiement pour le propri\u00e9taire, quantit\u00e9s pour le livreur, avec `contact` pendant la livraison seulement. `remise` n'est renseign\u00e9e que si le syst\u00e8me conna\u00eet la remise physique (r\u00e9ception ou retrait valid\u00e9s). `404` (jamais `403`) hors du p\u00e9rim\u00e8tre du compte : ne confirme jamais l'existence de l'op\u00e9ration.",
+                "tags": [
+                    "Activity"
+                ],
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Op\u00e9ration introuvable."
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`OperationTransfertResource`\n\n`OperationVenteResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/OperationTransfertResource"
+                                                }
+                                            },
+                                            "required": [
+                                                "data"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/OperationVenteResource"
+                                                }
+                                            },
+                                            "required": [
+                                                "data"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
                     }
                 }
             }
@@ -6616,6 +6714,686 @@
                     "created_at"
                 ],
                 "title": "NotificationResource"
+            },
+            "OperationTransfertResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "const": "logistique"
+                    },
+                    "reference": {
+                        "type": "string"
+                    },
+                    "nature": {
+                        "type": "object",
+                        "properties": {
+                            "code": {
+                                "type": "string",
+                                "const": "transfert"
+                            },
+                            "label": {
+                                "type": "string",
+                                "const": "Transfert logistique"
+                            }
+                        },
+                        "required": [
+                            "code",
+                            "label"
+                        ]
+                    },
+                    "liens": {
+                        "type": "string"
+                    },
+                    "avancement": {
+                        "anyOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "en_preparation"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "En pr\u00e9paration"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "en_cours_de_livraison"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "En cours de livraison"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "receptionne"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "R\u00e9ceptionn\u00e9"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "termine"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Termin\u00e9"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "annule"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Annul\u00e9"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "retourne"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Retourn\u00e9"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            }
+                        ]
+                    },
+                    "statut_paiement": {
+                        "type": "null"
+                    },
+                    "statut_paiement_label": {
+                        "type": "null"
+                    },
+                    "remise": {
+                        "type": "null"
+                    },
+                    "site_source": {
+                        "type": "string"
+                    },
+                    "site_destination": {
+                        "type": "string"
+                    },
+                    "vehicule": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "nom_vehicule": {
+                                "type": "string"
+                            },
+                            "immatriculation": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "nom_vehicule",
+                            "immatriculation"
+                        ]
+                    },
+                    "date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "nb_packs": {
+                        "type": "integer"
+                    },
+                    "lignes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string"
+                                },
+                                "libelle": {
+                                    "type": "string"
+                                },
+                                "quantite": {
+                                    "type": "integer"
+                                },
+                                "prix_unitaire": {
+                                    "type": "null"
+                                },
+                                "total": {
+                                    "type": "null"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "libelle",
+                                "quantite",
+                                "prix_unitaire",
+                                "total"
+                            ]
+                        }
+                    },
+                    "total": {
+                        "type": "null"
+                    },
+                    "contact": {
+                        "type": "null"
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "reference",
+                    "nature",
+                    "liens",
+                    "avancement",
+                    "statut_paiement",
+                    "statut_paiement_label",
+                    "remise",
+                    "site_source",
+                    "site_destination",
+                    "vehicule",
+                    "date",
+                    "nb_packs",
+                    "lignes",
+                    "total",
+                    "contact"
+                ],
+                "title": "OperationTransfertResource"
+            },
+            "OperationVenteResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "const": "vente"
+                    },
+                    "reference": {
+                        "type": "string"
+                    },
+                    "nature": {
+                        "anyOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "enum": [
+                                            "Vente",
+                                            "Distribution client"
+                                        ]
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "precommande"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Pr\u00e9commande"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            }
+                        ]
+                    },
+                    "liens": {
+                        "type": "string"
+                    },
+                    "avancement": {
+                        "anyOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "brouillon"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Brouillon"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "creee"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Cr\u00e9\u00e9e"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "preparation_en_cours"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Pr\u00e9paration en cours"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "prete_au_retrait"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Pr\u00eate au retrait"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "en_preparation"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "En pr\u00e9paration"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "en_cours_de_livraison"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "En cours de livraison"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "livree"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Livr\u00e9e"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "en_cours_de_cloture"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "En cours de cl\u00f4ture"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "retiree"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Retir\u00e9e"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "terminee"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Termin\u00e9e"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "annulee"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Annul\u00e9e"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "const": "retournee"
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "const": "Retourn\u00e9e"
+                                    }
+                                },
+                                "required": [
+                                    "code",
+                                    "label"
+                                ]
+                            }
+                        ]
+                    },
+                    "statut_paiement": {
+                        "type": "string"
+                    },
+                    "statut_paiement_label": {
+                        "type": "string"
+                    },
+                    "remise": {
+                        "anyOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "date": {
+                                        "type": "string"
+                                    },
+                                    "source": {
+                                        "type": "string",
+                                        "const": "retrait"
+                                    }
+                                },
+                                "required": [
+                                    "date",
+                                    "source"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "date": {
+                                        "type": "string"
+                                    },
+                                    "source": {
+                                        "type": "string",
+                                        "const": "reception"
+                                    }
+                                },
+                                "required": [
+                                    "date",
+                                    "source"
+                                ]
+                            }
+                        ]
+                    },
+                    "site_source": {
+                        "type": "string"
+                    },
+                    "site_destination": {
+                        "type": "string"
+                    },
+                    "vehicule": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "nom_vehicule": {
+                                "type": "string"
+                            },
+                            "immatriculation": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "nom_vehicule",
+                            "immatriculation"
+                        ]
+                    },
+                    "date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "nb_packs": {
+                        "type": "integer"
+                    },
+                    "lignes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string"
+                                },
+                                "libelle": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "quantite": {
+                                    "type": "string"
+                                },
+                                "prix_unitaire": {
+                                    "type": [
+                                        "number",
+                                        "null"
+                                    ]
+                                },
+                                "total": {
+                                    "type": [
+                                        "number",
+                                        "null"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "libelle",
+                                "quantite",
+                                "prix_unitaire",
+                                "total"
+                            ]
+                        }
+                    },
+                    "total": {
+                        "type": [
+                            "number",
+                            "null"
+                        ]
+                    },
+                    "contact": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "telephone": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "adresse": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "telephone",
+                            "adresse"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "reference",
+                    "nature",
+                    "liens",
+                    "avancement",
+                    "statut_paiement",
+                    "statut_paiement_label",
+                    "remise",
+                    "site_source",
+                    "site_destination",
+                    "vehicule",
+                    "date",
+                    "nb_packs",
+                    "lignes",
+                    "total",
+                    "contact"
+                ],
+                "title": "OperationVenteResource"
             },
             "PaiementParrainResource": {
                 "type": "object",

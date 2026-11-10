@@ -38,6 +38,12 @@ class CommissionAjustementController extends Controller
     public const VALIDATION_LOT_MAX = 500;
 
     /**
+     * Le Gate::before du super administrateur court-circuite la policy `ajuster` : l'état
+     * « période calculée » est donc revérifié dans chaque action liée à une période.
+     */
+    private const PERIODE_NON_AJUSTABLE = 'Seule une période calculée peut être ajustée.';
+
+    /**
      * Point d'entrée direct "Répartir" depuis Comptabilité > Commissions : le comptable clique
      * sur un véhicule sans jamais passer par le menu Périodes. Contrairement à vehicule()
      * ci-dessous (qui exige une période déjà CALCULEE via sa policy), cette action résout — et
@@ -77,6 +83,7 @@ class CommissionAjustementController extends Controller
     public function vehicule(PaiementPeriode $periode, string $vehicule, Request $request): Response
     {
         $this->authorize('ajuster', $periode);
+        abort_unless($periode->isCalculee(), 403, self::PERIODE_NON_AJUSTABLE);
 
         // Combine toujours vente + logistique (jamais un choix) : un véhicule peut porter
         // les deux natures de commission sur la même période, et la logistique ne doit
@@ -230,6 +237,10 @@ class CommissionAjustementController extends Controller
     {
         $this->authorize('ajuster', $periode);
 
+        if (! $periode->isCalculee()) {
+            return back()->with('error', self::PERIODE_NON_AJUSTABLE);
+        }
+
         $data = $request->validate([
             'parts' => ['required', 'array', 'min:1'],
             'parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
@@ -280,6 +291,10 @@ class CommissionAjustementController extends Controller
     public function ajusterMultiple(Request $request, PaiementPeriode $periode): RedirectResponse
     {
         $this->authorize('ajuster', $periode);
+
+        if (! $periode->isCalculee()) {
+            return back()->with('error', self::PERIODE_NON_AJUSTABLE);
+        }
 
         $data = $request->validate([
             'groups' => ['required', 'array', 'min:1'],
@@ -342,6 +357,10 @@ class CommissionAjustementController extends Controller
     {
         $this->authorize('ajuster', $periode);
 
+        if (! $periode->isCalculee()) {
+            return back()->with('error', self::PERIODE_NON_AJUSTABLE);
+        }
+
         $data = $request->validate([
             'parts' => ['required', 'array', 'min:1'],
             'parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
@@ -370,6 +389,10 @@ class CommissionAjustementController extends Controller
     public function remplacant(Request $request, PaiementPeriode $periode): RedirectResponse
     {
         $this->authorize('ajuster', $periode);
+
+        if (! $periode->isCalculee()) {
+            return back()->with('error', self::PERIODE_NON_AJUSTABLE);
+        }
 
         $data = $request->validate([
             'commission_type' => ['required', Rule::in(['vente', 'logistique'])],
@@ -513,6 +536,10 @@ class CommissionAjustementController extends Controller
     public function validerLot(Request $request, PaiementPeriode $periode): RedirectResponse
     {
         $this->authorize('ajuster', $periode);
+
+        if (! $periode->isCalculee()) {
+            return back()->with('error', self::PERIODE_NON_AJUSTABLE);
+        }
 
         $data = $request->validate([
             'parts' => ['required', 'array', 'min:1', 'max:'.self::VALIDATION_LOT_MAX],

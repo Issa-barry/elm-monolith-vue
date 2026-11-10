@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -139,6 +140,15 @@ class Fournisseur extends Model
     public function scopeActifs(Builder $q): Builder
     {
         return $q->where('is_active', true);
+    }
+
+    /** Sous-catégories du référentiel Contacts (ADR 0060), sans effet métier. */
+    public function sousCategories(): BelongsToMany
+    {
+        return $this->belongsToMany(ContactSousCategorie::class, 'fournisseur_sous_categories', 'fournisseur_id', 'contact_sous_categorie_id')
+            ->using(FonctionSousCategorie::class)
+            ->withPivot(['id', 'created_by'])
+            ->withTimestamps();
     }
 
     /** Factures fournisseurs : la dette fournisseur est la somme de leurs restes dus (ADR 0022). */

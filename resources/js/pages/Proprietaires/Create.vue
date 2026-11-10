@@ -33,6 +33,9 @@ const form = useForm({
     code_pays: 'GN' as string | null,
     code_phone_pays: '+224' as string | null,
     is_active: true,
+    telephone_entreprise: null as string | null,
+    identifiant_fiscal: null as string | null,
+    entreprise_choix: null as string | null,
 });
 
 function submit() {

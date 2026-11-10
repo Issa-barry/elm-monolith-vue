@@ -22,7 +22,10 @@ class PaiementFichePolicy
             return false;
         }
 
-        return $user->voitToutesLesAgences() || $this->sameSite($user, $fiche);
+        // Lecture : l'agence qui paie et l'agence de rattachement (ADR 0061).
+        return $user->voitToutesLesAgences()
+            || $this->sameSite($user, $fiche)
+            || ($fiche->site_rattachement_id !== null && $user->isAssignedToSite($fiche->site_rattachement_id));
     }
 
     public function payer(User $user, PaiementFiche $fiche): bool
@@ -35,6 +38,7 @@ class PaiementFichePolicy
             return false;
         }
 
+        // Paiement : seule l'agence qui paie (`site_id`), jamais l'agence de rattachement.
         return $user->agitSurToutesLesAgences() || $this->sameSite($user, $fiche);
     }
 

@@ -75,6 +75,12 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
             { title: 'Applications', href: '/settings/modules' },
         );
     }
+    if (can('commissions.configurer_agences_payeuses')) {
+        gestionItems.push({
+            title: 'Agences payeuses',
+            href: '/settings/commissions/agences-payeuses',
+        });
+    }
     if (can('communications.manage')) {
         gestionItems.push({
             title: 'Communications',

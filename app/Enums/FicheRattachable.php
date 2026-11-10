@@ -63,7 +63,8 @@ enum FicheRattachable: string
         $query = $this->modele()::query();
 
         if ($this === self::CONSULTANT) {
-            $query->where('type', PrestataireType::CONSULTANT->value)->whereNull('entreprise_tierce_id');
+            // Lot 6b (ADR 0060) : critère unique de la qualification Consultant.
+            $query->qualifiesConsultant()->whereNull('entreprise_tierce_id');
         }
 
         return $query;

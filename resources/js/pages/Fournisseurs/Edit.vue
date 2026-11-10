@@ -5,7 +5,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
 import { computed, watch } from 'vue';
-import FournisseurForm, { type FormData } from './partials/FournisseurForm.vue';
+import FournisseurForm, {
+    type FormData,
+    type OptionSousCategorie,
+} from './partials/FournisseurForm.vue';
 
 interface FournisseurData {
     id: string;
@@ -22,9 +25,13 @@ interface FournisseurData {
     adresse: string | null;
     notes: string | null;
     is_active: boolean;
+    sous_categorie_ids: string[];
 }
 
-const props = defineProps<{ fournisseur: FournisseurData }>();
+const props = defineProps<{
+    fournisseur: FournisseurData;
+    sous_categories_options: OptionSousCategorie[];
+}>();
 const page = usePage();
 const flashSuccess = computed(
     () => (page.props as any).flash?.success as string | undefined,
@@ -49,6 +56,7 @@ const form = useForm({
     adresse: props.fournisseur.adresse,
     notes: props.fournisseur.notes,
     is_active: props.fournisseur.is_active,
+    sous_categorie_ids: props.fournisseur.sous_categorie_ids,
 });
 
 function submit() {
@@ -124,6 +132,7 @@ watch(
                 :errors="form.errors"
                 :processing="form.processing"
                 :reference="fournisseur.reference"
+                :sous-categories-options="props.sous_categories_options"
                 @submit="submit"
                 @update:form="handleFormUpdate($event)"
             />

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Settings;
 use App\Enums\CommissionMode;
 use App\Enums\CommissionRegleStatut;
 use App\Enums\CommissionUniteCalcul;
-use App\Enums\PrestataireType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\StoreCommissionConfigurationRequest;
 use App\Http\Requests\Settings\StoreCommissionConsultantAffectationRequest;
@@ -208,7 +207,7 @@ class CommissionRegleController extends Controller
             ])->values(),
             'consultantsEligibles' => Prestataire::where('organization_id', $orgId)
                 ->actifs()
-                ->parType(PrestataireType::CONSULTANT)
+                ->qualifiesConsultant()
                 ->with(['personne', 'entrepriseTierce'])
                 ->get()
                 ->map(fn (Prestataire $p) => [

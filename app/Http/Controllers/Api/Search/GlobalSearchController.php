@@ -18,6 +18,8 @@ class GlobalSearchController extends Controller
             user: $request->user(),
             limit: (int) $request->input('limit', 5),
             onlyCategories: $request->input('categories'),
+            // Lot 8 (ADR 0060) : seule la route du back-office regroupe les contacts.
+            regrouperContacts: (bool) $request->route('regrouper_contacts', false),
         );
 
         return response()->json([

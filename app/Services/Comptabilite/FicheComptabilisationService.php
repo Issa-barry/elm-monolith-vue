@@ -8,7 +8,7 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
 use App\Models\PaiementFicheReaffectation;
 use App\Models\PieceComptable;
-use App\Services\Commission\FicheSiteResponsableService;
+use App\Services\Commission\AgencePayeuseCommissionService;
 use Illuminate\Support\Carbon;
 
 /**
@@ -183,8 +183,17 @@ class FicheComptabilisationService
         );
     }
 
+    /** Fiche dont la validation a déjà été comptabilisée : la changer d'agence produira deux pièces. */
+    public function estConstatee(PaiementFiche $fiche): bool
+    {
+        $evenement = self::EVENEMENT_VALIDATION[$fiche->beneficiaire_type] ?? null;
+
+        return $evenement !== null && $this->ecritures->pieceExistantePour($fiche->organization_id, $fiche, $evenement) !== null;
+    }
+
     /**
-     * Fiche livreur/propriétaire/parrain déjà constatée qui change d'agence (ADR 0020) : déplace le reste
+     * Fiche de commission déjà constatée qui change d'agence payeuse (véhicule réaffecté, ADR 0020 ;
+     * politique de paiement modifiée, ADR 0061) : déplace le reste
      * dû et la charge correspondante de l'agence d'origine vers la nouvelle, pour que la dette soit
      * soldée là où elle est payée. Sans effet si la fiche n'a jamais été constatée (pas de pièce de
      * validation) ou s'il ne reste rien à payer.
@@ -195,7 +204,7 @@ class FicheComptabilisationService
     {
         $fiche = $reaffectation->fiche;
         $type = $fiche?->beneficiaire_type;
-        if (! in_array($type, FicheSiteResponsableService::TYPES_CONCERNES, true) || (float) $reaffectation->montant <= 0.009) {
+        if (! in_array($type, AgencePayeuseCommissionService::TYPES, true) || (float) $reaffectation->montant <= 0.009) {
             return null;
         }
 

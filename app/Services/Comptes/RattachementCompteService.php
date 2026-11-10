@@ -3,7 +3,6 @@
 namespace App\Services\Comptes;
 
 use App\Enums\AuditEvent;
-use App\Enums\PrestataireType;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\Parrain;
 use App\Models\Personne;
@@ -172,7 +171,7 @@ class RattachementCompteService
                 return 'Une entreprise se rattache par ses interlocuteurs.';
             }
 
-            if ($fiche->type !== PrestataireType::CONSULTANT) {
+            if (! $fiche->qualifieConsultant()) {
                 return 'Seul un prestataire consultant peut être rattaché à un compte.';
             }
         }

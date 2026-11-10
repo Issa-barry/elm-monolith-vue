@@ -8,7 +8,6 @@ use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionMotifNonGeneration;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\OrigineCommissionPart;
-use App\Enums\PrestataireType;
 use App\Enums\StatutCommission;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
@@ -35,11 +34,9 @@ use App\Services\Notification\NotificationDispatcher;
 use App\Services\Notification\PushBodyFormatter;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
+use App\Support\Database\TransactionAnnulee;
 use Carbon\Carbon;
-use Illuminate\Database\ConcurrencyErrorDetector;
-use Illuminate\Database\DeadlockException;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\LostConnectionDetector;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -113,7 +110,8 @@ class CommissionEnveloppeGenerator
         // calcul indépendant qui pourrait diverger.
         $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
             $commande->nature_operation,
-            $commande->client?->type,
+            // D12 (lot 7c) : nature du client enregistrée sur la commande, repli D13.
+            $commande->natureClient(),
             $commande->mode_remise_grossiste,
         );
 
@@ -161,7 +159,8 @@ class CommissionEnveloppeGenerator
 
         $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
             $commande->nature_operation,
-            $commande->client?->type,
+            // D12 (lot 7c) : nature du client enregistrée sur la commande, repli D13.
+            $commande->natureClient(),
             $commande->mode_remise_grossiste,
         );
         $identite = CommissionProcessus::firstOrCreate(
@@ -206,7 +205,8 @@ class CommissionEnveloppeGenerator
     {
         $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
             $commande->nature_operation,
-            $commande->client?->type,
+            // D12 (lot 7c) : nature du client enregistrée sur la commande, repli D13.
+            $commande->natureClient(),
             $commande->mode_remise_grossiste,
         );
         $identite = CommissionProcessus::firstOrCreate(
@@ -455,7 +455,7 @@ class CommissionEnveloppeGenerator
                 // délai de verrou ou connexion perdue — MySQL a pu annuler TOUTE la transaction,
                 // la tentative ne serait pas réellement enregistrée. On laisse remonter : l'appelant
                 // annule l'opération entière (approbation comprise) et l'utilisateur réessaie.
-                if (self::transactionCompromise($e)) {
+                if (TransactionAnnulee::estCompromise($e)) {
                     throw $e;
                 }
 
@@ -495,13 +495,6 @@ class CommissionEnveloppeGenerator
                 // reste "à régulariser", jamais rollbackée.
             }
         });
-    }
-
-    private static function transactionCompromise(Throwable $e): bool
-    {
-        return $e instanceof DeadlockException
-            || (new ConcurrencyErrorDetector)->causedByConcurrencyError($e)
-            || (new LostConnectionDetector)->causedByLostConnection($e);
     }
 
     /**
@@ -1097,7 +1090,7 @@ class CommissionEnveloppeGenerator
 
                     $consultantActif = Prestataire::whereKey($consultantId)
                         ->where('organization_id', $ctx->organizationId)
-                        ->where('type', PrestataireType::CONSULTANT->value)
+                        ->qualifiesConsultant()
                         ->where('is_active', true)
                         ->exists();
 

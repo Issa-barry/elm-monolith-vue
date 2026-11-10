@@ -46,6 +46,8 @@ interface PersonneOption {
     vehicule_noms?: string | null;
     vehicule_immatriculations?: string | null;
     type?: string | null;
+    /** Lot 6b : qualification Consultant (critère unique serveur). */
+    qualifie_consultant?: boolean;
 }
 interface SiteOption {
     id: string;
@@ -294,7 +296,7 @@ function clearProprietaire() {
 // Concerné « Consultant » : même picker que Prestataire, limité aux consultants ;
 // la dépense reste enregistrée comme prestataire (CategorieDepense::CONSULTANT).
 const consultants = computed(() =>
-    props.prestataires.filter((p) => p.type === 'consultant'),
+    props.prestataires.filter((p) => p.qualifie_consultant === true),
 );
 
 const prestataireSelected = ref<PersonneOption | null>(

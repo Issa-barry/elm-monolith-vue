@@ -51,14 +51,25 @@ interface Prestataire {
     phone: string | null;
     code_phone_pays: string | null;
     ville: string | null;
-    type: string;
+    type: string | null;
     type_label: string;
+    /** Lot 6b : qualifications (badges de catégorie, pas de statut). */
+    qualifications: { code: string; libelle: string }[];
     is_active: boolean;
+    /** D17 : aucune opération ne la référence (calculé par le serveur). */
+    supprimable: boolean;
 }
 
 const props = defineProps<{ prestataires: Prestataire[] }>();
 
 const { can } = usePermissions();
+// Lot 8 (ADR 0060) : avec `contacts.create`, création par le parcours « téléphone d'abord » de
+// Contacts, fonction présélectionnée ; sinon le formulaire de l'écran.
+const urlCreation = computed(() =>
+    can('contacts.create')
+        ? '/backoffice/contacts/nouveau?type=personne&fonction=prestataire'
+        : '/backoffice/prestataires/create',
+);
 const confirm = useConfirm();
 const toast = useToast();
 
@@ -120,13 +131,29 @@ function confirmDelete(p: Prestataire) {
         acceptClass: 'p-button-danger',
         accept: () => {
             router.delete(`/backoffice/prestataires/${p.id}`, {
-                onSuccess: () =>
+                onSuccess: (page) => {
+                    // D17 : le serveur refuse la suppression d'une fiche qui a un historique.
+                    const refus = (
+                        page.props.flash as
+                            | { error?: string | null }
+                            | undefined
+                    )?.error;
+                    if (refus) {
+                        toast.add({
+                            severity: 'error',
+                            summary: 'Suppression impossible',
+                            detail: refus,
+                            life: 6000,
+                        });
+                        return;
+                    }
                     toast.add({
                         severity: 'success',
                         summary: 'Supprimé',
                         detail: `${p.nom_complet ?? p.reference} a été supprimé.`,
                         life: 3000,
-                    }),
+                    });
+                },
             });
         },
     });
@@ -155,10 +182,7 @@ function confirmDelete(p: Prestataire) {
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Prestataires</span
                 >
-                <Link
-                    v-if="can('prestataires.create')"
-                    href="/backoffice/prestataires/create"
-                >
+                <Link v-if="can('prestataires.create')" :href="urlCreation">
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -208,13 +232,15 @@ function confirmDelete(p: Prestataire) {
                             {{ p.email }}
                         </div>
                         <span
-                            class="mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                            v-for="q in p.qualifications"
+                            :key="q.code"
+                            class="mt-0.5 mr-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
                             :class="
-                                typeColor[p.type] ??
+                                typeColor[q.code] ??
                                 'bg-muted text-muted-foreground'
                             "
                         >
-                            {{ p.type_label }}
+                            {{ q.libelle }}
                         </span>
                     </div>
 
@@ -256,11 +282,14 @@ function confirmDelete(p: Prestataire) {
                             <DropdownMenuSeparator
                                 v-if="
                                     can('prestataires.update') &&
-                                    can('prestataires.delete')
+                                    can('prestataires.delete') &&
+                                    p.supprimable
                                 "
                             />
                             <DropdownMenuItem
-                                v-if="can('prestataires.delete')"
+                                v-if="
+                                    can('prestataires.delete') && p.supprimable
+                                "
                                 class="cursor-pointer text-destructive focus:text-destructive"
                                 @click="confirmDelete(p)"
                             >
@@ -279,10 +308,7 @@ function confirmDelete(p: Prestataire) {
             >
                 <Users class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun prestataire trouvé.</p>
-                <Link
-                    v-if="can('prestataires.create')"
-                    href="/backoffice/prestataires/create"
-                >
+                <Link v-if="can('prestataires.create')" :href="urlCreation">
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Ajouter le premier prestataire
@@ -305,10 +331,7 @@ function confirmDelete(p: Prestataire) {
                         }}
                     </p>
                 </div>
-                <Link
-                    v-if="can('prestataires.create')"
-                    href="/backoffice/prestataires/create"
-                >
+                <Link v-if="can('prestataires.create')" :href="urlCreation">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau prestataire
@@ -445,21 +468,25 @@ function confirmDelete(p: Prestataire) {
 
                     <!-- Type -->
                     <Column
-                        field="type"
-                        header="Type"
+                        field="type_label"
+                        header="Qualifications"
                         sortable
-                        style="width: 140px"
+                        style="width: 180px"
                     >
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="
-                                    typeColor[data.type] ??
-                                    'bg-muted text-muted-foreground'
-                                "
-                            >
-                                {{ data.type_label }}
-                            </span>
+                            <div class="flex flex-wrap gap-1">
+                                <span
+                                    v-for="q in data.qualifications"
+                                    :key="q.code"
+                                    class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="
+                                        typeColor[q.code] ??
+                                        'bg-muted text-muted-foreground'
+                                    "
+                                >
+                                    {{ q.libelle }}
+                                </span>
+                            </div>
                         </template>
                     </Column>
 
@@ -549,11 +576,15 @@ function confirmDelete(p: Prestataire) {
                                         <DropdownMenuSeparator
                                             v-if="
                                                 can('prestataires.update') &&
-                                                can('prestataires.delete')
+                                                can('prestataires.delete') &&
+                                                data.supprimable
                                             "
                                         />
                                         <DropdownMenuItem
-                                            v-if="can('prestataires.delete')"
+                                            v-if="
+                                                can('prestataires.delete') &&
+                                                data.supprimable
+                                            "
                                             class="cursor-pointer text-destructive focus:text-destructive"
                                             @click="confirmDelete(data)"
                                         >
@@ -575,7 +606,7 @@ function confirmDelete(p: Prestataire) {
                             <p class="text-sm">Aucun prestataire trouvé.</p>
                             <Link
                                 v-if="can('prestataires.create')"
-                                href="/backoffice/prestataires/create"
+                                :href="urlCreation"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

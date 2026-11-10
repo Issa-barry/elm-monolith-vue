@@ -554,6 +554,48 @@ class CommissionAjustementVenteTest extends TestCase
         }
     }
 
+    /**
+     * Même garde pour l'ajustement : sur une période validée, le super administrateur ne voit
+     * plus « Ajuster » et ne peut ni ouvrir l'écran d'ajustement ni modifier un montant.
+     *
+     * @test
+     */
+    public function ajuster_une_periode_validee_est_refuse_meme_pour_le_super_admin(): void
+    {
+        ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        $periode->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
+
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $this->user->assignRole('super_admin');
+        $superAdmin = $this->user->fresh();
+
+        $this->actingAs($superAdmin)
+            ->get(route('comptabilite.periodes.show', $periode))
+            ->assertInertia(fn (Assert $page) => $page->where('can.ajuster', false));
+
+        $this->actingAs($superAdmin)
+            ->get(route('comptabilite.periodes.ajustements.vehicule', ['periode' => $periode, 'vehicule' => $vehicule->id]))
+            ->assertForbidden();
+
+        $part = CommissionAdjustmentService::partsPourPeriode($periode)->first();
+        $montantAvant = $part->montant_a_payer;
+
+        $this->actingAs($superAdmin)
+            ->post(route('comptabilite.periodes.ajustements.ajuster-groupe', $periode), [
+                'parts' => [['type' => 'vente', 'id' => $part->id]],
+                'montant' => 1,
+                'motif' => 'correction',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame($montantAvant, $part->fresh()->montant_a_payer);
+    }
+
     /** @test */
     public function valider_vehicules_en_masse_interdit_a_une_autre_organisation(): void
     {

@@ -29,6 +29,8 @@ import { computed, ref } from 'vue';
 interface ClientData {
     id: number;
     nom_complet: string;
+    /** Lot 7b : contact d'un client professionnel (mention secondaire, L7-2). */
+    contact_nom: string | null;
     telephone: string | null;
     adresse: string | null;
     ville: string | null;
@@ -429,13 +431,24 @@ function saveTarifs(): void {
                     <div class="mt-5 grid gap-4 sm:grid-cols-2">
                         <div class="rounded-lg border bg-background p-4">
                             <p class="text-xs text-muted-foreground">
-                                Nom complet
+                                {{
+                                    client.contact_nom
+                                        ? 'Raison sociale'
+                                        : 'Nom complet'
+                                }}
                             </p>
                             <p
                                 class="mt-1 text-sm font-medium"
                                 data-testid="client-name"
                             >
                                 {{ client.nom_complet }}
+                            </p>
+                            <p
+                                v-if="client.contact_nom"
+                                class="mt-0.5 text-xs text-muted-foreground"
+                                data-testid="client-contact"
+                            >
+                                Contact : {{ client.contact_nom }}
                             </p>
                         </div>
 

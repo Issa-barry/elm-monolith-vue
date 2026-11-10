@@ -38,6 +38,10 @@ la liste des sites). Les noms techniques gardent `central` (`is_central_tresorer
   décochant : l'interrupteur est verrouillé sur la trésorerie principale actuelle.
 - **Utilisation** (`SiteCentralTresorerieResolver`) :
   - paiement d'une fiche sans agence (ADR 0009) ;
+  - agence centralisée par défaut des commissions (Paramètres → Agences payeuses, ADR 0061) : elle
+    paie les propriétaires, consultants, parrains et sites tant qu'aucune autre agence n'est choisie.
+    Transférer la trésorerie principale déplace donc aussi ce paiement (fiches non payées comprises),
+    sauf agence centralisée choisie explicitement ;
   - détenteur proposé par défaut pour un compte de trésorerie commun (ADR 0016) ;
   - destination unique des remises et des règlements inter-agences (ADR 0016).
 - Sans trésorerie principale, ces opérations sont refusées avec un message explicite.

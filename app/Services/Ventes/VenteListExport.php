@@ -74,7 +74,7 @@ class VenteListExport implements FromCollection, WithHeadings, WithMapping, With
 
         $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
             $commande->nature_operation,
-            $commande->client?->type,
+            $commande->natureClient(),
             $commande->mode_remise_grossiste,
         );
 

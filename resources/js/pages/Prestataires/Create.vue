@@ -10,6 +10,7 @@ import PrestataireForm, { type FormData } from './partials/PrestataireForm.vue';
 interface Option {
     value: string;
     label: string;
+    actif?: boolean;
 }
 
 defineProps<{ types: Option[] }>();
@@ -31,7 +32,8 @@ const form = useForm({
     pays: 'Guinée',
     ville: null as string | null,
     adresse: null as string | null,
-    type: 'machiniste',
+    qualification_ids: [] as string[],
+    type: null as string | null,
     notes: null as string | null,
     is_active: true,
 });

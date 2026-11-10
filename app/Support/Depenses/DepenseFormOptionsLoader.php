@@ -132,6 +132,9 @@ final class DepenseFormOptionsLoader
 
     public static function prestataires(string $orgId): Collection
     {
+        // Lot 6b (ADR 0060) : critère unique de la qualification Consultant, en une requête.
+        $consultants = Prestataire::where('organization_id', $orgId)->qualifiesConsultant()->pluck('id')->flip();
+
         return Prestataire::with(['personne', 'entrepriseTierce'])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
@@ -141,8 +144,9 @@ final class DepenseFormOptionsLoader
                 'id' => $p->id,
                 'nom_complet' => $p->nom_complet,
                 'telephone' => $p->phone,
-                // Le concerné « Consultant » ne propose que les prestataires de ce type.
                 'type' => $p->type?->value,
+                // Le concerné « Consultant » ne propose que les prestataires qualifiés Consultant.
+                'qualifie_consultant' => isset($consultants[$p->id]),
             ])
             ->values();
     }

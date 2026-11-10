@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Clients;
 use App\Enums\ClientType;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Support\Contacts\SuppressionFonction;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -51,7 +52,10 @@ class IndexClientController extends Controller
 
         $clients = $query
             ->orderBy('nom')
-            ->get()
+            ->get();
+        $nonSupprimables = array_flip(SuppressionFonction::idsReferences(Client::class, $clients->pluck('id')->all()));
+
+        $clients = $clients
             ->map(fn (Client $c) => [
                 'id' => $c->id,
                 'nom' => $c->nom,
@@ -69,6 +73,7 @@ class IndexClientController extends Controller
                 'type_label' => $c->type->label(),
                 'cashback_eligible' => $c->cashback_eligible,
                 'cashback_montant_par_pack' => $c->cashback_montant_par_pack,
+                'supprimable' => ! isset($nonSupprimables[$c->id]),
             ]);
 
         return Inertia::render('Clients/Index', [

@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Enums\AuditEvent;
+use App\Enums\EvenementComptable;
 use App\Enums\StatutFactureVente;
+use App\Http\Controllers\Ventes\StoreEncaissementVenteController;
 use App\Models\AuditLog;
 use App\Models\CommandeVente;
 use App\Models\CompteComptable;
@@ -22,11 +24,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasCaissesDediees;
+use Tests\Feature\Concerns\SimuleDeadlock;
 use Tests\TestCase;
 
 class EncaissementVenteTest extends TestCase
 {
-    use HasCaissesDediees, RefreshDatabase;
+    use HasCaissesDediees, RefreshDatabase, SimuleDeadlock;
 
     private function utilisateur(Organization $org): User
     {
@@ -183,6 +186,37 @@ class EncaissementVenteTest extends TestCase
         $this->assertSame(1, EncaissementVente::where('facture_vente_id', $facture->id)->count());
         $this->assertEquals(5000, $facture->fresh()->montant_encaisse);
         $this->assertEquals(StatutFactureVente::PAYEE, $facture->fresh()->statut_facture);
+    }
+
+    /**
+     * Incident VTE-081126-134 (08/11/2026) : un deadlock masqué en pleine transaction faisait annuler
+     * l'encaissement par MySQL, mais la suite partait hors transaction — pièce de caisse CA-2026-010088
+     * et audit « Encaissement enregistré » validés seuls, 450 000 GNF comptés en caisse sans
+     * encaissement. Désormais plus rien ne s'écrit après la perte de la transaction, et l'agent voit
+     * que rien n'a été enregistré.
+     */
+    public function test_deadlock_masque_pendant_l_encaissement_n_ecrit_ni_piece_ni_audit(): void
+    {
+        ['facture' => $facture, 'commande' => $commande, 'user' => $user] = $this->creerContexte();
+        $this->preparerDeadlockSimule();
+        $declenche = false;
+        PieceComptable::creating(function () use (&$declenche) {
+            if (! $declenche) {
+                $declenche = true;
+                $this->deadlockMasque();
+            }
+        });
+
+        $response = $this->actingAs($user)->post(route('encaissements.store', $facture), [
+            'montant' => 5000,
+            'date_encaissement' => now()->toDateString(),
+            'mode_paiement' => 'especes',
+        ]);
+
+        $response->assertSessionHasErrors(['comptabilisation' => StoreEncaissementVenteController::MESSAGE_TRANSACTION_ANNULEE]);
+        $this->assertTrue($declenche);
+        $this->assertSame(0, PieceComptable::where('type_evenement', EvenementComptable::ENCAISSEMENT_VENTE_RECU->value)->count());
+        $this->assertSame(0, AuditLog::where('auditable_id', $commande->id)->where('event_code', AuditEvent::ENCAISSEMENT_ADDED->value)->count());
     }
 
     public function test_encaissement_refuse_sur_facture_annulee(): void

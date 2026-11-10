@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\StatutFichePaiement;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,6 +24,7 @@ class PaiementFiche extends Model
         'rang',
         'fiche_origine_id',
         'site_id',
+        'site_rattachement_id',
         'montant_brut',
         'total_deductions',
         'montant_net',
@@ -118,9 +120,27 @@ class PaiementFiche extends Model
         return $this->belongsTo(User::class, 'paid_by');
     }
 
+    /** Agence qui paie la fiche (ADR 0061). */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /** Agence de rattachement (véhicule, site bénéficiaire, salarié) : ouvre la lecture, jamais le paiement. */
+    public function siteRattachement(): BelongsTo
+    {
+        return $this->belongsTo(Site::class, 'site_rattachement_id');
+    }
+
+    /**
+     * Fiches lisibles par un responsable de ces agences : celles qu'elles paient et celles qui leur
+     * sont rattachées (ADR 0061).
+     *
+     * @param  array<int, string>  $siteIds
+     */
+    public function scopeLisiblesPourSites(Builder $query, array $siteIds): Builder
+    {
+        return $query->where(fn (Builder $q) => $q->whereIn('site_id', $siteIds)->orWhereIn('site_rattachement_id', $siteIds));
     }
 
     public function organization(): BelongsTo

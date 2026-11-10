@@ -29,7 +29,16 @@ import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import { computed, onMounted, ref, watch } from 'vue';
 
-type SearchItem = { id: string; title: string; subtitle: string | null };
+// Lot 8 (ADR 0060) : un résultat Contacts porte son lien et un badge par fonction (lien vers
+// l'écran métier quand il existe).
+type SearchBadge = { libelle: string; href: string | null };
+type SearchItem = {
+    id: string;
+    title: string;
+    subtitle: string | null;
+    href?: string;
+    badges?: SearchBadge[];
+};
 type SearchCategory = { label: string; total: number; items: SearchItem[] };
 type SearchResults = Record<string, SearchCategory>;
 
@@ -101,14 +110,21 @@ const categoryRoutes: Record<string, (id: string) => string> = {
     // Fiche livreur : route self-view (livreurs.show) hors préfixe /backoffice,
     // aussi accessible au staff avec la permission livreurs.read (cf. LivreurPolicy::view()).
     livreurs: (id) => `/livreurs/${id}`,
+    // Référentiel Contacts : l'id porte le type de fiche (« personnes/… », « entreprises/… »).
+    contacts: (id) => `/backoffice/contacts/${id}`,
 };
 
-function navigateTo(category: string, id: string) {
-    const url = categoryRoutes[category]?.(id);
+function navigateTo(category: string, item: SearchItem) {
+    const url = item.href ?? categoryRoutes[category]?.(item.id);
     if (url) {
         router.visit(url);
         closeSearch();
     }
+}
+
+function visiter(url: string) {
+    router.visit(url);
+    closeSearch();
 }
 
 function hasResults(results: SearchResults | null): boolean {
@@ -225,7 +241,7 @@ onMounted(() => {
                 <!-- Dropdown résultats -->
                 <div
                     v-if="isSearchOpen"
-                    class="absolute top-full right-0 z-50 mt-2 w-80 overflow-hidden rounded-lg border bg-background shadow-lg"
+                    class="absolute top-full right-0 z-50 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-lg border bg-background shadow-lg"
                 >
                     <!-- Chargement -->
                     <div
@@ -256,21 +272,55 @@ onMounted(() => {
                                 >
                                     {{ cat.label }}
                                 </div>
-                                <button
+                                <div
                                     v-for="item in cat.items"
                                     :key="item.id"
-                                    class="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-muted/50"
-                                    @click="navigateTo(String(key), item.id)"
+                                    class="transition-colors hover:bg-muted/50"
                                 >
-                                    <span class="text-sm font-medium">{{
-                                        item.title
-                                    }}</span>
-                                    <span
-                                        v-if="item.subtitle"
-                                        class="text-xs text-muted-foreground"
-                                        >{{ item.subtitle }}</span
+                                    <button
+                                        class="flex w-full flex-col px-3 pt-2 text-left"
+                                        :class="
+                                            item.badges?.length
+                                                ? 'pb-1'
+                                                : 'pb-2'
+                                        "
+                                        @click="navigateTo(String(key), item)"
                                     >
-                                </button>
+                                        <span class="text-sm font-medium">{{
+                                            item.title
+                                        }}</span>
+                                        <span
+                                            v-if="item.subtitle"
+                                            class="text-xs text-muted-foreground"
+                                            >{{ item.subtitle }}</span
+                                        >
+                                    </button>
+                                    <div
+                                        v-if="item.badges?.length"
+                                        class="flex flex-wrap gap-1 px-3 pb-2"
+                                        data-testid="recherche-badges-fonctions"
+                                    >
+                                        <template
+                                            v-for="badge in item.badges"
+                                            :key="badge.libelle + badge.href"
+                                        >
+                                            <button
+                                                v-if="badge.href"
+                                                type="button"
+                                                class="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:border-primary hover:text-primary"
+                                                :title="`Ouvrir l'écran ${badge.libelle}`"
+                                                @click="visiter(badge.href)"
+                                            >
+                                                {{ badge.libelle }}
+                                            </button>
+                                            <span
+                                                v-else
+                                                class="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                                                >{{ badge.libelle }}</span
+                                            >
+                                        </template>
+                                    </div>
+                                </div>
                             </div>
                         </template>
                     </template>

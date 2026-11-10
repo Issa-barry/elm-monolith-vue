@@ -50,7 +50,7 @@ import Dialog from 'primevue/dialog';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import AnnulationExceptionnelleDialog from './partials/AnnulationExceptionnelleDialog.vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
 import PrecommandeActions, {
@@ -760,9 +760,43 @@ const annulerDisabled = computed(
 );
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-const activeTab = ref<
-    'informations' | 'produits' | 'facturation' | 'journal' | 'historique'
->('informations');
+type OngletVente =
+    | 'informations'
+    | 'produits'
+    | 'facturation'
+    | 'journal'
+    | 'historique';
+
+const activeTab = ref<OngletVente>('informations');
+
+const ONGLETS: { key: OngletVente; label: string }[] = [
+    { key: 'informations', label: 'Informations' },
+    { key: 'produits', label: 'Produits' },
+    { key: 'facturation', label: 'Facturation' },
+    { key: 'journal', label: "Journal d'activité" },
+    { key: 'historique', label: 'Historique' },
+];
+
+// Sur mobile, onglets et étapes défilent horizontalement : l'élément actif est recentré.
+const tabNav = ref<HTMLElement | null>(null);
+const stepperRef = ref<HTMLElement | null>(null);
+
+function centrer(conteneur: HTMLElement | null, selecteur: string) {
+    if (!conteneur || conteneur.scrollWidth <= conteneur.clientWidth) return;
+    const cible = conteneur.querySelector<HTMLElement>(selecteur);
+    if (cible)
+        conteneur.scrollLeft =
+            cible.offsetLeft - (conteneur.clientWidth - cible.offsetWidth) / 2;
+}
+
+watch(activeTab, async () => {
+    await nextTick();
+    centrer(tabNav.value, '[aria-selected="true"]');
+});
+onMounted(() => {
+    centrer(tabNav.value, '[aria-selected="true"]');
+    centrer(stepperRef.value, '[data-step-current]');
+});
 
 // ── Encaissement ──────────────────────────────────────────────────────────────
 // Un seul choix "mode de paiement" côté UI, porté par PaymentCard : espèces + les moyens que les
@@ -1182,7 +1216,9 @@ function stepLabel(idx: number, defaultLabel: string): string {
             </div>
         </div>
 
-        <div class="space-y-5 px-4 py-6 sm:px-6">
+        <div
+            class="vente-detail min-w-0 space-y-4 px-4 py-4 [overflow-wrap:anywhere] sm:space-y-5 sm:px-6 sm:py-6"
+        >
             <!-- En-tête commande ─────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
@@ -1403,7 +1439,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     commande.is_retournee ||
                     commande.is_annulee_erreur_saisie
                 "
-                class="rounded-xl border bg-card px-6 py-4 shadow-sm"
+                class="rounded-xl border bg-card px-4 py-4 shadow-sm sm:px-6"
             >
                 <!-- Annulée -->
                 <div
@@ -1441,78 +1477,90 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     >
                 </div>
 
-                <!-- Progression normale -->
-                <div v-else class="flex items-center">
-                    <template v-for="(step, idx) in STEPS" :key="step.key">
-                        <!-- Étape -->
-                        <div
-                            class="flex flex-col items-center"
-                            style="min-width: 80px"
-                        >
+                <!-- Progression normale : défile horizontalement sur mobile -->
+                <div
+                    v-else
+                    ref="stepperRef"
+                    data-testid="vente-stepper"
+                    class="relative -mx-4 overflow-x-auto px-4 [overflow-wrap:normal] sm:mx-0 sm:overflow-visible sm:px-0"
+                >
+                    <div class="flex min-w-max items-center sm:min-w-0">
+                        <template v-for="(step, idx) in STEPS" :key="step.key">
+                            <!-- Étape -->
                             <div
-                                :class="[
-                                    'flex h-9 w-9 items-center justify-center rounded-full transition-all',
-                                    idx === COMMISSIONS_STEP_IDX &&
-                                    commissionsEnErreur
-                                        ? 'bg-red-500 text-white shadow-sm'
-                                        : idx === COMMISSIONS_STEP_IDX &&
-                                            commissionsPartielles
-                                          ? 'bg-orange-500 text-white shadow-sm'
-                                          : stepState(idx) === 'done'
-                                            ? 'bg-emerald-500 text-white shadow-sm'
-                                            : '',
-                                    stepState(idx) === 'current' &&
-                                    !(
-                                        idx === COMMISSIONS_STEP_IDX &&
-                                        commissionsAvecAnomalie
-                                    )
-                                        ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
-                                        : '',
-                                    stepState(idx) === 'future'
-                                        ? 'bg-muted text-muted-foreground'
-                                        : '',
-                                ]"
+                                class="flex w-[76px] shrink-0 flex-col items-center sm:w-auto sm:min-w-[80px]"
+                                :data-step-current="
+                                    stepState(idx) === 'current' || undefined
+                                "
                             >
-                                <component :is="step.icon" class="h-4 w-4" />
+                                <div
+                                    :class="[
+                                        'flex h-9 w-9 items-center justify-center rounded-full transition-all',
+                                        idx === COMMISSIONS_STEP_IDX &&
+                                        commissionsEnErreur
+                                            ? 'bg-red-500 text-white shadow-sm'
+                                            : idx === COMMISSIONS_STEP_IDX &&
+                                                commissionsPartielles
+                                              ? 'bg-orange-500 text-white shadow-sm'
+                                              : stepState(idx) === 'done'
+                                                ? 'bg-emerald-500 text-white shadow-sm'
+                                                : '',
+                                        stepState(idx) === 'current' &&
+                                        !(
+                                            idx === COMMISSIONS_STEP_IDX &&
+                                            commissionsAvecAnomalie
+                                        )
+                                            ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
+                                            : '',
+                                        stepState(idx) === 'future'
+                                            ? 'bg-muted text-muted-foreground'
+                                            : '',
+                                    ]"
+                                >
+                                    <component
+                                        :is="step.icon"
+                                        class="h-4 w-4"
+                                    />
+                                </div>
+                                <span
+                                    :class="[
+                                        'mt-1.5 text-center text-[11px] leading-tight font-medium',
+                                        idx === COMMISSIONS_STEP_IDX &&
+                                        commissionsEnErreur
+                                            ? 'text-red-600 dark:text-red-400'
+                                            : idx === COMMISSIONS_STEP_IDX &&
+                                                commissionsPartielles
+                                              ? 'text-orange-600 dark:text-orange-400'
+                                              : stepState(idx) === 'current'
+                                                ? 'text-blue-600 dark:text-blue-400'
+                                                : '',
+                                        stepState(idx) === 'done' &&
+                                        !(
+                                            idx === COMMISSIONS_STEP_IDX &&
+                                            commissionsAvecAnomalie
+                                        )
+                                            ? 'text-emerald-600 dark:text-emerald-400'
+                                            : '',
+                                        stepState(idx) === 'future'
+                                            ? 'text-muted-foreground'
+                                            : '',
+                                    ]"
+                                >
+                                    {{ stepLabel(idx, step.shortLabel) }}
+                                </span>
                             </div>
-                            <span
+                            <!-- Connecteur -->
+                            <div
+                                v-if="idx < STEPS.length - 1"
                                 :class="[
-                                    'mt-1.5 text-center text-[11px] leading-tight font-medium',
-                                    idx === COMMISSIONS_STEP_IDX &&
-                                    commissionsEnErreur
-                                        ? 'text-red-600 dark:text-red-400'
-                                        : idx === COMMISSIONS_STEP_IDX &&
-                                            commissionsPartielles
-                                          ? 'text-orange-600 dark:text-orange-400'
-                                          : stepState(idx) === 'current'
-                                            ? 'text-blue-600 dark:text-blue-400'
-                                            : '',
-                                    stepState(idx) === 'done' &&
-                                    !(
-                                        idx === COMMISSIONS_STEP_IDX &&
-                                        commissionsAvecAnomalie
-                                    )
-                                        ? 'text-emerald-600 dark:text-emerald-400'
-                                        : '',
-                                    stepState(idx) === 'future'
-                                        ? 'text-muted-foreground'
-                                        : '',
+                                    'mb-5 h-0.5 w-5 shrink-0 transition-all sm:w-auto sm:flex-1',
+                                    connectorIsActive(idx)
+                                        ? 'bg-emerald-400'
+                                        : 'bg-border',
                                 ]"
-                            >
-                                {{ stepLabel(idx, step.shortLabel) }}
-                            </span>
-                        </div>
-                        <!-- Connecteur -->
-                        <div
-                            v-if="idx < STEPS.length - 1"
-                            :class="[
-                                'mb-5 h-0.5 flex-1 transition-all',
-                                connectorIsActive(idx)
-                                    ? 'bg-emerald-400'
-                                    : 'bg-border',
-                            ]"
-                        />
-                    </template>
+                            />
+                        </template>
+                    </div>
                 </div>
             </div>
 
@@ -1578,74 +1626,46 @@ function stepLabel(idx: number, defaultLabel: string): string {
             </Alert>
 
             <!-- Navigation par onglets ──────────────────────────────────────── -->
-            <div class="flex border-b">
+            <div
+                ref="tabNav"
+                role="tablist"
+                aria-label="Rubriques de la commande"
+                data-testid="vente-tabs"
+                class="relative -mx-4 flex overflow-x-auto border-b px-4 [overflow-wrap:normal] sm:mx-0 sm:px-0"
+            >
                 <button
-                    class="px-4 py-2 text-sm font-medium transition-colors"
+                    v-for="onglet in ONGLETS"
+                    :key="onglet.key"
+                    type="button"
+                    role="tab"
+                    :aria-selected="activeTab === onglet.key"
+                    class="min-h-11 shrink-0 px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors sm:min-h-0"
                     :class="
-                        activeTab === 'informations'
+                        activeTab === onglet.key
                             ? 'border-b-2 border-primary text-primary'
                             : 'text-muted-foreground hover:text-foreground'
                     "
-                    @click="activeTab = 'informations'"
+                    @click="activeTab = onglet.key"
                 >
-                    Informations
-                </button>
-                <button
-                    class="px-4 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        activeTab === 'produits'
-                            ? 'border-b-2 border-primary text-primary'
-                            : 'text-muted-foreground hover:text-foreground'
-                    "
-                    @click="activeTab = 'produits'"
-                >
-                    Produits
-                </button>
-                <button
-                    class="px-4 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        activeTab === 'facturation'
-                            ? 'border-b-2 border-primary text-primary'
-                            : 'text-muted-foreground hover:text-foreground'
-                    "
-                    @click="activeTab = 'facturation'"
-                >
-                    Facturation
-                </button>
-                <button
-                    class="px-4 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        activeTab === 'journal'
-                            ? 'border-b-2 border-primary text-primary'
-                            : 'text-muted-foreground hover:text-foreground'
-                    "
-                    @click="activeTab = 'journal'"
-                >
-                    Journal d'activité
-                </button>
-                <button
-                    class="px-4 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        activeTab === 'historique'
-                            ? 'border-b-2 border-primary text-primary'
-                            : 'text-muted-foreground hover:text-foreground'
-                    "
-                    @click="activeTab = 'historique'"
-                >
-                    Historique
+                    {{ onglet.label }}
                 </button>
             </div>
 
             <!-- Onglet : Informations ───────────────────────────────────────── -->
             <div v-if="activeTab === 'informations'">
                 <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
-                    <div class="mb-5 flex items-center justify-between">
+                    <div
+                        class="mb-4 flex flex-col gap-2.5 sm:mb-5 sm:flex-row sm:items-center sm:justify-between"
+                    >
                         <h3
                             class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                         >
                             Informations
                         </h3>
-                        <div class="flex items-center gap-2">
+                        <div
+                            class="flex flex-wrap items-center gap-x-2 gap-y-1.5"
+                            data-testid="vente-statuts"
+                        >
                             <StatusDot
                                 :status="commande.statut_affichage.value"
                                 :label="commande.statut_affichage.label"
@@ -1682,6 +1702,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         </div>
                     </div>
                     <div
+                        data-info-grid
                         :class="
                             commande.livreur_nom
                                 ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-5'
@@ -1822,7 +1843,10 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     <div
                         class="overflow-hidden overflow-x-auto rounded-lg border"
                     >
-                        <table class="w-full text-sm">
+                        <table
+                            class="w-full text-sm"
+                            data-mobile-cards="lignes"
+                        >
                             <thead>
                                 <tr class="border-b bg-muted/40">
                                     <th
@@ -1910,21 +1934,27 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                     :key="ligne.id"
                                     class="hover:bg-muted/10"
                                 >
-                                    <td class="px-4 py-3 font-medium">
+                                    <td
+                                        data-titre
+                                        class="px-4 py-3 font-medium"
+                                    >
                                         {{ ligne.produit_nom ?? '—' }}
                                     </td>
                                     <td
+                                        data-label="Demandée"
                                         class="px-4 py-3 text-center tabular-nums"
                                     >
                                         {{ ligne.quantite_demandee }}
                                     </td>
                                     <td
+                                        data-label="Chargée"
                                         v-if="showChargeeCol"
                                         class="px-4 py-3 text-center tabular-nums"
                                     >
                                         {{ ligne.quantite_chargee ?? '—' }}
                                     </td>
                                     <td
+                                        data-label="Écart chargement"
                                         v-if="showChargeeCol"
                                         class="px-4 py-3 text-center font-semibold tabular-nums"
                                         :class="
@@ -1934,6 +1964,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         {{ ecartLabel(ligne.ecart_chargement) }}
                                     </td>
                                     <td
+                                        data-label="Motif d'écart"
+                                        data-wide
                                         v-if="showChargeeCol"
                                         class="px-4 py-3 text-sm"
                                     >
@@ -1955,6 +1987,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         </p>
                                     </td>
                                     <td
+                                        data-label="Retournée"
                                         v-if="showRetourCols"
                                         class="px-4 py-3 text-center tabular-nums"
                                         :class="
@@ -1966,6 +1999,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         {{ ligne.quantite_retournee }}
                                     </td>
                                     <td
+                                        data-label="Livrée"
                                         v-if="showRetourCols"
                                         class="px-4 py-3 text-center font-semibold tabular-nums"
                                     >
@@ -1976,12 +2010,14 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         }}
                                     </td>
                                     <td
+                                        data-label="Reçue"
                                         v-if="showRecueCol"
                                         class="px-4 py-3 text-center tabular-nums"
                                     >
                                         {{ ligne.quantite_livree ?? '—' }}
                                     </td>
                                     <td
+                                        data-label="Écart réception"
                                         v-if="showRecueCol"
                                         class="px-4 py-3 text-center font-semibold tabular-nums"
                                         :class="
@@ -1991,6 +2027,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         {{ ecartLabel(ligne.ecart_livraison) }}
                                     </td>
                                     <td
+                                        data-label="Motif d'écart"
+                                        data-wide
                                         v-if="showRecueCol"
                                         class="px-4 py-3 text-sm"
                                     >
@@ -2020,6 +2058,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         </p>
                                     </td>
                                     <td
+                                        :data-label="prixUnitLabel"
                                         class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                     >
                                         {{ formatGNF(ligneUnitPrice(ligne)) }}
@@ -2028,6 +2067,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         </p>
                                     </td>
                                     <td
+                                        :data-label="totalColumnLabel"
                                         class="px-4 py-3 text-right font-semibold tabular-nums"
                                     >
                                         {{ formatGNF(ligne.total_ligne) }}
@@ -2287,15 +2327,20 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     v-if="facture"
                     class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
                 >
-                    <div class="mb-5 flex items-center justify-between">
+                    <div
+                        class="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-center sm:justify-between"
+                    >
                         <h3
                             class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                         >
                             Facturation
                         </h3>
-                        <div class="flex items-center gap-2">
+                        <div
+                            class="flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:gap-2"
+                        >
                             <span
                                 v-if="facture && facture.montant_restant > 0"
+                                class="block"
                                 :title="
                                     !commande.can_encaisser
                                         ? 'L\'encaissement est possible uniquement après validation du chargement.'
@@ -2304,6 +2349,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             >
                                 <Button
                                     size="sm"
+                                    class="h-11 w-full sm:h-8 sm:w-auto"
                                     :disabled="!commande.can_encaisser"
                                     @click="openEncaisserDialog"
                                 >
@@ -2324,28 +2370,43 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     </div>
 
                     <!-- KPIs -->
-                    <div class="mb-6 grid grid-cols-3 gap-3">
-                        <div class="rounded-lg border bg-muted/30 px-4 py-3">
+                    <div
+                        class="mb-6 grid gap-2 sm:grid-cols-3 sm:gap-3"
+                        data-testid="facturation-kpis"
+                    >
+                        <div
+                            class="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3 sm:block"
+                        >
                             <p class="text-xs text-muted-foreground">
                                 Total facturé
                             </p>
-                            <p class="mt-0.5 text-lg font-bold tabular-nums">
+                            <p
+                                class="text-base font-bold whitespace-nowrap tabular-nums sm:mt-0.5 sm:text-lg"
+                            >
                                 {{ formatGNF(facture.montant_net) }}
                             </p>
                         </div>
-                        <div class="rounded-lg border bg-muted/30 px-4 py-3">
+                        <div
+                            class="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3 sm:block"
+                        >
                             <p class="text-xs text-muted-foreground">
                                 Déjà encaissé
                             </p>
-                            <p class="mt-0.5 text-lg font-bold tabular-nums">
+                            <p
+                                class="text-base font-bold whitespace-nowrap tabular-nums sm:mt-0.5 sm:text-lg"
+                            >
                                 {{ formatGNF(facture.montant_encaisse) }}
                             </p>
                         </div>
-                        <div class="rounded-lg border bg-muted/30 px-4 py-3">
+                        <div
+                            class="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-3 sm:block"
+                        >
                             <p class="text-xs text-muted-foreground">
                                 Restant dû
                             </p>
-                            <p class="mt-0.5 text-lg font-bold tabular-nums">
+                            <p
+                                class="text-base font-bold whitespace-nowrap tabular-nums sm:mt-0.5 sm:text-lg"
+                            >
                                 {{ formatGNF(facture.montant_restant) }}
                             </p>
                         </div>
@@ -2359,7 +2420,10 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             Historique des encaissements
                         </p>
                         <div class="overflow-hidden rounded-lg border">
-                            <table class="w-full text-sm">
+                            <table
+                                class="w-full text-sm"
+                                data-mobile-cards="encaissements"
+                            >
                                 <thead>
                                     <tr class="border-b bg-muted/40">
                                         <th
@@ -2400,15 +2464,21 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         :key="enc.id"
                                         class="hover:bg-muted/10"
                                     >
-                                        <td class="px-4 py-3 tabular-nums">
+                                        <td
+                                            data-label="Date"
+                                            class="px-4 py-3 tabular-nums"
+                                        >
                                             {{ enc.date_encaissement }}
                                         </td>
                                         <td
+                                            data-label="Heure"
                                             class="px-4 py-3 text-muted-foreground tabular-nums"
                                         >
                                             {{ enc.heure ?? '—' }}
                                         </td>
                                         <td
+                                            data-label="Mode"
+                                            data-wide
                                             class="px-4 py-3 text-muted-foreground"
                                         >
                                             {{
@@ -2449,6 +2519,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                             </div>
                                         </td>
                                         <td
+                                            data-label="Référence"
                                             class="hidden px-4 py-3 text-muted-foreground md:table-cell"
                                         >
                                             {{ enc.reference_paiement ?? '—' }}
@@ -2459,11 +2530,13 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                             >
                                         </td>
                                         <td
+                                            data-label="Montant"
                                             class="px-4 py-3 text-right font-semibold tabular-nums"
                                         >
                                             {{ formatGNF(enc.montant) }}
                                         </td>
                                         <td
+                                            data-label="Par"
                                             class="hidden px-4 py-3 text-muted-foreground sm:table-cell"
                                         >
                                             {{ enc.created_by ?? '—' }}
@@ -2676,6 +2749,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             modal
             header="Annuler la commande"
             :style="{ width: '480px' }"
+            :breakpoints="{ '640px': 'calc(100vw - 1rem)' }"
         >
             <div class="space-y-4">
                 <p class="text-sm text-muted-foreground">
@@ -2768,6 +2842,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             modal
             header="Ticket commande"
             :style="{ width: '380px' }"
+            :breakpoints="{ '640px': 'calc(100vw - 1rem)' }"
         >
             <div class="flex justify-center py-2">
                 <div id="ticket-commande-print">
@@ -2799,6 +2874,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             modal
             header="Détail véhicule"
             :style="{ width: '28rem' }"
+            :breakpoints="{ '640px': 'calc(100vw - 1rem)' }"
         >
             <div class="space-y-3 px-1 py-2">
                 <div class="flex justify-between">
@@ -2889,6 +2965,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             modal
             header="Équipe de livraison"
             :style="{ width: '30rem' }"
+            :breakpoints="{ '640px': 'calc(100vw - 1rem)' }"
         >
             <div class="space-y-4 px-1 py-2">
                 <div class="flex justify-between">
@@ -2979,6 +3056,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
             modal
             header="Détail client"
             :style="{ width: '28rem' }"
+            :breakpoints="{ '640px': 'calc(100vw - 1rem)' }"
         >
             <div class="space-y-3 px-1 py-2">
                 <div class="flex justify-between">
@@ -3177,3 +3255,80 @@ function stepLabel(idx: number, defaultLabel: string): string {
         />
     </AppLayout>
 </template>
+
+<style scoped>
+@media (max-width: 639px) {
+    /* Informations : lignes libellé / valeur, comme les fiches Véhicule et Propriétaire. */
+    .vente-detail [data-info-grid] {
+        gap: 0;
+    }
+    .vente-detail [data-info-grid] > div {
+        display: grid;
+        grid-template-columns: 7rem minmax(0, 1fr);
+        align-items: start;
+        gap: 0.125rem 0.75rem;
+        border-top: 1px solid var(--border);
+        padding: 0.75rem 0;
+    }
+    .vente-detail [data-info-grid] > div:first-child {
+        border-top: 0;
+        padding-top: 0;
+    }
+    .vente-detail [data-info-grid] > div:last-child {
+        padding-bottom: 0;
+    }
+    .vente-detail [data-info-grid] > div > :first-child {
+        grid-column: 1;
+        padding-top: 0.125rem;
+    }
+    .vente-detail [data-info-grid] > div > :not(:first-child) {
+        grid-column: 2;
+        margin-top: 0;
+    }
+
+    /* Tableaux : une carte par ligne. */
+    .vente-detail [data-mobile-cards],
+    .vente-detail [data-mobile-cards] tbody,
+    .vente-detail [data-mobile-cards] tfoot {
+        display: block;
+        min-width: 0;
+    }
+    .vente-detail [data-mobile-cards] thead {
+        display: none;
+    }
+    .vente-detail [data-mobile-cards] tbody tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+        padding: 0.875rem 1rem;
+    }
+    .vente-detail [data-mobile-cards] tbody td {
+        display: block;
+        min-width: 0;
+        padding: 0;
+        text-align: left;
+    }
+    .vente-detail [data-mobile-cards] td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 0.125rem;
+        color: var(--muted-foreground);
+        font: 400 0.75rem var(--font-sans);
+    }
+    .vente-detail [data-mobile-cards] td[data-titre],
+    .vente-detail [data-mobile-cards] td[data-wide] {
+        grid-column: 1 / -1;
+    }
+    .vente-detail [data-mobile-cards] tfoot tr {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.875rem 1rem;
+    }
+    .vente-detail [data-mobile-cards] tfoot td {
+        display: block;
+        padding: 0;
+    }
+}
+</style>

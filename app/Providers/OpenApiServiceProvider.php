@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\Client\LivraisonsEnCoursController;
 use App\Http\Controllers\Api\Client\ProfileController;
 use App\Http\Controllers\Api\Client\PropositionsVehicule\IndexPropositionVehiculeController;
 use App\Http\Controllers\Api\Client\PropositionsVehicule\StorePropositionVehiculeController;
+use App\Http\Controllers\Api\Client\ShowOperationController;
 use App\Http\Controllers\Api\Client\UpdateNotificationPreferencesController;
 use App\Http\Controllers\Api\Client\UpdateProfileController;
 use App\Http\Controllers\Api\Client\VehiculeCommissionsController;
@@ -117,6 +118,7 @@ class OpenApiServiceProvider extends ServiceProvider
 
         // Activity
         ActiviteController::class => 'Activity',
+        ShowOperationController::class => 'Activity',
 
         // Orders
         IndexCommandeController::class => 'Orders',

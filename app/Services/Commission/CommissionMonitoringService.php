@@ -238,7 +238,7 @@ class CommissionMonitoringService
         $type = $source instanceof TransfertLogistique ? 'transfert' : 'vente';
         $processusCode = $source instanceof TransfertLogistique
             ? CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT
-            : CommissionProcessusDefaults::identiteCodePourVente($source->nature_operation, $source->client?->type, $source->mode_remise_grossiste);
+            : CommissionProcessusDefaults::identiteCodePourVente($source->nature_operation, $source->natureClient(), $source->mode_remise_grossiste);
         $processus = $processusParCode->get($processusCode);
 
         [$evenement, $date] = match (true) {

@@ -4,6 +4,8 @@ use App\Http\Controllers\ImportFlotteController;
 use App\Http\Controllers\Settings\Achats\EditAchatParametrageController;
 use App\Http\Controllers\Settings\Achats\UpdateAchatParametrageController;
 use App\Http\Controllers\Settings\CommissionRegleController;
+use App\Http\Controllers\Settings\Commissions\EditAgencesPayeusesController;
+use App\Http\Controllers\Settings\Commissions\UpdateAgencesPayeusesController;
 use App\Http\Controllers\Settings\Communications\EditCommunicationRuleController;
 use App\Http\Controllers\Settings\Communications\UpdateCommunicationRuleController;
 use App\Http\Controllers\Settings\Depenses\EditDepenseParametrageController;
@@ -74,6 +76,8 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/communications', EditCommunicationRuleController::class)->name('settings.communications.edit');
     Route::put('settings/communications', UpdateCommunicationRuleController::class)->name('settings.communications.update');
 
+    Route::get('settings/commissions/agences-payeuses', EditAgencesPayeusesController::class)->name('settings.commissions.agences-payeuses.edit');
+    Route::put('settings/commissions/agences-payeuses', UpdateAgencesPayeusesController::class)->name('settings.commissions.agences-payeuses.update');
     Route::get('settings/commissions', [CommissionRegleController::class, 'index'])->name('settings.commissions.index');
     Route::get('settings/commissions/configuration', [CommissionRegleController::class, 'redirectConfiguration']);
     Route::post('settings/commissions/configuration', [CommissionRegleController::class, 'storeConfiguration'])->name('settings.commissions.configuration.store');

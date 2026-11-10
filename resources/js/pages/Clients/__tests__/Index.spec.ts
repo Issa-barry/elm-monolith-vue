@@ -43,6 +43,7 @@ const client = {
     type_label: 'Grossiste',
     cashback_eligible: false,
     cashback_montant_par_pack: null,
+    supprimable: true,
 };
 const monter = () =>
     shallowMount(ClientsIndex, {

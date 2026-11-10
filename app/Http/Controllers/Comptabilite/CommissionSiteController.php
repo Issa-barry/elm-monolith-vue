@@ -15,11 +15,11 @@ use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
 use App\Models\Site;
+use App\Services\Commission\AgencePayeuseCommissionService;
 use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionVenteCalculatorService;
 use App\Services\PeriodeComptableService;
 use App\Services\SavedFilterService;
-use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionPeriodeFilter;
@@ -49,8 +49,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CommissionSiteController extends Controller
 {
     private const DATE_FORMAT = 'd/m/Y';
-
-    public function __construct(private SiteScopeService $siteScope) {}
 
     private function scalarInput(Request $request, string $key): string
     {
@@ -307,7 +305,6 @@ class CommissionSiteController extends Controller
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         $toutesAgences = $user->voitToutesLesAgences();
-        $siteIds = ! $toutesAgences ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $query = CommissionEnveloppePart::with([
@@ -322,10 +319,13 @@ class CommissionSiteController extends Controller
                 CommissionPeriodeFilter::appliquer($q, $filtrePeriodes, 'earned_at');
             });
 
+        // L'agence qui paie toutes les fiches Site voit tous les sites ; les autres lisent les
+        // commissions de leur propre site (ADR 0061).
+        $perimetre = app(AgencePayeuseCommissionService::class)->perimetreLecture($user, 'site');
         if ($toutesAgences && ! empty($filtreSiteIds)) {
             $query->whereIn('beneficiaire_id', $filtreSiteIds);
-        } elseif (! $toutesAgences && ! empty($siteIds)) {
-            $query->whereIn('beneficiaire_id', $siteIds);
+        } elseif (! $toutesAgences && ! empty($perimetre)) {
+            $query->whereIn('beneficiaire_id', $perimetre);
         }
 
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);

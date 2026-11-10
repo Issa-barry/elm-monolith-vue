@@ -2,7 +2,6 @@
 
 namespace App\Services\Comptes;
 
-use App\Enums\PrestataireType;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\Parrain;
 use App\Models\Prestataire;
@@ -43,7 +42,7 @@ class ActivitesCompteResolver
         $consultants = Prestataire::query()
             ->with(['personne', 'entrepriseTierce'])
             ->where('organization_id', $organizationId)
-            ->parType(PrestataireType::CONSULTANT)
+            ->qualifiesConsultant()
             ->where(function (Builder $q) use ($user, $entrepriseIds) {
                 $q->where(fn (Builder $personnel) => $personnel
                     ->whereNull('entreprise_tierce_id')

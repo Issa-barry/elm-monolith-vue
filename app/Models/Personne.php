@@ -3,10 +3,13 @@
 namespace App\Models;
 
 use App\Enums\Civilite;
+use App\Services\Contacts\ClientIdentiteSynchronisation;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -25,8 +28,8 @@ class Personne extends Model
 
     protected $fillable = [
         'organization_id', 'nom', 'prenom', 'nom_complet', 'surnom',
-        'telephone', 'telephone_normalise', 'email',
-        'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse',
+        'telephone', 'telephone_normalise', 'telephone_secondaire', 'email',
+        'pays', 'code_pays', 'code_phone_pays', 'ville', 'quartier', 'adresse', 'latitude', 'longitude',
         'date_naissance', 'lieu_naissance', 'civilite', 'sexe', 'nationalite',
     ];
 
@@ -35,7 +38,24 @@ class Personne extends Model
         return [
             'date_naissance' => 'date',
             'civilite' => Civilite::class,
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
         ];
+    }
+
+    /**
+     * R1 (ADR 0060, lot 7a) : une fois la synchronisation activée pour l'organisation (D16), toute
+     * modification de l'identité d'une Personne — quel que soit l'écran — est recopiée sur ses
+     * clients avant l'enregistrement : un conflit d'unicité côté client (téléphone, e-mail) refuse
+     * aussi la modification de la Personne. Sans activation : aucun effet (CLIENTPERSONNE-002).
+     */
+    protected static function booted(): void
+    {
+        static::updating(function (Personne $personne) {
+            if ($personne->isDirty(ClientIdentiteSynchronisation::COLONNES) && ClientIdentiteSynchronisation::estActivePour($personne->organization_id)) {
+                app(ClientIdentiteSynchronisation::class)->depuisPersonne($personne);
+            }
+        });
     }
 
     public function setEmailAttribute(mixed $value): void
@@ -116,6 +136,21 @@ class Personne extends Model
     public function prestataire(): HasOne
     {
         return $this->hasOne(Prestataire::class);
+    }
+
+    /** Entreprises que cette personne représente (une même personne peut en représenter plusieurs). */
+    public function interlocutions(): HasMany
+    {
+        return $this->hasMany(EntrepriseInterlocuteur::class);
+    }
+
+    /** Catégories libres du référentiel Contacts (ADR 0060, lot 6a), sans effet métier. */
+    public function categoriesLibres(): BelongsToMany
+    {
+        return $this->belongsToMany(CategorieLibre::class, 'personne_contact_categories', 'personne_id', 'contact_categorie_id')
+            ->using(CategorieLibreAttribution::class)
+            ->withPivot(['id', 'created_by'])
+            ->withTimestamps();
     }
 
     public function piecesIdentite(): MorphMany

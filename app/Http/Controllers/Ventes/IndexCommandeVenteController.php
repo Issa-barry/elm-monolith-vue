@@ -350,7 +350,7 @@ class IndexCommandeVenteController extends Controller
         // (commande en brouillon ou à charger).
         $processusCode = CommissionProcessusDefaults::identiteCodePourVente(
             $c->nature_operation ?? NatureOperation::VENTE_STANDARD,
-            $c->client?->type,
+            $c->natureClient(),
             $c->mode_remise_grossiste,
         );
 

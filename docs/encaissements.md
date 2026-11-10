@@ -342,6 +342,27 @@ Côté écran, `PaymentCard` ignore tout nouvel envoi tant que `processing` est 
 sous MySQL avec deux processus réels : l'ancien code enregistrait 2 × 450 000 pour 450 000 quand la
 seconde requête écrivait juste après la première ; le nouveau refuse la seconde.
 
+### Transaction annulée par la base : rien n'est enregistré (09/11/2026)
+
+Incident VTE-081126-134 (08/11/2026) : un premier encaissement espèces de 450 000 GNF a subi un
+deadlock MySQL en cours de transaction. MySQL a annulé toute la transaction (encaissement, passage
+en « Livrée »), mais un `catch` du recalcul des périodes de commission a masqué l'erreur : la suite
+s'est exécutée hors transaction et la pièce de caisse CA-2026-010088 et l'audit « Encaissement
+enregistré » sont restés seuls. L'agente a reçu une erreur et a ressaisi 12 s plus tard (CA-2026-010090).
+Résultat : 450 000 GNF de trop dans sa caisse en comptabilité. Cinq pièces de ce type existaient en
+production entre le 06 et le 09/11/2026.
+
+Désormais la connexion refuse toute requête après la perte de la transaction, et la validation
+finale échoue ([ADR 0062](adr/0062-garde-des-transactions-annulees.md)) : rien n'est écrit, et le
+formulaire affiche « Encaissement non enregistré : une autre opération utilisait la base au même
+moment. Rien n'a été enregistré, vous pouvez réessayer. » La nouvelle saisie est sûre : le verrou
+ci-dessus relit le restant dû. Test :
+`EncaissementVenteTest::test_deadlock_masque_pendant_l_encaissement_n_ecrit_ni_piece_ni_audit`.
+
+Les pièces déjà laissées en base sont contrepassées au déploiement, uniquement lorsqu'il est certain
+qu'aucun argent ne leur correspond. Les autres restent « à examiner ». Le critère et la commande de
+rapport sont décrits dans l'[ADR 0062](adr/0062-garde-des-transactions-annulees.md).
+
 ### Suppression d'un encaissement : tout ou rien (24/10/2026)
 
 `DestroyEncaissementVenteController` englobe la trace d'audit, la suppression, le recalcul du

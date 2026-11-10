@@ -11,6 +11,7 @@ use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\UserAuthIdentity;
+use App\Services\Contacts\ClientIdentiteSynchronisation;
 use App\Services\ModuleService;
 use App\Services\OtpService;
 use Illuminate\Support\Facades\DB;
@@ -233,7 +234,7 @@ class CreateNewUser implements CreatesNewUsers
                 'personne_id' => $existing->personne_id ?? $user->personne_id,
             ]);
         } else {
-            Client::create([
+            $client = Client::create([
                 'organization_id' => $organizationId,
                 'user_id' => $user->id,
                 'personne_id' => $user->personne_id,
@@ -246,6 +247,9 @@ class CreateNewUser implements CreatesNewUsers
                 // valeur neutre (pas de règle cashback obligatoire contrairement à Revendeur).
                 'type' => ClientType::EXTERNE->value,
             ]);
+            // R1 (ADR 0060, lot 7a) : identité reprise de la Personne si la synchronisation est
+            // active pour l'organisation ; sans effet sinon (inscription et ADR 0056 inchangés).
+            app(ClientIdentiteSynchronisation::class)->apresCreation($client);
         }
     }
 
