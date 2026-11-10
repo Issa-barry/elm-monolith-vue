@@ -15,9 +15,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
- * Opérations auxquelles un compte est réellement lié, et à quel titre : c'est ce qui autorise le scan
- * d'une référence hors personnel habilité. Le lien vient des données du compte, jamais de ses rôles : un
- * super admin n'y gagne rien.
+ * Périmètre unique des opérations d'un compte (ADR 0058) : la liste « Commandes », son détail et le
+ * scan lisent tous ici ce qu'un compte peut voir et pourquoi. Une opération est lue une seule fois en
+ * base, avec ses conditions combinées : un compte à la fois client, livreur et propriétaire de la même
+ * vente voit une seule ligne, portant ses trois liens. Le lien vient des données du compte, jamais de
+ * ses rôles : un super admin n'y gagne rien.
  *
  * Lien livreur : il n'existe aucun historique des membres d'équipe, et `equipe_livreurs` est recréée à
  * chaque modification d'équipe. Un livreur voit donc une opération s'il a une part de commission à son
@@ -33,9 +35,9 @@ final class OperationsCompte
 
     public const LIEN_PROPRIETAIRE = 'proprietaire';
 
-    private const DATE_VENTE = 'COALESCE(validated_at, created_at)';
+    public const DATE_VENTE = 'COALESCE(validated_at, created_at)';
 
-    private const DATE_TRANSFERT = 'COALESCE(date_depart_reelle, created_at)';
+    public const DATE_TRANSFERT = 'COALESCE(date_depart_reelle, created_at)';
 
     private const VENTES_EN_COURS = [
         StatutCommandeVente::A_CHARGER,
@@ -57,11 +59,16 @@ final class OperationsCompte
 
     public function __construct(private readonly ClientIdentity $identity) {}
 
-    /** @return Builder<CommandeVente> */
-    public function ventes(): Builder
+    /**
+     * `$lien` restreint aux opérations vues à ce titre (filtre de la liste), les autres liens de chaque
+     * ligne restent calculés par `liensVentes()`.
+     *
+     * @return Builder<CommandeVente>
+     */
+    public function ventes(?string $lien = null): Builder
     {
         $query = CommandeVente::query();
-        $conditions = $this->conditionsVente();
+        $conditions = $this->restreindre($this->conditionsVente(), $lien);
 
         if ($this->identity->organizationId === null || $conditions === []) {
             return $query->whereRaw('1 = 0');
@@ -77,10 +84,10 @@ final class OperationsCompte
     }
 
     /** @return Builder<TransfertLogistique> */
-    public function transferts(): Builder
+    public function transferts(?string $lien = null): Builder
     {
         $query = TransfertLogistique::query();
-        $conditions = $this->conditionsTransfert();
+        $conditions = $this->restreindre($this->conditionsTransfert(), $lien);
 
         if ($this->identity->organizationId === null || $conditions === []) {
             return $query->whereRaw('1 = 0');
@@ -93,6 +100,11 @@ final class OperationsCompte
                     $q->orWhere($condition);
                 }
             });
+    }
+
+    public function aDesOperations(): bool
+    {
+        return $this->ventes()->exists() || $this->transferts()->exists();
     }
 
     /**
@@ -121,39 +133,72 @@ final class OperationsCompte
         ])->all();
     }
 
-    /** @return list<\Closure(Builder): void> */
+    /**
+     * @param  Collection<int, TransfertLogistique>  $transferts
+     * @return array<string, list<string>>
+     */
+    public function liensTransferts(Collection $transferts): array
+    {
+        $viaLivreur = $this->identity->livreur === null || $transferts->isEmpty()
+            ? collect()
+            : TransfertLogistique::query()
+                ->whereKey($transferts->pluck('id')->all())
+                ->where(fn (Builder $q) => $this->conditionLivreurTransfert($q))
+                ->pluck('id')
+                ->flip();
+
+        $vehicules = $this->vehiculesProprietaire()->flip();
+
+        return $transferts->mapWithKeys(fn (TransfertLogistique $transfert) => [
+            $transfert->id => array_values(array_filter([
+                $viaLivreur->has($transfert->id) ? self::LIEN_LIVREUR : null,
+                $transfert->vehicule_id !== null && $vehicules->has($transfert->vehicule_id) ? self::LIEN_PROPRIETAIRE : null,
+            ])),
+        ])->all();
+    }
+
+    /**
+     * @param  array<string, \Closure(Builder): void>  $conditions
+     * @return array<string, \Closure(Builder): void>
+     */
+    private function restreindre(array $conditions, ?string $lien): array
+    {
+        return $lien === null ? $conditions : array_intersect_key($conditions, [$lien => true]);
+    }
+
+    /** @return array<string, \Closure(Builder): void> */
     private function conditionsVente(): array
     {
         $conditions = [];
 
         if ($this->identity->client !== null) {
-            $conditions[] = fn (Builder $q) => $q
+            $conditions[self::LIEN_CLIENT] = fn (Builder $q) => $q
                 ->where('client_id', $this->identity->client->id)
                 ->where('statut', '!=', StatutCommandeVente::BROUILLON->value);
         }
 
         if ($this->identity->livreur !== null) {
-            $conditions[] = fn (Builder $q) => $this->conditionLivreurVente($q);
+            $conditions[self::LIEN_LIVREUR] = fn (Builder $q) => $this->conditionLivreurVente($q);
         }
 
         if ($this->vehiculesProprietaire()->isNotEmpty()) {
-            $conditions[] = fn (Builder $q) => $q->whereIn('vehicule_id', $this->vehiculesProprietaire());
+            $conditions[self::LIEN_PROPRIETAIRE] = fn (Builder $q) => $q->whereIn('vehicule_id', $this->vehiculesProprietaire());
         }
 
         return $conditions;
     }
 
-    /** @return list<\Closure(Builder): void> */
+    /** @return array<string, \Closure(Builder): void> */
     private function conditionsTransfert(): array
     {
         $conditions = [];
 
         if ($this->identity->livreur !== null) {
-            $conditions[] = fn (Builder $q) => $this->conditionLivreurTransfert($q);
+            $conditions[self::LIEN_LIVREUR] = fn (Builder $q) => $this->conditionLivreurTransfert($q);
         }
 
         if ($this->vehiculesProprietaire()->isNotEmpty()) {
-            $conditions[] = fn (Builder $q) => $q->whereIn('vehicule_id', $this->vehiculesProprietaire());
+            $conditions[self::LIEN_PROPRIETAIRE] = fn (Builder $q) => $q->whereIn('vehicule_id', $this->vehiculesProprietaire());
         }
 
         return $conditions;

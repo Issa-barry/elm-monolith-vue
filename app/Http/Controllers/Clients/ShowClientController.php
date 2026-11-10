@@ -32,6 +32,9 @@ class ShowClientController extends Controller
             'client' => [
                 'id' => $client->id,
                 'nom_complet' => $client->nom_complet,
+                // L7-2 (ADR 0060, lot 7b) : client professionnel — la raison sociale est le nom
+                // principal, le contact (sa Personne) une mention secondaire.
+                'contact_nom' => $client->entreprise_tierce_id !== null ? $client->personne?->nom_complet : null,
                 'email' => $client->email,
                 'telephone' => $telephone,
                 'adresse' => $client->adresse,

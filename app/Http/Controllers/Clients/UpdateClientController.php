@@ -3,22 +3,25 @@
 namespace App\Http\Controllers\Clients;
 
 use App\Enums\ClientType;
+use App\Http\Controllers\Concerns\SaisieEntrepriseLiee;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Personne;
 use App\Services\CashbackEligibiliteService;
+use App\Services\Contacts\ProprietaireEntreprise;
 use App\Support\Clients\ClientUniqueness;
 use App\Support\Clients\ClientValidationMessages;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class UpdateClientController extends Controller
 {
-    use PhoneHandlerTrait;
+    use PhoneHandlerTrait, SaisieEntrepriseLiee;
 
-    public function __invoke(Request $request, Client $client): RedirectResponse
+    public function __invoke(Request $request, Client $client, ProprietaireEntreprise $entreprises): RedirectResponse
     {
         $this->authorize('update', $client);
 
@@ -33,7 +36,13 @@ class UpdateClientController extends Controller
             'type' => ['nullable', Rule::in(ClientType::values())],
             'cashback_eligible' => 'boolean',
             'cashback_montant_par_pack' => 'nullable|integer|min:1',
+            // Lot 7b (ADR 0060) : client professionnel relié à une fiche Entreprise ; `nom_complet`
+            // devient le nom du contact, la raison sociale le nom principal du client (L7-2).
+            'client_professionnel' => 'boolean',
+            'raison_sociale' => 'required_if:client_professionnel,true|nullable|string|max:200',
+            ...$this->reglesEntrepriseLiee(),
         ], ClientValidationMessages::pour());
+        $raisonSocialeSaisie = (string) ($data['raison_sociale'] ?? '');
 
         $data = CashbackEligibiliteService::resoudreEligibilite($data);
         CashbackEligibiliteService::validerCoherence(
@@ -72,25 +81,43 @@ class UpdateClientController extends Controller
             'adresse' => $data['adresse'] ?? null,
         ];
 
-        if ($client->personne_id) {
-            // Édite l'identité déjà rattachée EN PLACE, jamais de re-résolution par téléphone
-            // (même principe que ProprietaireController::update()) : éditer un client ne doit
-            // jamais le rattacher silencieusement à une autre Personne existante. La garde
-            // ci-dessous protège la contrainte unique (organization_id, telephone_normalise) —
-            // sans elle, un nouveau téléphone déjà porté par une AUTRE Personne (un autre rôle)
-            // heurterait une exception SQL brute au lieu d'un message de validation clair.
-            Personne::assertTelephoneDisponible($client->organization_id, $data['telephone'], $client->personne_id);
-            $client->personne->update([
-                ...$identitePersonne,
-                'telephone_normalise' => Personne::normaliserTelephone($data['telephone']),
-            ]);
-        } else {
-            // Filet de sécurité : ne devrait plus se produire une fois le backfill exécuté,
-            // mais garantit qu'aucun client ne reste sans Personne après une modification.
-            $data['personne_id'] = Personne::resoudreOuCreer($client->organization_id, $identitePersonne)->id;
-        }
+        $professionnel = (bool) ($data['client_professionnel'] ?? false);
+        $identiteEntreprise = $professionnel ? $this->identiteEntreprise($data, $raisonSocialeSaisie) : null;
+        $relie = $client->entreprise_tierce_id !== null;
 
-        $client->update($data);
+        DB::transaction(function () use ($client, $data, $identitePersonne, $entreprises, $identiteEntreprise, $relie, $request) {
+            if ($client->personne_id) {
+                // Édite l'identité déjà rattachée EN PLACE, jamais de re-résolution par téléphone
+                // (même principe que ProprietaireController::update()) : éditer un client ne doit
+                // jamais le rattacher silencieusement à une autre Personne existante. La garde
+                // ci-dessous protège la contrainte unique (organization_id, telephone_normalise) —
+                // sans elle, un nouveau téléphone déjà porté par une AUTRE Personne (un autre rôle)
+                // heurterait une exception SQL brute au lieu d'un message de validation clair.
+                Personne::assertTelephoneDisponible($client->organization_id, $data['telephone'], $client->personne_id);
+                $client->personne->update([
+                    ...$identitePersonne,
+                    'telephone_normalise' => Personne::normaliserTelephone($data['telephone']),
+                ]);
+            } else {
+                // Filet de sécurité : ne devrait plus se produire une fois le backfill exécuté,
+                // mais garantit qu'aucun client ne reste sans Personne après une modification.
+                $data['personne_id'] = Personne::resoudreOuCreer($client->organization_id, $identitePersonne)->id;
+            }
+
+            // Lot 7b : client professionnel (nom principal = raison sociale de l'entreprise, L7-2).
+            if ($identiteEntreprise === null) {
+                // D8 : n'est plus professionnel — lien retiré et journalisé, entreprise et interlocuteurs
+                // conservés ; son nom redevient celui saisi.
+                $entreprises->delier($client, $request->user(), 'client_particulier');
+                $client->update($data);
+            } else {
+                unset($data['nom_complet']);
+                $client->update($data);
+                $relie
+                    ? $entreprises->modifierIdentite($client, $identiteEntreprise, (bool) ($data['confirmer_modification_entreprise'] ?? false), $request->user())
+                    : $entreprises->rattacherDepuisFormulaire($client, $identiteEntreprise, $data['entreprise_choix'] ?? null, $request->user());
+            }
+        });
 
         return redirect()->route('clients.edit', $client)
             ->with('success', 'Client mis à jour avec succès.');

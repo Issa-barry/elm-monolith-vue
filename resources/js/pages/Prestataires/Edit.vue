@@ -10,6 +10,7 @@ import PrestataireForm, { type FormData } from './partials/PrestataireForm.vue';
 interface Option {
     value: string;
     label: string;
+    actif?: boolean;
 }
 
 interface PrestataireData {
@@ -25,7 +26,7 @@ interface PrestataireData {
     pays: string;
     ville: string | null;
     adresse: string | null;
-    type: string;
+    qualification_ids: string[];
     notes: string | null;
     is_active: boolean;
 }
@@ -53,7 +54,8 @@ const form = useForm({
     pays: props.prestataire.pays,
     ville: props.prestataire.ville,
     adresse: props.prestataire.adresse,
-    type: props.prestataire.type,
+    qualification_ids: props.prestataire.qualification_ids,
+    type: null as string | null,
     notes: props.prestataire.notes,
     is_active: props.prestataire.is_active,
 });

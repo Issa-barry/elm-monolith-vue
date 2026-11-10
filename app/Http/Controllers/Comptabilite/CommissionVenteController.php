@@ -16,6 +16,7 @@ use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
 use App\Models\Site;
 use App\Models\VehiculeCapacite;
+use App\Services\Commission\AgencePayeuseCommissionService;
 use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
@@ -23,7 +24,6 @@ use App\Services\CommissionVenteCalculatorService;
 use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
 use App\Services\SavedFilterService;
-use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionPdfFooter;
@@ -45,8 +45,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CommissionVenteController extends Controller
 {
     private const DATE_FORMAT = 'd/m/Y';
-
-    public function __construct(private SiteScopeService $siteScope) {}
 
     /**
      * Les filtres "select" de DataFilters sont toujours envoyés en tableau
@@ -91,7 +89,6 @@ class CommissionVenteController extends Controller
 
         $toutesAgences = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
-        $siteIds = ! $toutesAgences ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $query = CommissionEnveloppePart::with([
@@ -114,12 +111,14 @@ class CommissionVenteController extends Controller
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
         self::restreindreAuxStatuts($query, $filtreStatuts);
 
-        // Agence = celle qui paie la commission (site actuel du véhicule), jamais le site où la
-        // vente a eu lieu — cf. CommissionEnveloppe::siteResponsableId().
+        // Agence = agence de rattachement (site actuel du véhicule), jamais le site où la vente a eu
+        // lieu — cf. CommissionEnveloppe::siteResponsableId(). Si une seule agence paie toutes les
+        // fiches livreur, ses responsables voient tout (ADR 0061).
+        $perimetre = app(AgencePayeuseCommissionService::class)->perimetreLecture($user, 'livreur');
         if ($toutesAgences && ! empty($filtreSiteIds)) {
             CommissionSiteResponsableFilter::appliquer($query, $filtreSiteIds);
-        } elseif (! $toutesAgences && ! empty($siteIds)) {
-            CommissionSiteResponsableFilter::appliquer($query, $siteIds);
+        } elseif (! $toutesAgences && ! empty($perimetre)) {
+            CommissionSiteResponsableFilter::appliquer($query, $perimetre);
         }
 
         $allParts = $query->get();
@@ -773,7 +772,7 @@ class CommissionVenteController extends Controller
         $search = trim((string) $request->input('search', ''));
         $filtreSiteIds = $toutesAgences
             ? array_values(array_filter((array) $request->input('site_ids', [])))
-            : $this->siteScope->accessibleSiteIds($user)->all();
+            : (app(AgencePayeuseCommissionService::class)->perimetreLecture($user, 'livreur') ?? []);
 
         $parts = $this->loadPartsForExport($orgId, $filtrePeriodes, $filtreSiteIds, $filtreProcessus, $filtreStatuts);
         $fraisDepensesParLivreur = self::fraisDepenses(
@@ -826,7 +825,7 @@ class CommissionVenteController extends Controller
         $search = trim((string) $request->input('search', ''));
         $filtreSiteIds = $toutesAgences
             ? array_values(array_filter((array) $request->input('site_ids', [])))
-            : $this->siteScope->accessibleSiteIds($user)->all();
+            : (app(AgencePayeuseCommissionService::class)->perimetreLecture($user, 'livreur') ?? []);
 
         $parts = $this->loadPartsForExport($orgId, $filtrePeriodes, $filtreSiteIds, $filtreProcessus, $filtreStatuts);
         $fraisDepensesParLivreur = self::fraisDepenses(

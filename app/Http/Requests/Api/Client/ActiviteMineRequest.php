@@ -2,8 +2,7 @@
 
 namespace App\Http\Requests\Api\Client;
 
-use App\Enums\StatutCommandeVente;
-use App\Enums\StatutTransfert;
+use App\Services\Client\Operations\OperationsCompte;
 use App\Support\Periodes\Periode;
 use App\Support\Periodes\PeriodeComptableFiltre;
 use Carbon\CarbonImmutable;
@@ -11,12 +10,10 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * Filtres de `GET /v1/mobile/activite` — historique complet (pas seulement
- * "en cours") mêlant deux modèles à vocabulaire de statut distinct
- * (CommandeVente vs TransfertLogistique). `statut` n'a de sens qu'accompagné
- * de `type` (sinon on ne sait pas contre quel enum le valider) — l'exiger
- * explicitement plutôt que d'inventer une correspondance entre les deux
- * vocabulaires ou d'ignorer silencieusement le filtre.
+ * Filtres de `GET /v1/mobile/activite`, la liste unique « Commandes » (ADR 0058).
+ * Aucun filtre sur le statut brut : il permettrait à un livreur de déduire le
+ * paiement d'une vente par essais successifs. `lien` restreint aux opérations vues
+ * à ce titre (client, livreur, propriétaire), côté serveur pour garder des totaux justes.
  *
  * `periode` (périodes rapides, résolues ici par Periode, jamais par le
  * navigateur) exclut `date_debut`/`date_fin` : 422 plutôt qu'un choix silencieux
@@ -41,27 +38,7 @@ class ActiviteMineRequest extends FormRequest
     {
         return [
             'type' => ['nullable', Rule::in(['vente', 'logistique'])],
-            'statut' => [
-                'nullable',
-                function ($attribute, $value, $fail) {
-                    if ($value === null) {
-                        return;
-                    }
-                    $type = $this->input('type');
-                    if ($type === null) {
-                        $fail('Le filtre "statut" nécessite de préciser "type" (vente ou logistique) : les deux modèles ont des statuts différents.');
-
-                        return;
-                    }
-                    $valides = array_column(
-                        $type === 'vente' ? StatutCommandeVente::cases() : StatutTransfert::cases(),
-                        'value'
-                    );
-                    if (! in_array($value, $valides, true)) {
-                        $fail('Statut invalide pour ce type.');
-                    }
-                },
-            ],
+            'lien' => ['nullable', Rule::in([OperationsCompte::LIEN_CLIENT, OperationsCompte::LIEN_LIVREUR, OperationsCompte::LIEN_PROPRIETAIRE])],
             'vehicule_id' => ['nullable', 'string'],
             'periode' => ['nullable', Rule::in(self::PERIODES), 'prohibits:date_debut,date_fin'],
             ...PeriodeComptableFiltre::regles(['periode', 'date_debut', 'date_fin']),
@@ -79,7 +56,7 @@ class ActiviteMineRequest extends FormRequest
 
         return [
             'type' => $this->input('type'),
-            'statut' => $this->input('statut'),
+            'lien' => $this->input('lien'),
             'vehicule_id' => $this->input('vehicule_id'),
             'periode' => $this->input('periode'),
             'annee' => $periodeComptable?->annee,

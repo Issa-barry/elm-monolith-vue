@@ -213,7 +213,7 @@ class PaiementFicheController extends Controller
         $query = PaiementFiche::where('organization_id', $orgId);
         if (! auth()->user()->voitToutesLesAgences()) {
             $siteIds = auth()->user()->sites()->pluck('sites.id')->all();
-            $query->whereIn('site_id', $siteIds);
+            $query->lisiblesPourSites($siteIds);
         }
         if ($type) {
             $query->where('beneficiaire_type', $type);
@@ -265,7 +265,7 @@ class PaiementFicheController extends Controller
 
         if (! auth()->user()->voitToutesLesAgences()) {
             $siteIds = auth()->user()->sites()->pluck('sites.id')->all();
-            $query->whereIn('site_id', $siteIds);
+            $query->lisiblesPourSites($siteIds);
         }
 
         $this->applyFilters($query, $filters);

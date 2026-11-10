@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -25,9 +27,9 @@ class EntrepriseTierce extends Model
     protected $table = 'entreprises_tierces';
 
     protected $fillable = [
-        'organization_id', 'raison_sociale', 'identifiant_fiscal',
-        'telephone', 'telephone_normalise', 'email',
-        'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse',
+        'organization_id', 'raison_sociale', 'nom_commercial', 'identifiant_fiscal', 'rccm',
+        'telephone', 'telephone_normalise', 'telephone_secondaire', 'email',
+        'pays', 'code_pays', 'code_phone_pays', 'ville', 'quartier', 'adresse', 'latitude', 'longitude',
         'contact_personne_id', 'is_active',
     ];
 
@@ -35,7 +37,30 @@ class EntrepriseTierce extends Model
     {
         return [
             'is_active' => 'boolean',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
         ];
+    }
+
+    /**
+     * La fiche Entreprise fait foi pour la raison sociale (ADR 0060, lot 5, D5) : quel que soit
+     * l'écran qui la modifie (Fournisseur, Prestataire, Propriétaire), la copie portée par les
+     * propriétaires reliés suit dans la même requête SQL. Les écrans qui modifient une entreprise le
+     * font dans une transaction, pour que les deux écritures réussissent ou échouent ensemble.
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (EntrepriseTierce $entreprise) {
+            if ($entreprise->wasChanged('raison_sociale')) {
+                Proprietaire::withTrashed()
+                    ->where('entreprise_tierce_id', $entreprise->id)
+                    ->update(['raison_sociale' => $entreprise->raison_sociale]);
+                // Lot 7b (L7-2) : la raison sociale est le nom principal du client professionnel.
+                Client::withTrashed()
+                    ->where('entreprise_tierce_id', $entreprise->id)
+                    ->update(['nom_complet' => $entreprise->raison_sociale]);
+            }
+        });
     }
 
     // ── Mutateurs ─────────────────────────────────────────────────────────────
@@ -68,9 +93,36 @@ class EntrepriseTierce extends Model
         return $this->hasMany(Prestataire::class);
     }
 
+    /** Au plus un, garanti par App\Services\Contacts\ProprietaireEntreprise (ADR 0060, lot 5). */
+    public function proprietaires(): HasMany
+    {
+        return $this->hasMany(Proprietaire::class);
+    }
+
+    /** Au plus un, garanti par App\Services\Contacts\ProprietaireEntreprise (ADR 0060, lot 7b). */
+    public function clients(): HasMany
+    {
+        return $this->hasMany(Client::class);
+    }
+
+    /** Catégories libres du référentiel Contacts (ADR 0060, lot 6a), sans effet métier. */
+    public function categoriesLibres(): BelongsToMany
+    {
+        return $this->belongsToMany(CategorieLibre::class, 'entreprise_contact_categories', 'entreprise_tierce_id', 'contact_categorie_id')
+            ->using(CategorieLibreAttribution::class)
+            ->withPivot(['id', 'created_by'])
+            ->withTimestamps();
+    }
+
     public function interlocuteurs(): HasMany
     {
         return $this->hasMany(EntrepriseInterlocuteur::class);
+    }
+
+    /** Au plus un, garanti par App\Services\Contacts\InterlocuteurService (ADR 0060). */
+    public function interlocuteurPrincipal(): HasOne
+    {
+        return $this->hasOne(EntrepriseInterlocuteur::class)->where('est_principal', true)->where('is_active', true);
     }
 
     /**

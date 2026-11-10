@@ -34,6 +34,7 @@ use App\Http\Controllers\Api\Client\LivraisonsEnCoursController;
 use App\Http\Controllers\Api\Client\ProfileController;
 use App\Http\Controllers\Api\Client\PropositionsVehicule\IndexPropositionVehiculeController;
 use App\Http\Controllers\Api\Client\PropositionsVehicule\StorePropositionVehiculeController;
+use App\Http\Controllers\Api\Client\ShowOperationController;
 use App\Http\Controllers\Api\Client\UpdateNotificationPreferencesController;
 use App\Http\Controllers\Api\Client\UpdateProfileController;
 use App\Http\Controllers\Api\Client\VehiculeCommissionsController;
@@ -235,6 +236,9 @@ Route::middleware('auth:sanctum')->group(function () {
             ->name('client.depenses.mine');
         Route::get('activite', ActiviteController::class)
             ->name('client.activite.mine');
+        Route::get('activite/{type}/{id}', ShowOperationController::class)
+            ->whereIn('type', ['vente', 'logistique'])
+            ->name('client.activite.show');
         Route::get('commandes/mine', IndexCommandeController::class)
             ->name('client.commandes.mine');
         Route::get('commandes/{commandeId}', ShowCommandeController::class)

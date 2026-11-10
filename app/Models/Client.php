@@ -18,6 +18,9 @@ class Client extends Model
         'organization_id',
         'user_id',
         'personne_id',
+        // Lot 7b (ADR 0060) : client professionnel relié à sa fiche Entreprise ; `personne_id` reste
+        // son contact, `nom_complet` porte alors la raison sociale (L7-2).
+        'entreprise_tierce_id',
         'nom',
         'prenom',
         'nom_complet',
@@ -93,6 +96,12 @@ class Client extends Model
     public function personne(): BelongsTo
     {
         return $this->belongsTo(Personne::class);
+    }
+
+    /** Fiche Entreprise d'un client professionnel (lot 7b, ADR 0060). */
+    public function entrepriseTierce(): BelongsTo
+    {
+        return $this->belongsTo(EntrepriseTierce::class);
     }
 
     public function vehicules(): HasMany

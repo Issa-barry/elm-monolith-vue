@@ -641,7 +641,7 @@ final class CommandeVenteFormBuilder
 
         $identiteCode = CommissionProcessusDefaults::identiteCodePourVente(
             $commande->nature_operation,
-            $commande->client?->type,
+            $commande->natureClient(),
             $commande->mode_remise_grossiste,
         );
         $processusIdentite = CommissionProcessusDefaults::resoudreOuCreer($commande->organization_id, $identiteCode);

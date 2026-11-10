@@ -22,6 +22,7 @@ use App\Models\Parrain;
 use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Services\Commission\AgencePayeuseCommissionService;
 use App\Services\Commission\FicheSiteResponsableService;
 use App\Support\Fiches\BeneficiaireFiche;
 use Illuminate\Support\Carbon;
@@ -586,9 +587,9 @@ class PeriodeCalculatorService
      * Mirroring calculerLivreurs() : pas de CommissionLogistiquePart (un site n'a jamais de
      * commission logistique), filtré par cible_type=site sur l'enveloppe pour rester cohérent
      * même si beneficiaire_type=site n'est aujourd'hui utilisé par aucun autre mécanisme. Le
-     * bénéficiaire de la fiche EST le site (jamais un employé/gérant) : le site facturé et le
-     * site à rattacher à la fiche sont donc toujours le même — pas besoin de
-     * resolveSitePrincipal()/accumulerSite() ici.
+     * bénéficiaire de la fiche EST le site (jamais un employé/gérant) : il est aussi son agence de
+     * rattachement — pas besoin de resolveSitePrincipal()/accumulerSite() ici. L'agence qui paie
+     * vient de la politique de paiement (ADR 0061).
      */
     private function calculerSites(PaiementPeriode $periode): int
     {
@@ -669,8 +670,8 @@ class PeriodeCalculatorService
      * courant change depuis) — filtré par cible_type=consultant sur l'enveloppe pour rester
      * cohérent même si beneficiaire_type=prestataire venait à couvrir un autre usage un jour. Un
      * consultant n'est rattaché à aucun site (désignation au niveau organisation, cf.
-     * CommissionConsultantAffectation) : $siteId est toujours null en pied de fiche, contrairement
-     * à calculerSites().
+     * CommissionConsultantAffectation) : aucune agence de rattachement, l'agence qui paie vient de
+     * la politique de paiement (ADR 0061), à défaut la trésorerie principale au décaissement.
      */
     private function calculerConsultants(PaiementPeriode $periode): int
     {
@@ -893,11 +894,11 @@ class PeriodeCalculatorService
     }
 
     /**
-     * Site à rattacher à la fiche d'un bénéficiaire livreur/propriétaire : l'agence de ses
-     * commissions est le site actuel de chaque véhicule (CommissionEnveloppe::siteResponsableId()),
-     * le site majoritaire en montant départageant un bénéficiaire passé sur deux véhicules
-     * d'agences différentes. Règle unique : FicheSiteResponsableService, qui réaligne aussi les
-     * fiches non payées quand un véhicule change de site.
+     * Agence de rattachement de la fiche d'un livreur, propriétaire ou parrain : le site actuel de
+     * chaque véhicule (CommissionEnveloppe::siteResponsableId()), le site majoritaire en montant
+     * départageant un bénéficiaire passé sur deux véhicules d'agences différentes. Règle unique :
+     * FicheSiteResponsableService, qui réaligne aussi les fiches non payées quand un véhicule
+     * change de site.
      *
      * @param  array<string, float>  $montantParSite
      */
@@ -907,7 +908,8 @@ class PeriodeCalculatorService
     }
 
     /**
-     * Crée la fiche ouverte d'un bénéficiaire (ADR 0010). Les lignes déjà portées par une de
+     * Crée la fiche ouverte d'un bénéficiaire (ADR 0010). $siteId est son agence de rattachement ;
+     * l'agence qui paie suit la politique de l'organisation (AgencePayeuseCommissionService, ADR 0061). Les lignes déjà portées par une de
      * ses fiches figées sont écartées ; s'il en reste, elles vont sur une fiche de rang
      * suivant (fiche complémentaire), rattachée à la fiche d'origine. Les déductions reportées
      * encore en attente pour ce bénéficiaire y sont imputées. Un solde négatif sur une fiche
@@ -955,7 +957,10 @@ class PeriodeCalculatorService
             'beneficiaire_nom' => $nom,
             'rang' => $estComplement ? (int) $figees->max('rang') + 1 : 1,
             'fiche_origine_id' => $estComplement ? $figees->sortBy('rang')->first()->id : null,
-            'site_id' => $siteId,
+            'site_id' => in_array($type, AgencePayeuseCommissionService::TYPES, true)
+                ? app(AgencePayeuseCommissionService::class)->sitePayeur($periode->organization_id, $type, $siteId)
+                : $siteId,
+            'site_rattachement_id' => $siteId,
             'montant_brut' => $brut,
             'total_deductions' => $deductions,
             'montant_net' => max(0, $net),

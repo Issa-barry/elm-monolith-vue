@@ -22,10 +22,15 @@ use App\Observers\BusinessProfileRoleObserver;
 use App\Observers\DepenseObserver;
 use App\Observers\RattachementAutomatiqueObserver;
 use App\Observers\VenteObserver;
+use App\Services\Commission\AgencePayeuseCommissionService;
 use App\Services\Communications\NullWhatsAppGateway;
 use App\Services\Rh\Paie\DonneesPaieRhService;
 use App\Services\Sms\NimbaSmsGateway;
+use App\Support\Database\Connexions\MariaDbConnexionGardee;
+use App\Support\Database\Connexions\MySqlConnexionGardee;
+use App\Support\Database\Connexions\SQLiteConnexionGardee;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -51,9 +56,19 @@ class AppServiceProvider extends ServiceProvider
         // contrôleurs.
         $this->app->bind(SmsGateway::class, NimbaSmsGateway::class);
 
+        // Une transaction annulée par la base (deadlock, connexion perdue) refuse toute requête
+        // suivante : une erreur masquée par un catch ne fait plus valider une opération à moitié
+        // (incident VTE-081126-134, cf. App\Support\Database\TransactionAnnulee).
+        Connection::resolverFor('mysql', fn ($pdo, $database, $prefix, $config) => new MySqlConnexionGardee($pdo, $database, $prefix, $config));
+        Connection::resolverFor('mariadb', fn ($pdo, $database, $prefix, $config) => new MariaDbConnexionGardee($pdo, $database, $prefix, $config));
+        Connection::resolverFor('sqlite', fn ($pdo, $database, $prefix, $config) => new SQLiteConnexionGardee($pdo, $database, $prefix, $config));
+
         // Frontière RH → Comptabilité de la paie (ADR 0040) : la Comptabilité lit la transmission
         // figée du mois, jamais les tables RH.
         $this->app->bind(SourceDonneesPaie::class, DonneesPaieRhService::class);
+
+        // Politique de paiement des commissions lue une fois par requête ou job (ADR 0061).
+        $this->app->scoped(AgencePayeuseCommissionService::class);
 
         // Fournisseur WhatsApp pour les notifications transactionnelles (cf.
         // App\Services\Communications\TransactionalCommunicationDispatcher) —

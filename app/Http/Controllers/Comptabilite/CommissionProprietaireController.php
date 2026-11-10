@@ -15,13 +15,13 @@ use App\Models\PaiementFichePaiement;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Services\Commission\AgencePayeuseCommissionService;
 use App\Services\Commission\FichePayableResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
 use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
 use App\Services\SavedFilterService;
-use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionPdfFooter;
@@ -42,8 +42,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CommissionProprietaireController extends Controller
 {
     private const DATE_FORMAT = 'd/m/Y';
-
-    public function __construct(private SiteScopeService $siteScope) {}
 
     /**
      * DataFilters envoie les champs select sous forme de tableau, y compris
@@ -82,7 +80,6 @@ class CommissionProprietaireController extends Controller
 
         $toutesAgences = $user->voitToutesLesAgences();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
-        $siteIds = ! $toutesAgences ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $query = CommissionEnveloppePart::with([
@@ -96,14 +93,15 @@ class CommissionProprietaireController extends Controller
                 CommissionPeriodeFilter::appliquer($q, $filtrePeriodes, 'earned_at');
             });
 
-        // Agence = celle qui paie la commission (site actuel du véhicule), jamais le site où la
-        // vente a eu lieu — cf. CommissionEnveloppe::siteResponsableId().
+        // Agence = agence de rattachement (site actuel du véhicule), jamais le site où la vente a eu
+        // lieu — cf. CommissionEnveloppe::siteResponsableId(). L'agence qui paie toutes les fiches
+        // propriétaire voit tout ; les autres lisent les commissions de leurs véhicules (ADR 0061).
+        $perimetre = app(AgencePayeuseCommissionService::class)->perimetreLecture($user, 'proprietaire');
         if ($toutesAgences && ! empty($filtreSiteIds)) {
             CommissionSiteResponsableFilter::appliquer($query, $filtreSiteIds);
-        } elseif (! $toutesAgences) {
-            // Pour un non-admin, une collection vide signifie qu'aucun site n'est accessible ;
-            // l'absence de restriction reste exclusivement reservee aux administrateurs.
-            CommissionSiteResponsableFilter::appliquer($query, $siteIds);
+        } elseif (! $toutesAgences && $perimetre !== null) {
+            // Pour un non-admin, une collection vide signifie qu'aucun site n'est accessible.
+            CommissionSiteResponsableFilter::appliquer($query, $perimetre);
         }
 
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
@@ -691,10 +689,11 @@ class CommissionProprietaireController extends Controller
         $filtreStatuts = CommissionStatutFilter::normaliser($request->input('statut', []));
         $filtreNom = trim((string) $request->input('nom', ''));
         $filtreTelephone = trim((string) $request->input('telephone', ''));
+        $perimetre = app(AgencePayeuseCommissionService::class)->perimetreLecture($user, 'proprietaire');
         $filtreSiteIds = $user->voitToutesLesAgences()
             ? array_values(array_filter((array) $request->input('site_ids', [])))
-            : $this->siteScope->accessibleSiteIds($user)->all();
-        $restreindreAuxSites = ! $user->voitToutesLesAgences() || ! empty($filtreSiteIds);
+            : ($perimetre ?? []);
+        $restreindreAuxSites = $user->voitToutesLesAgences() ? ! empty($filtreSiteIds) : $perimetre !== null;
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(
@@ -744,10 +743,11 @@ class CommissionProprietaireController extends Controller
         $filtreStatuts = CommissionStatutFilter::normaliser($request->input('statut', []));
         $filtreNom = trim((string) $request->input('nom', ''));
         $filtreTelephone = trim((string) $request->input('telephone', ''));
+        $perimetre = app(AgencePayeuseCommissionService::class)->perimetreLecture($user, 'proprietaire');
         $filtreSiteIds = $user->voitToutesLesAgences()
             ? array_values(array_filter((array) $request->input('site_ids', [])))
-            : $this->siteScope->accessibleSiteIds($user)->all();
-        $restreindreAuxSites = ! $user->voitToutesLesAgences() || ! empty($filtreSiteIds);
+            : ($perimetre ?? []);
+        $restreindreAuxSites = $user->voitToutesLesAgences() ? ! empty($filtreSiteIds) : $perimetre !== null;
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(

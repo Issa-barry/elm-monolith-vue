@@ -287,7 +287,8 @@ class PaiementPeriodeController extends Controller
                 'valider' => auth()->user()->can('gererValidation', $periode),
                 'cloturer' => auth()->user()->can('cloturer', $periode),
                 'delete' => auth()->user()->can('delete', $periode),
-                'ajuster' => auth()->user()->can('ajuster', $periode),
+                // Gate::before du super administrateur : l'état de la période est revérifié ici.
+                'ajuster' => auth()->user()->can('ajuster', $periode) && $periode->isCalculee(),
             ],
         ]);
     }

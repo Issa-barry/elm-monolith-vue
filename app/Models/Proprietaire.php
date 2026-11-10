@@ -25,10 +25,14 @@ class Proprietaire extends Model
     // jamais de colonne équivalente ici, cf. accesseurs ci-dessous. `raison_sociale` reste ici
     // (pas sur Personne, partagée avec User/Employe/Livreur) : seul un Proprietaire peut être
     // une entreprise, `personne_id` désigne alors son contact (nom/téléphone), pas l'entreprise.
+    // Lot 5 du référentiel Contacts (ADR 0060) : l'entreprise est la fiche `entreprise_tierce_id`,
+    // qui fait foi pour la raison sociale ; `raison_sociale` en est la copie synchronisée, lue
+    // partout (nom_affichage, espace client, exports).
     protected $fillable = [
         'organization_id',
         'user_id',
         'personne_id',
+        'entreprise_tierce_id',
         'type',
         'raison_sociale',
         'is_active',
@@ -128,6 +132,12 @@ class Proprietaire extends Model
     public function personne(): BelongsTo
     {
         return $this->belongsTo(Personne::class);
+    }
+
+    /** Fiche Entreprise d'un propriétaire de type entreprise (lot 5, ADR 0060). */
+    public function entrepriseTierce(): BelongsTo
+    {
+        return $this->belongsTo(EntrepriseTierce::class);
     }
 
     public function user(): BelongsTo

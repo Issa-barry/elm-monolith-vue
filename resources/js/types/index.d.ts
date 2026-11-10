@@ -59,6 +59,7 @@ export type StandalonePermission =
     | 'tresorerie.valider_supports'
     | 'tresorerie.supprimer_supports'
     | 'tresorerie.designer_principale'
+    | 'commissions.configurer_agences_payeuses'
     | 'encaissements.surveiller'
     | 'encaissements.traiter_anomalies'
     | 'rapports.read_own'
@@ -83,7 +84,12 @@ export type StandalonePermission =
     | 'rh-transmissions-paie.valider'
     | 'rh-transmissions-paie.transmettre'
     | 'parrains.read'
-    | 'rattachements-comptes.gerer';
+    | 'rattachements-comptes.gerer'
+    | 'contacts.read'
+    | 'contacts.create'
+    | 'contacts.update'
+    | 'contacts.gerer_categories'
+    | 'contacts.gerer_interlocuteurs';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**
@@ -137,7 +143,10 @@ export interface NavItem {
     isActive?: boolean;
     badge?: number;
     items?: NavItem[];
-    /** Groupe fonctionnel affiché comme label de section dans la sidebar (top-level uniquement). */
+    /**
+     * Groupe fonctionnel affiché comme label de section : dans la sidebar pour un lien de premier
+     * niveau, comme intertitre du sous-menu pour un sous-lien (ex. « Par fonction », lot 8 Contacts).
+     */
     group?: string;
 }
 

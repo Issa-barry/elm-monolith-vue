@@ -6,12 +6,14 @@ import { paysOptionsByName } from '@/lib/pays';
 import { Save } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
+import MultiSelect from 'primevue/multiselect';
 import Textarea from 'primevue/textarea';
 import { computed } from 'vue';
 
 interface Option {
     value: string;
     label: string;
+    actif?: boolean;
 }
 
 const PAYS_OPTIONS = paysOptionsByName;
@@ -31,9 +33,12 @@ export interface FormData {
     pays: string;
     ville: string | null;
     adresse: string | null;
-    type: string;
+    /** Lot 6b (ADR 0060) : qualifications du référentiel (ids), au moins une active. */
+    qualification_ids: string[];
     notes: string | null;
     is_active: boolean;
+    /** Ancien champ, toujours vide : son erreur (« au moins une qualification ») s'affiche sous Qualifications. */
+    type: string | null;
 }
 
 const props = defineProps<{
@@ -141,24 +146,47 @@ function onPhoneInput(value: string | null | undefined) {
                     </div>
                 </div>
 
-                <!-- Type -->
+                <!-- Qualifications (lot 6b) -->
                 <div class="sm:col-span-2">
-                    <Label class="mb-1.5 block"
-                        >Type <span class="text-destructive">*</span></Label
+                    <Label for="qualification_ids" class="mb-1.5 block"
+                        >Qualifications
+                        <span class="text-destructive">*</span></Label
                     >
-                    <Dropdown
-                        :model-value="form.type"
+                    <MultiSelect
+                        input-id="qualification_ids"
+                        :model-value="form.qualification_ids"
                         @update:model-value="
-                            $emit('update:form', { ...form, type: $event })
+                            $emit('update:form', {
+                                ...form,
+                                qualification_ids: $event ?? [],
+                            })
                         "
                         :options="types"
                         option-label="label"
                         option-value="value"
+                        :option-disabled="
+                            (o: Option) =>
+                                o.actif === false &&
+                                !form.qualification_ids.includes(o.value)
+                        "
+                        display="chip"
+                        placeholder="Choisir une ou plusieurs qualifications"
                         class="w-full"
-                        :class="{ 'p-invalid': errors.type }"
+                        :class="{
+                            'p-invalid':
+                                errors.qualification_ids || errors.type,
+                        }"
+                        data-testid="prestataire-qualifications"
                     />
-                    <p v-if="errors.type" class="mt-1 text-xs text-destructive">
-                        {{ errors.type }}
+                    <p
+                        v-if="errors.qualification_ids || errors.type"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.qualification_ids ?? errors.type }}
+                    </p>
+                    <p v-else class="mt-1 text-xs text-muted-foreground">
+                        Seule la qualification Consultant ouvre les commissions
+                        consultant ; les autres sont descriptives.
                     </p>
                 </div>
 

@@ -64,6 +64,14 @@ const LIEN_ACTIF = 'data-[active=true]:font-bold';
 // Pas de trait vertical sur les sous-menus (absent d'Apollo) ; l'indentation suffit.
 const SOUS_MENU = 'gap-0 border-l-0';
 
+/** Intertitre d'un sous-menu : affiché quand le groupe change par rapport au lien précédent. */
+function intertitre(items: NavItem[], index: number): string | null {
+    const groupe = items[index].group ?? null;
+    return groupe !== null && items[index - 1]?.group !== groupe
+        ? groupe
+        : null;
+}
+
 function parentBadge(item: NavItem): number | undefined {
     const total = item.items?.reduce((sum, s) => sum + (s.badge ?? 0), 0) ?? 0;
     return total > 0 ? total : undefined;
@@ -122,9 +130,16 @@ function parentBadge(item: NavItem): number | undefined {
 
             <SidebarMenuSub v-if="isMenuOpen(item)" :class="SOUS_MENU">
                 <SidebarMenuSubItem
-                    v-for="subItem in item.items"
+                    v-for="(subItem, index) in item.items"
                     :key="`${item.title}-${subItem.title}`"
                 >
+                    <p
+                        v-if="intertitre(item.items!, index)"
+                        class="px-2 pt-3 pb-1 text-[11px] font-semibold tracking-wider text-sidebar-foreground/60 uppercase"
+                        data-testid="sous-menu-intertitre"
+                    >
+                        {{ intertitre(item.items!, index) }}
+                    </p>
                     <template v-if="subItem.items?.length">
                         <SidebarMenuSubButton
                             as="button"

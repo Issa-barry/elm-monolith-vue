@@ -2,7 +2,10 @@
 
 namespace Tests;
 
+use App\Support\Database\TransactionAnnulee;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use RuntimeException;
 
@@ -12,6 +15,11 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
         $this->withoutMiddleware(ValidateCsrfToken::class);
+
+        // La transaction d'enveloppe de RefreshDatabase n'est pas une opération métier : la garde
+        // des transactions annulées s'applique au-dessus (cf. App\Support\Database\TransactionAnnulee).
+        $traits = class_uses_recursive(static::class);
+        TransactionAnnulee::$niveauRacine = isset($traits[RefreshDatabase::class]) || isset($traits[DatabaseTransactions::class]) ? 1 : 0;
     }
 
     /**

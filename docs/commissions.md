@@ -798,7 +798,15 @@ COMMISSION qui change.
   source unique partagée par `CommissionEnveloppeGenerator::genererPourCommandeVente()` ET
   `CommandeVenteFormBuilder::ensurePartageLivraisonCategorieConfigure()`) :
   - `nature_operation = distribution_client` → `CODE_DISTRIBUTION_CLIENT`, priorité, inchangé.
-  - `client.type = GROSSISTE` **ET** `mode_remise_grossiste = LIVRAISON` → `CODE_TRANSFERT_GROSSISTE`.
+  - nature du client **de la commande** `= GROSSISTE` **ET** `mode_remise_grossiste = LIVRAISON` →
+    `CODE_TRANSFERT_GROSSISTE`. Depuis le 09/11/2026 (référentiel Contacts, lot 7c, D12 à D14 —
+    [contacts.md](contacts.md), CONTACT-042), la nature lue est `commandes_ventes.nature_client`,
+    enregistrée à la création de la commande (`CommandeVente::natureClient()`), et non plus la
+    nature actuelle du client : une commission générée ou relancée après un changement de nature du
+    client garde le processus de la commande. Commandes antérieures (colonne vide) : repli sur la
+    nature actuelle du client, comportement d'avant inchangé (D13). Même lecture pour le suivi des
+    commissions non générées, la liste et l'export des ventes, l'écran de modification et les
+    précommandes.
   - **Grossiste + Enlèvement reste sur `CODE_VENTE`**, décision produit explicite du 05/09/2026 :
     Transfert grossiste ne s'applique qu'aux véhicules d'usage Grossiste — un Enlèvement
     n'a structurellement aucun véhicule/équipe, la question ne se pose donc pas. Ne pas généraliser.
@@ -1275,10 +1283,15 @@ Cf. [ADR 0006](adr/0006-partage-livreur-conforme-et-regularisation.md).
 - Seule une période `CALCULEE` accepte la validation de véhicules — vérifié aussi dans le
   contrôleur (et plus seulement par la policy `ajuster`), car le super administrateur court-circuite
   les policies (`Gate::before`). Même garde ajoutée sur `validerVehicule`.
+- **Ajustement (07/11/2026)** : même garde sur toutes les actions d'ajustement liées à une période
+  (écran d'ajustement d'un véhicule → 403 ; `ajusterGroupe`, `ajusterMultiple`, `absenceGroupe`,
+  `remplacant`, `validerLot` → refus avec message). Avant, le super administrateur voyait encore
+  « Ajuster » sur une période validée et pouvait y modifier des montants. `can.ajuster` de
+  `PaiementPeriodeController::show()` exige désormais aussi une période calculée.
 - Visibilité : cases et boutons affichés uniquement si `can.ajuster` et période calculée ; seules
   les lignes « À vérifier » / « À revérifier » équilibrées sont sélectionnables.
 - Tests : `tests/Feature/Comptabilite/CommissionAjustementVenteTest.php`
-  (`valider_vehicules_en_masse_*`).
+  (`valider_vehicules_en_masse_*`, `ajuster_une_periode_validee_est_refuse_meme_pour_le_super_admin`).
 
 ### Validation d'une grande sélection (01/11/2026)
 
@@ -1673,10 +1686,48 @@ fiche de paiement partait vers le site majoritaire des ventes de la quinzaine.
   commissions des véhicules de son agence, et ne voit plus celles des ventes faites chez lui par
   un véhicule d'une autre agence. Le site de chaque vente reste visible dans le détail d'un bénéficiaire et
   dans les sites contributeurs d'un véhicule (écran Propriétaires).
-- **Hors règle** : les commissions de la cible **Site** restent dues au site de la vente.
+- **Hors règle** : les commissions de la cible **Site** restent dues au site de la vente (bénéficiaire) ;
+  leur agence payeuse suit la politique de l'ADR 0061.
 - **Rattrapage** : `php artisan commissions:realigner-sites-fiches` liste les fiches non payées
   calculées avant la règle dont l'agence doit changer ; `--appliquer` les corrige.
 - Tests : `tests/Feature/Comptabilite/CommissionSiteResponsableVehiculeTest.php`.
+
+> **Amendé le 07/11/2026 (ADR 0061)** : le site du véhicule est désormais l'agence de
+> **rattachement** de la fiche. L'agence qui **paie** suit la politique de paiement ci-dessous ; par
+> défaut, seuls les livreurs restent payés par l'agence du véhicule.
+
+## Agences payeuses des commissions — politique configurable (07/11/2026, ADR 0061)
+
+Voir [ADR 0061](adr/0061-agences-payeuses-des-commissions.md). Décision : Matoto (trésorerie
+principale) paie tous les bénéficiaires sauf les livreurs, réglable dans **Paramètres → Agences
+payeuses** (permission `commissions.configurer_agences_payeuses`, super administrateur par défaut).
+
+| Bénéficiaire | Règle par défaut | Agence payeuse par défaut |
+| ------------ | ---------------- | ------------------------- |
+| Propriétaire | Agence centralisée | Trésorerie principale (Matoto) |
+| Consultant | Agence centralisée | Trésorerie principale (Matoto) |
+| Parrain | Agence centralisée | Trésorerie principale (Matoto) |
+| Site | Agence centralisée | Trésorerie principale (Matoto) |
+| Livreur | Agence de rattachement | Agence du véhicule |
+
+- **Règles possibles par catégorie** : agence centralisée (une seule agence commune ; vide = la
+  trésorerie principale), agence de rattachement (véhicule ; site bénéficiaire pour une commission
+  Site ; aucune pour un consultant), ou une autre agence choisie.
+- **Deux agences par fiche** : l'agence qui paie (`site_id`) et l'agence de rattachement
+  (`site_rattachement_id`). La colonne **Agence** des écrans Livreurs et Propriétaires reste
+  l'agence de rattachement (agence du véhicule).
+- **Lecture / paiement** : l'agence de rattachement lit les commissions et les fiches ; seule l'agence
+  payeuse (ou un compte « toutes agences ») voit **Payer**. Les responsables de l'agence qui paie
+  une catégorie entière voient toutes ses commissions (écrans Propriétaires, Livreurs, Sites).
+- **Changement de politique** : les fiches non entièrement payées passent aussitôt à la nouvelle
+  agence payeuse (reste dû et charge déplacés en comptabilité si la fiche est constatée) ; les fiches
+  payées et les paiements faits ne bougent pas. Chaque changement est historisé.
+- **Véhicule réaffecté** : l'agence de rattachement suit le véhicule ; l'agence payeuse ne change que
+  pour une catégorie réglée sur « agence de rattachement ».
+- **Financement / Remises** : le besoin des catégories centralisées est compté à l'agence centralisée.
+- **Bascule des fiches existantes** : `php artisan commissions:realigner-sites-fiches` (aperçu), puis
+  `--appliquer`.
+- Tests : `tests/Feature/Comptabilite/AgencesPayeusesCommissionsTest.php`.
 
 ## Part du parrain dans l'enveloppe Livreur (21/10/2026, ADR 0035)
 

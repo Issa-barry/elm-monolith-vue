@@ -5,25 +5,30 @@ namespace App\Services\Client\Data;
 use JsonSerializable;
 
 /**
- * Une ligne de `Api\Client\ActiviteController` (vente ou transfert logistique
- * — même forme pour les deux, cf. `ActiviteController::ventes()`/`transferts()`).
- * `dateSort` sert uniquement au tri interne (fusion + tri des deux sources
- * avant pagination) — volontairement absent de `jsonSerialize()`, jamais
- * exposé (remplace l'ancien `unset($row['date_sort'])` fait à la main après
- * pagination).
+ * Une ligne de la liste « Commandes » (`Api\Client\ActiviteController`), vente ou transfert logistique
+ * (ADR 0058). `nature` dit ce qu'est l'opération, `liens` pourquoi ce compte la voit, `avancement` où
+ * elle en est. `statutPaiement` reste à part, et vaut null pour un transfert, une vente sans facture
+ * ou un compte seulement livreur.
  *
- * Vente : `statutLabel` est le libellé affiché au back-office
- * (`CommandeVente::statutAffichage()`), `statutPaiement` celui de la facture.
- * Logistique : aucun paiement, les deux champs de paiement valent null.
+ * `statut` et `statut_label` répètent `avancement` le temps du déploiement : le front déjà en ligne les
+ * lit encore. Ils ne portent jamais le statut brut, qui révélerait le paiement à un livreur.
+ *
+ * `dateSort` sert uniquement au tri interne, jamais exposé.
  */
 final class ActiviteRow implements JsonSerializable
 {
+    /**
+     * @param  array{code: string, label: string}  $nature
+     * @param  list<string>  $liens
+     * @param  array{code: string, label: string}  $avancement
+     */
     public function __construct(
         public readonly string $id,
         public readonly string $type,
         public readonly string $reference,
-        public readonly ?string $statut,
-        public readonly ?string $statutLabel,
+        public readonly array $nature,
+        public readonly array $liens,
+        public readonly array $avancement,
         public readonly string $siteSource,
         public readonly string $siteDestination,
         public readonly ?VehiculeSummary $vehicule,
@@ -40,8 +45,11 @@ final class ActiviteRow implements JsonSerializable
             'id' => $this->id,
             'type' => $this->type,
             'reference' => $this->reference,
-            'statut' => $this->statut,
-            'statut_label' => $this->statutLabel,
+            'nature' => $this->nature,
+            'liens' => $this->liens,
+            'avancement' => $this->avancement,
+            'statut' => $this->avancement['code'],
+            'statut_label' => $this->avancement['label'],
             'statut_paiement' => $this->statutPaiement,
             'statut_paiement_label' => $this->statutPaiementLabel,
             'site_source' => $this->siteSource,

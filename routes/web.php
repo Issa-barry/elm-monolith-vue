@@ -89,6 +89,32 @@ use App\Http\Controllers\Comptabilite\SituationTresorerieController;
 use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\Comptabilite\TransfererMobileMoneyAgentController;
 use App\Http\Controllers\Comptabilite\VerserCaisseAgentController;
+use App\Http\Controllers\Contacts\Categories\AttribuerCategoriesEntrepriseController;
+use App\Http\Controllers\Contacts\Categories\AttribuerCategoriesPersonneController;
+use App\Http\Controllers\Contacts\Categories\IndexCategoriesController;
+use App\Http\Controllers\Contacts\Categories\OrdonnerCategoriesController;
+use App\Http\Controllers\Contacts\Categories\StoreCategorieLibreController;
+use App\Http\Controllers\Contacts\Categories\StoreSousCategorieController;
+use App\Http\Controllers\Contacts\Categories\UpdateCategorieLibreController;
+use App\Http\Controllers\Contacts\Categories\UpdateSousCategorieController;
+use App\Http\Controllers\Contacts\CreateContactController;
+use App\Http\Controllers\Contacts\Entreprises\IndexEntrepriseController;
+use App\Http\Controllers\Contacts\Entreprises\ShowEntrepriseController;
+use App\Http\Controllers\Contacts\Entreprises\StoreEntrepriseController;
+use App\Http\Controllers\Contacts\Entreprises\StoreFonctionEntrepriseController;
+use App\Http\Controllers\Contacts\Entreprises\UpdateEntrepriseController;
+use App\Http\Controllers\Contacts\Interlocuteurs\DefinirPrincipalInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\DesactiverInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\ReactiverInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\RechercheTelephoneInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\StoreInterlocuteurController;
+use App\Http\Controllers\Contacts\Interlocuteurs\UpdateInterlocuteurController;
+use App\Http\Controllers\Contacts\Personnes\IndexPersonneController;
+use App\Http\Controllers\Contacts\Personnes\ShowPersonneController;
+use App\Http\Controllers\Contacts\Personnes\StoreFonctionPersonneController;
+use App\Http\Controllers\Contacts\Personnes\StorePersonneController;
+use App\Http\Controllers\Contacts\Personnes\UpdatePersonneController;
+use App\Http\Controllers\Contacts\RechercheTelephoneContactController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\Depenses\CommandesCarburantDepenseController;
 use App\Http\Controllers\Depenses\ConcerneDetailDepenseController;
@@ -190,6 +216,7 @@ use App\Http\Controllers\Produits\Variantes\IndexProduitVarianteController;
 use App\Http\Controllers\Produits\Variantes\UpdateProduitVarianteController;
 use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ProprietaireController;
+use App\Http\Controllers\Proprietaires\EntreprisesCorrespondantesController;
 use App\Http\Controllers\Rapports\ExportRapportActiviteController;
 use App\Http\Controllers\Rapports\IndexMaSituationController;
 use App\Http\Controllers\Rapports\IndexRapportActiviteController;
@@ -454,6 +481,10 @@ Route::prefix('backoffice')->group(function () {
         Route::get('clients/verifier-telephone', VerifierTelephoneClientController::class)
             ->name('clients.verifier-telephone');
         Route::get('clients', IndexClientController::class)->name('clients.index');
+        // Lot 7b (ADR 0060) : recherche des entreprises d'un client professionnel, avant {client}.
+        Route::get('clients/entreprises-correspondantes', EntreprisesCorrespondantesController::class)
+            ->defaults('fonction', 'client')
+            ->name('clients.entreprises-correspondantes');
         Route::get('clients/create', CreateClientController::class)->name('clients.create');
         Route::post('clients', StoreClientController::class)->name('clients.store');
         Route::get('clients/{client}', ShowClientController::class)->name('clients.show');
@@ -477,6 +508,48 @@ Route::prefix('backoffice')->group(function () {
             ->name('clients.vehicules.update');
         Route::delete('clients/{client}/vehicules/{vehicule}', DestroyVehiculeClientController::class)
             ->name('clients.vehicules.destroy');
+
+        // Référentiel Contacts (ADR 0060, lot 2) — lecture seule. Permission et visibilité
+        // (organisation, fonctions lisibles, périmètre d'agences des parrains) vérifiées par les
+        // contrôleurs.
+        Route::get('contacts/personnes', IndexPersonneController::class)->name('contacts.personnes.index');
+        Route::get('contacts/personnes/{personne}', ShowPersonneController::class)->name('contacts.personnes.show');
+        Route::get('contacts/entreprises', IndexEntrepriseController::class)->name('contacts.entreprises.index');
+        Route::get('contacts/entreprises/{entreprise}', ShowEntrepriseController::class)->name('contacts.entreprises.show');
+
+        // Lot 3 — création « téléphone d'abord » et ajout explicite d'une fonction (ADR 0060).
+        // contacts.create + permission et module de la fonction ; visibilité vérifiée par les contrôleurs.
+        Route::get('contacts/nouveau', CreateContactController::class)->name('contacts.create');
+        Route::get('contacts/recherche-telephone', RechercheTelephoneContactController::class)->name('contacts.recherche-telephone');
+        Route::post('contacts/personnes', StorePersonneController::class)->name('contacts.personnes.store');
+        Route::post('contacts/entreprises', StoreEntrepriseController::class)->name('contacts.entreprises.store');
+        Route::post('contacts/personnes/{personne}/fonctions', StoreFonctionPersonneController::class)->name('contacts.personnes.fonctions.store');
+        Route::post('contacts/entreprises/{entreprise}/fonctions', StoreFonctionEntrepriseController::class)->name('contacts.entreprises.fonctions.store');
+
+        // Lot 4 — interlocuteurs d'une entreprise (ADR 0060). contacts.gerer_interlocuteurs ; entreprise
+        // visible vérifiée par les contrôleurs ; scopeBindings : un interlocuteur d'une autre entreprise répond 404.
+        Route::scopeBindings()->prefix('contacts/entreprises/{entreprise}/interlocuteurs')->name('contacts.entreprises.interlocuteurs.')->group(function () {
+            Route::get('recherche-telephone', RechercheTelephoneInterlocuteurController::class)->name('recherche-telephone');
+            Route::post('/', StoreInterlocuteurController::class)->name('store');
+            Route::patch('{interlocuteur}', UpdateInterlocuteurController::class)->name('update');
+            Route::post('{interlocuteur}/principal', DefinirPrincipalInterlocuteurController::class)->name('principal');
+            Route::post('{interlocuteur}/desactiver', DesactiverInterlocuteurController::class)->name('desactiver');
+            Route::post('{interlocuteur}/reactiver', ReactiverInterlocuteurController::class)->name('reactiver');
+        });
+
+        // Lot 6a — catégories de contacts (ADR 0060). Écran : contacts.gerer_categories ;
+        // attribution des catégories libres : contacts.update et fiche visible (contrôleurs).
+        Route::get('contacts/categories', IndexCategoriesController::class)->name('contacts.categories.index');
+        Route::post('contacts/categories/sous-categories', StoreSousCategorieController::class)->name('contacts.categories.sous-categories.store');
+        Route::patch('contacts/categories/sous-categories/{sousCategorie}', UpdateSousCategorieController::class)->name('contacts.categories.sous-categories.update');
+        Route::post('contacts/categories/libres', StoreCategorieLibreController::class)->name('contacts.categories.libres.store');
+        Route::patch('contacts/categories/libres/{categorieLibre}', UpdateCategorieLibreController::class)->name('contacts.categories.libres.update');
+        Route::post('contacts/categories/ordre', OrdonnerCategoriesController::class)->name('contacts.categories.ordre');
+        // Lot 7a — identité d'une fiche (contacts.update, fiche visible vérifiée par les contrôleurs).
+        Route::patch('contacts/personnes/{personne}', UpdatePersonneController::class)->name('contacts.personnes.update');
+        Route::patch('contacts/entreprises/{entreprise}', UpdateEntrepriseController::class)->name('contacts.entreprises.update');
+        Route::put('contacts/personnes/{personne}/categories', AttribuerCategoriesPersonneController::class)->name('contacts.personnes.categories.update');
+        Route::put('contacts/entreprises/{entreprise}/categories', AttribuerCategoriesEntrepriseController::class)->name('contacts.entreprises.categories.update');
 
         // ── Module : PDV ──────────────────────────────────────────────────────────
         // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune
@@ -657,6 +730,10 @@ Route::prefix('backoffice')->group(function () {
             Route::get('parrains/{parrain}/compte/candidat', [CompteParrainController::class, 'candidat'])->name('parrains.compte.candidat');
             Route::post('parrains/{parrain}/compte', [CompteParrainController::class, 'store'])->name('parrains.compte.store');
             Route::delete('parrains/{parrain}/compte', [CompteParrainController::class, 'destroy'])->name('parrains.compte.destroy');
+            // Lot 5 du référentiel Contacts (ADR 0060) : déclarée avant la ressource (joker {proprietaire}).
+            Route::get('proprietaires/entreprises-correspondantes', EntreprisesCorrespondantesController::class)
+                ->defaults('fonction', 'proprietaire')
+                ->name('proprietaires.entreprises-correspondantes');
             Route::resource('proprietaires', ProprietaireController::class);
             Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])
                 ->name('proprietaires.definir-interne');
@@ -1226,6 +1303,7 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Recherche globale (dashboard — session auth) ──────────────────────
         Route::get('search/global', GlobalSearchController::class)
+            ->defaults('regrouper_contacts', true)
             ->name('search.global');
     });
 });

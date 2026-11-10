@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import RattachementEntreprise, {
+    type EntrepriseReliee,
+} from '@/components/contacts/RattachementEntreprise.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -34,6 +37,11 @@ interface FormData {
     code_pays: string | null;
     code_phone_pays: string | null;
     is_active: boolean;
+    // Lot 5 (ADR 0060) : fiche Entreprise du propriétaire entreprise.
+    telephone_entreprise: string | null;
+    identifiant_fiscal: string | null;
+    entreprise_choix: string | null;
+    confirmer_modification_entreprise?: boolean;
 }
 
 const props = defineProps<{
@@ -42,11 +50,17 @@ const props = defineProps<{
     processing: boolean;
     backHref?: string;
     typeOptions: TypeOption[];
+    entreprise?: EntrepriseReliee | null;
+    proprietaireId?: string | null;
 }>();
 
 const isEntreprise = computed(() => props.form.type === 'entreprise');
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
+
+function maj(champs: Partial<FormData> | Record<string, unknown>) {
+    emit('update:form', { ...props.form, ...champs });
+}
 
 const selectedCountry = computed(() =>
     PAYS_OPTIONS.find((c) => c.code === props.form.code_pays),
@@ -151,31 +165,18 @@ function onTelephoneInput(value: string | null | undefined) {
                 {{ isEntreprise ? 'Entreprise' : 'Identité' }}
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
-                <div v-if="isEntreprise" class="sm:col-span-2">
-                    <Label for="raison_sociale" class="mb-1.5 block"
-                        >Raison sociale
-                        <span class="text-destructive">*</span></Label
-                    >
-                    <InputText
-                        id="raison_sociale"
-                        data-testid="raison-sociale-input"
-                        :model-value="form.raison_sociale ?? ''"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                raison_sociale: $event || null,
-                            })
-                        "
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.raison_sociale }"
-                    />
-                    <p
-                        v-if="errors.raison_sociale"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.raison_sociale }}
-                    </p>
-                </div>
+                <RattachementEntreprise
+                    v-if="isEntreprise"
+                    :valeurs="form"
+                    :errors="errors"
+                    :entreprise="entreprise ?? null"
+                    url-recherche="/backoffice/proprietaires/entreprises-correspondantes"
+                    :parametres="
+                        proprietaireId ? { proprietaire: proprietaireId } : {}
+                    "
+                    libelle-deja-pris="Déjà propriétaire"
+                    @maj="maj"
+                />
                 <template v-if="!isEntreprise">
                     <div>
                         <Label for="prenom" class="mb-1.5 block"
@@ -394,7 +395,9 @@ function onTelephoneInput(value: string | null | undefined) {
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
                     <Label for="telephone" class="mb-1.5 block"
-                        >Téléphone
+                        >{{
+                            isEntreprise ? 'Téléphone du contact' : 'Téléphone'
+                        }}
                         <span class="text-destructive">*</span></Label
                     >
                     <div class="flex gap-2">

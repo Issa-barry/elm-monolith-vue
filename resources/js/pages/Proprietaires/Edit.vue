@@ -27,10 +27,21 @@ interface ProprietaireData {
     code_pays: string | null;
     code_phone_pays: string | null;
     is_active: boolean;
+    telephone_entreprise: string | null;
+    identifiant_fiscal: string | null;
+}
+
+interface EntrepriseReliee {
+    id: string;
+    raison_sociale: string;
+    partagee: boolean;
+    peut_modifier_identite: boolean;
+    lien: string | null;
 }
 
 const props = defineProps<{
     proprietaire: ProprietaireData;
+    entreprise: EntrepriseReliee | null;
     type_proprietaire_options: TypeOption[];
 }>();
 const page = usePage();
@@ -61,6 +72,10 @@ const form = useForm({
     code_pays: props.proprietaire.code_pays,
     code_phone_pays: props.proprietaire.code_phone_pays,
     is_active: Boolean(props.proprietaire.is_active),
+    telephone_entreprise: props.proprietaire.telephone_entreprise,
+    identifiant_fiscal: props.proprietaire.identifiant_fiscal,
+    entreprise_choix: null as string | null,
+    confirmer_modification_entreprise: false,
 });
 
 watch(
@@ -80,6 +95,10 @@ watch(
             code_pays: p.code_pays,
             code_phone_pays: p.code_phone_pays,
             is_active: Boolean(p.is_active),
+            telephone_entreprise: p.telephone_entreprise,
+            identifiant_fiscal: p.identifiant_fiscal,
+            entreprise_choix: null,
+            confirmer_modification_entreprise: false,
         }).reset();
     },
 );
@@ -151,6 +170,9 @@ function submit() {
                 :processing="form.processing"
                 :back-href="`/backoffice/proprietaires/${proprietaire.id}`"
                 :type-options="props.type_proprietaire_options"
+                :entreprise="props.entreprise"
+                :proprietaire-id="String(proprietaire.id)"
+                :key="`${props.entreprise?.id ?? 'sans-entreprise'}|${props.entreprise?.raison_sociale}|${proprietaire.telephone_entreprise}|${proprietaire.identifiant_fiscal}`"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

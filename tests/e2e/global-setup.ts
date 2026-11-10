@@ -240,9 +240,16 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
     for (let i = 0; i < nbVehicules; i++) {
         await page.goto(periodeUrl);
         await page
-            .getByRole('link', { name: /ajuster/i })
-            .nth(i)
-            .click();
+            .getByRole('button', { name: 'Valider la période', exact: true })
+            .waitFor({ state: 'visible', timeout: 15_000 });
+        // La période passe « Validée » d'elle-même dès la dernière commission validée (ADR 0008)
+        // et, depuis le 08/11, seule une période calculée affiche « Ajuster » : les liens restants
+        // disparaissent alors, il n'y a plus rien à valider.
+        const liensRestants = page.getByRole('link', { name: /ajuster/i });
+        if ((await liensRestants.count()) <= i) {
+            break;
+        }
+        await liensRestants.nth(i).click();
         await page.waitForURL(/\/ajustements\/vehicules\//, {
             timeout: 20_000,
         });

@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
 use App\Models\Personne;
+use App\Services\Contacts\ReferentielCategories;
+use App\Support\Contacts\SuppressionFonction;
 use App\Traits\PhoneHandlerTrait;
 use App\Traits\ResolutionIdentiteTiersTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -24,7 +27,10 @@ class FournisseurController extends Controller
 
         $fournisseurs = Fournisseur::with(['personne', 'entrepriseTierce'])
             ->where('organization_id', auth()->user()->organization_id)
-            ->get()
+            ->get();
+        $nonSupprimables = array_flip(SuppressionFonction::idsReferences(Fournisseur::class, $fournisseurs->pluck('id')->all()));
+
+        $fournisseurs = $fournisseurs
             ->sortBy('nom_complet')
             ->values()
             ->map(fn (Fournisseur $f) => [
@@ -39,6 +45,7 @@ class FournisseurController extends Controller
                 'code_phone_pays' => $f->code_phone_pays,
                 'ville' => $f->ville,
                 'is_active' => $f->is_active,
+                'supprimable' => ! isset($nonSupprimables[$f->id]),
             ]);
 
         return Inertia::render('Fournisseurs/Index', [
@@ -50,10 +57,12 @@ class FournisseurController extends Controller
     {
         $this->authorize('create', Fournisseur::class);
 
-        return Inertia::render('Fournisseurs/Create');
+        return Inertia::render('Fournisseurs/Create', [
+            'sous_categories_options' => $this->optionsSousCategories(auth()->user()->organization_id),
+        ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, ReferentielCategories $referentiel): RedirectResponse
     {
         $this->authorize('create', Fournisseur::class);
 
@@ -67,14 +76,19 @@ class FournisseurController extends Controller
 
         $data = $this->normalizeData($data);
 
-        $identite = $this->resoudreIdentite($orgId, $data);
+        DB::transaction(function () use ($orgId, $data, $request, $referentiel) {
+            $identite = $this->resoudreIdentite($orgId, $data);
 
-        Fournisseur::create([
-            'organization_id' => $orgId,
-            'notes' => $data['notes'] ?? null,
-            'is_active' => $data['is_active'] ?? true,
-            ...$identite,
-        ]);
+            $fournisseur = Fournisseur::create([
+                'organization_id' => $orgId,
+                'notes' => $data['notes'] ?? null,
+                'is_active' => $data['is_active'] ?? true,
+                ...$identite,
+            ]);
+
+            // Lot 6a (ADR 0060) : sous-catégories du référentiel, sans effet métier.
+            $referentiel->synchroniserFournisseur($request->user(), $fournisseur, array_values($data['sous_categorie_ids'] ?? []));
+        });
 
         return redirect()->route('fournisseurs.index')
             ->with('success', 'Fournisseur créé avec succès.');
@@ -113,11 +127,10 @@ class FournisseurController extends Controller
         $this->validateLocalPhoneLength(array_merge($data, ['telephone' => $data['phone']]));
         $data = $this->normalizeData($data);
 
-        // Détection de doublon sur le téléphone NORMALISÉ (pas la saisie brute) — un même numéro
-        // peut légitimement désigner une EntrepriseTierce déjà connue (ex: déjà Prestataire) :
-        // dans ce cas on la réutilise. Seul un DEUXIÈME Fournisseur pointant vers cette même
-        // société est bloqué, pour éviter une fiche Fournisseur dupliquée créée par erreur
-        // depuis ce raccourci.
+        // Détection de doublon sur le téléphone NORMALISÉ (pas la saisie brute). Un numéro déjà
+        // fournisseur garde son message précis ; tout autre numéro déjà connu (entreprise déjà
+        // prestataire...) est refusé par resoudreIdentite() : il n'est plus repris en silence, la
+        // fonction s'ajoute depuis Contacts après confirmation (ADR 0060, lot 3, CONTACT-020).
         $telephoneNormalise = Personne::normaliserTelephone($data['phone']);
         $entrepriseExistante = EntrepriseTierce::where('organization_id', $orgId)
             ->where('telephone_normalise', $telephoneNormalise)
@@ -170,11 +183,24 @@ class FournisseurController extends Controller
                 'adresse' => $fournisseur->adresse,
                 'notes' => $fournisseur->notes,
                 'is_active' => $fournisseur->is_active,
+                'sous_categorie_ids' => $portees = $fournisseur->sousCategories()->pluck('contact_sous_categories.id')->all(),
             ],
+            'sous_categories_options' => $this->optionsSousCategories($fournisseur->organization_id, $portees),
         ]);
     }
 
-    public function update(Request $request, Fournisseur $fournisseur): RedirectResponse
+    /**
+     * Sous-catégories proposées (lot 6a) : actives, plus celles déjà portées même désactivées.
+     *
+     * @param  list<string>  $portees
+     * @return list<array{value: string, label: string, actif: bool}>
+     */
+    private function optionsSousCategories(?string $organizationId, array $portees = []): array
+    {
+        return ReferentielCategories::optionsSousCategoriesFournisseur($organizationId, $portees);
+    }
+
+    public function update(Request $request, Fournisseur $fournisseur, ReferentielCategories $referentiel): RedirectResponse
     {
         $this->authorize('update', $fournisseur);
 
@@ -185,13 +211,20 @@ class FournisseurController extends Controller
 
         $data = $this->normalizeData($data);
 
-        $identite = $this->resoudreIdentite($fournisseur->organization_id, $data, $fournisseur);
+        DB::transaction(function () use ($fournisseur, $data, $request, $referentiel) {
+            $identite = $this->resoudreIdentite($fournisseur->organization_id, $data, $fournisseur);
 
-        $fournisseur->update([
-            'notes' => $data['notes'] ?? null,
-            'is_active' => $data['is_active'] ?? $fournisseur->is_active,
-            ...$identite,
-        ]);
+            $fournisseur->update([
+                'notes' => $data['notes'] ?? null,
+                'is_active' => $data['is_active'] ?? $fournisseur->is_active,
+                ...$identite,
+            ]);
+
+            // Lot 6a : sans le champ (ancien client), les sous-catégories portées restent inchangées.
+            if (array_key_exists('sous_categorie_ids', $data)) {
+                $referentiel->synchroniserFournisseur($request->user(), $fournisseur, array_values($data['sous_categorie_ids'] ?? []));
+            }
+        });
 
         return redirect()->route('fournisseurs.edit', $fournisseur)
             ->with('success', 'Fournisseur mis à jour avec succès.');
@@ -210,6 +243,9 @@ class FournisseurController extends Controller
             'adresse' => 'nullable|string',
             'notes' => 'nullable|string',
             'is_active' => 'boolean',
+            // Lot 6a (ADR 0060) : sous-catégories du référentiel, contrôlées par ReferentielCategories.
+            'sous_categorie_ids' => 'sometimes|nullable|array|max:50',
+            'sous_categorie_ids.*' => 'required|string|max:26',
         ];
     }
 
@@ -231,6 +267,12 @@ class FournisseurController extends Controller
     public function destroy(Fournisseur $fournisseur): RedirectResponse
     {
         $this->authorize('delete', $fournisseur);
+
+        // D17 (ADR 0060) : un fournisseur référencé par une opération se désactive, il ne se supprime plus.
+        if (! SuppressionFonction::estSupprimable($fournisseur)) {
+            return back()->with('error', SuppressionFonction::message($fournisseur));
+        }
+
         $fournisseur->delete();
 
         return redirect()->route('fournisseurs.index')
