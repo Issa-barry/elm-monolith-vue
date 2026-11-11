@@ -32,7 +32,7 @@ Les deux modes produisent le même objet `App\Support\Periodes\Periode` (clé, d
 | Cette année | `cette_annee` | 1er janvier → 31 décembre |
 | Année dernière | `annee_precedente` | année précédente |
 | Toutes les périodes | `tout` | aucune borne |
-| Période personnalisée | `personnalisee` | `date_debut` → `date_fin` |
+| Période personnalisée | `personnalisee` | `date_debut` → `date_fin` (aujourd'hui si vide) |
 
 `tout` (et non `toutes`) est la clé déjà publiée dans l'API et le front Nuxt : elle ne change pas.
 
@@ -48,7 +48,11 @@ Anciennes clés encore acceptées (liens et vues enregistrées) : `today`, `week
    service ou composant front ne calcule ses propres bornes.
 2. **Fuseau** : celui de l'application (`config/app.php`, `UTC` = heure de Conakry, sans heure d'été).
 3. **Dates incluses** : du 1er au 4 novembre = toutes les opérations du 4 novembre jusqu'à 23:59:59.
-4. **Les deux dates ensemble** : une seule date est refusée. `date_fin` ≥ `date_debut`.
+4. **Date de début obligatoire, fin facultative** (décision du 10/11/2026) : sans `date_fin`, la période va
+   jusqu'à aujourd'hui (résolu par le serveur, jamais par le navigateur) ; une date de début dans le futur
+   sans date de fin est refusée (« Sans date de fin, la date de début ne peut pas dépasser aujourd'hui. »).
+   Une date de fin seule est refusée. `date_fin` ≥ `date_debut`. La fin ouverte est renvoyée vide au
+   filtre (`valeursFiltre()`) : une vue enregistrée suit le jour courant.
 5. **Exclusivité** : `periode` et des dates ensemble sont refusés (« Choisissez une période ou des
    dates, pas les deux »). Exception tolérée : une clé sans effet (`tout`, `all`, `personnalisee`)
    envoyée avec des dates est retirée avant validation.
@@ -99,6 +103,12 @@ return Inertia::render('Module/Index', [
 - `DataFilters.vue` envoie `periode` pour un raccourci, `date_debut` + `date_fin` pour « Période
   personnalisée », et bloque « Appliquer » tant que les deux dates ne sont pas valides. L'erreur du
   serveur s'affiche sous le champ.
+- Panneau « Filtres » : les champs « Du » / « Au » sont toujours visibles sous la liste (dès que
+  l'écran propose `personnalisee`). Saisir une date passe en « Période personnalisée » ; choisir un
+  raccourci efface les dates ; vider les deux dates revient au défaut de l'écran. Dans la barre, les
+  dates n'apparaissent qu'après le choix « Période personnalisée ».
+- Toute liste PrimeVue du panneau (modal) porte `append-to="self"` : ouverte dans `body`, ses choix
+  ne sont pas cliquables.
 - Un écran qui filtre des données déjà chargées (graphique du tableau de bord) reçoit les bornes de
   chaque choix (`Periode::optionsAvecBornes()`) : le navigateur ne lit jamais son horloge pour une
   période.
@@ -111,7 +121,7 @@ Ils envoient la clé ou les deux dates, jamais de bornes calculées (`config/cli
 
 | Contrôle | Où | Bloque |
 | --- | --- | --- |
-| Registre des écrans | `tests/Feature/Periodes/RegistreFiltresPeriodeTest.php` | écran qui valide une période sans être inscrit ; écran inscrit qui n'accepte pas `periode=hier`, des dates valides, ou qui ne refuse pas une seule date / une fin avant le début avec le message commun |
+| Registre des écrans | `tests/Feature/Periodes/RegistreFiltresPeriodeTest.php` | écran qui valide une période sans être inscrit ; écran inscrit qui n'accepte pas `periode=hier`, des dates valides, une date de début seule, ou qui ne refuse pas une date de fin seule / une fin avant le début avec le message commun |
 | Architecture | `tests/Unit/Architecture/PeriodesArchitectureTest.php` | `startOfMonth`, `subMonth`, `whereDate`… dans un contrôleur ; lecture directe de `date_debut`/`date_fin` dans `app/Http` ; exception devenue inutile |
 | Front | `scripts/check-ui-standards.mjs` (`npm run lint:standards`, job CI `quality`) | champ `type: 'date-range'` ; liste de périodes codée en dur (`value: 'ce_mois'`, `value: 'last_week'`…) |
 | Moteur | `tests/Unit/Periodes/PeriodeTest.php` | bornes, changements de mois et d'année, année bissextile, semaine, dates identiques, alias, validation, SQL |

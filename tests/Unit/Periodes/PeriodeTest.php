@@ -137,6 +137,44 @@ class PeriodeTest extends TestCase
         $this->assertSame('04/11/2026', substr($periode->libelle(), 0, 10));
     }
 
+    public function test_date_de_debut_seule_va_jusqu_a_aujourd_hui(): void
+    {
+        $periode = Periode::depuisRequete($this->requete(['date_debut' => '2026-09-01']), $this->maintenant());
+
+        $this->assertSame(Periode::PERSONNALISEE, $periode->cle);
+        $this->assertSame(['2026-09-01 00:00:00', '2026-09-16 23:59:59'], [$periode->debut->toDateTimeString(), $periode->fin->toDateTimeString()]);
+        $this->assertTrue($periode->finOuverte);
+        // Fin renvoyée vide au filtre : une vue enregistrée suit le jour courant au lieu de figer cette date.
+        $this->assertSame(['periode' => 'personnalisee', 'date_debut' => '2026-09-01', 'date_fin' => null], $periode->valeursFiltre());
+        $this->assertSame('Du 01/09/2026 au 16/09/2026', $periode->libelle());
+    }
+
+    public function test_date_de_debut_seule_aujourd_hui_est_acceptee(): void
+    {
+        CarbonImmutable::setTestNow($this->maintenant());
+
+        try {
+            $periode = Periode::depuisRequeteValidee($this->requete(['date_debut' => '2026-09-16']));
+            $this->assertSame(['2026-09-16', '2026-09-16'], [$periode->debut->toDateString(), $periode->fin->toDateString()]);
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
+    }
+
+    public function test_date_de_debut_seule_dans_le_futur_refusee_avec_un_message(): void
+    {
+        CarbonImmutable::setTestNow($this->maintenant());
+
+        try {
+            Periode::depuisRequeteValidee($this->requete(['date_debut' => '2026-09-17']));
+            $this->fail('La requête aurait dû être refusée.');
+        } catch (ValidationException $e) {
+            $this->assertSame(["Sans date de fin, la date de début ne peut pas dépasser aujourd'hui."], $e->errors()['date_debut']);
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
+    }
+
     public function test_anciens_noms_de_dates_restent_acceptes(): void
     {
         $periode = Periode::depuisRequete($this->requete(['date_from' => '2026-09-01', 'date_to' => '2026-09-13']), $this->maintenant());
@@ -156,7 +194,7 @@ class PeriodeTest extends TestCase
     {
         return [
             'date de fin seule' => [['date_fin' => '2026-09-13'], 'date_debut'],
-            'date de début seule' => [['date_debut' => '2026-09-01'], 'date_fin'],
+            'date de début seule dans le futur' => [['date_debut' => '2999-01-01'], 'date_debut'],
             'début après la fin' => [['date_debut' => '2026-09-13', 'date_fin' => '2026-09-01'], 'date_fin'],
             'format invalide' => [['date_debut' => '01/09/2026', 'date_fin' => '2026-09-13'], 'date_debut'],
             'date impossible' => [['date_debut' => '2026-02-31', 'date_fin' => '2026-03-05'], 'date_debut'],

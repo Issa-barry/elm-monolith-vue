@@ -58,7 +58,10 @@ const champs = computed(() =>
     props.type === 'personne' ? CHAMPS_PERSONNE : CHAMPS_ENTREPRISE,
 );
 
-const form = useForm<Record<string, string>>({});
+// Inertia n'envoie que les clés déclarées à la création du formulaire : elles doivent toutes y être.
+const form = useForm<Record<string, string>>(
+    Object.fromEntries(champs.value.map((c) => [c.cle, ''])),
+);
 
 watch(
     () => props.visible,

@@ -174,7 +174,8 @@ $periode->appliquer($query, 'created_at');
 
 - Deux modes seulement : `periode=<clé>` (aujourd_hui, hier, cette_semaine, semaine_precedente,
   ce_mois, mois_precedent, cette_annee, annee_precedente, tout) ou `date_debut` + `date_fin`
-  (incluses, ensemble, ordonnées). Jamais les deux à la fois.
+  (incluses, ordonnées ; `date_debut` obligatoire, sans `date_fin` = jusqu'à aujourd'hui, résolu
+  par le serveur). Jamais les deux à la fois.
 - **Interdit** : calculer des bornes dans un contrôleur, un service ou le navigateur (`startOfMonth`,
   `subMonth`, `whereDate`, `new Date()`…) ; lire `date_debut`/`date_fin` à la main ; un champ
   `type: 'date-range'` ; une liste de périodes codée en dur côté front.

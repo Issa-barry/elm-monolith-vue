@@ -373,14 +373,41 @@ class VehiculeSituationVentesTest extends TestCase
             );
     }
 
-    public function test_periode_personnalisee_incomplete_est_refusee(): void
+    /** ADR 0057 (décision du 10/11/2026) : sans date de fin, la période va jusqu'à aujourd'hui. */
+    public function test_periode_personnalisee_sans_date_de_fin_va_jusqu_a_aujourd_hui(): void
     {
         $vehicule = $this->makeVehicule();
 
-        // ADR 0057 : une seule date ne forme pas une période ; erreur explicite plutôt qu'un repli
-        // silencieux sur « Toutes les périodes ».
+        $ancienne = $this->makeCommande($vehicule, ['total_commande' => 50000]);
+        $ancienne->created_at = now()->subDays(10);
+        $ancienne->saveQuietly();
+
+        $recente = $this->makeCommande($vehicule, ['total_commande' => 10000]);
+        $recente->created_at = now();
+        $recente->saveQuietly();
+
+        $debut = now()->subDays(5)->toDateString();
+
         $this->actingAs($this->user)
-            ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_debut' => '2026-09-01']))
-            ->assertSessionHasErrors('date_fin');
+            ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_debut' => $debut]))
+            ->assertOk()
+            ->assertSessionHasNoErrors()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('situation_periode.cle', 'personnalisee')
+                ->where('situation_periode.date_debut', $debut)
+                ->where('situation_periode.date_fin', now()->toDateString())
+                ->where('situation_ventes.kpis.ca_vendu', 10000)
+                ->where('situation_ventes.kpis.nb_ventes', 1)
+            );
+    }
+
+    public function test_periode_personnalisee_avec_date_de_fin_seule_est_refusee(): void
+    {
+        $vehicule = $this->makeVehicule();
+
+        // ADR 0057 : erreur explicite plutôt qu'un repli silencieux sur « Toutes les périodes ».
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_fin' => '2026-09-13']))
+            ->assertSessionHasErrors('date_debut');
     }
 }

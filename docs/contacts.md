@@ -23,8 +23,8 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 7a — Identité client | La fiche Personne fait foi (R1) ; rapport, arbitrage et activation par organisation (D16) ; modification de l'identité depuis Contacts | Fait (09/11/2026, commit `d268ffe8`) |
 | 7b — Client professionnel | Client relié à une fiche Entreprise (règles du lot 5), raison sociale comme nom principal (L7-2) | Fait (09/11/2026, commit `ee322eb0`) |
 | 8 — Bascule | Menu « Par fonction », groupe « Contacts » unique dans la recherche du back-office, création Fournisseur / Prestataire par le parcours Contacts (L8-1 à L8-3) | Fait (09/11/2026, commit `0b06d1c6`) |
-| 9a — Détection des doublons | Commande `contacts:doublons` en lecture seule : paires probables, blocages F1/F2, rattachements ADR 0056 | Codé (09/11/2026), non commité |
-| 9b — Fusion | Périmètre décidé après la détection en production (F6) | À venir |
+| 9a — Détection des doublons | Commande `contacts:doublons` en lecture seule : paires probables d'entreprises et blocage F1 ; personnes jamais rapprochées (10/11/2026) | Fait (09/11/2026, en production le 10/11/2026) ; personnes retirées le 10/11/2026 |
+| 9b — Fusion manuelle | Fusion décidée par l'administration, personnes et entreprises (10/11/2026) | À venir, après la clôture du 9a |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
@@ -378,21 +378,19 @@ sur les ventes, commissions, comptabilité ou logistique.
   Fournisseur. Client, Propriétaire et Parrain gardent leur formulaire (champs métier : nature,
   cashback, dérogation, type de propriétaire…), le parcours Contacts ne créant que les fonctions
   Fournisseur et Prestataire (CONTACT-017).
-- **CONTACT-053** — Doublons probables (lot 9a) : `contacts:doublons --acteur=<id>` (droit
-  `contacts.read`, organisation de l'acteur) liste les paires de fiches qui se ressemblent, **en
-  lecture seule** : aucune fusion, aucun rattachement, aucune écriture en base. Un même téléphone ne
-  pouvant être porté par deux fiches, ce sont des rapprochements, jamais des certitudes. Personnes :
-  même e-mail ; même nom dans la même ville (sans tenir compte de la casse, des accents ni des
-  espaces ; fiche sans nom ou sans ville jamais rapprochée par le nom). Entreprises : même NIF,
-  même raison sociale normalisée, même e-mail. Fiches supprimées et autres organisations ignorées.
-  `--export=<fichier.csv>` écrit une ligne par paire (séparateur « ; »).
-- **CONTACT-054** — Pour chaque paire, le rapport donne les fonctions et comptes des deux fiches et
-  ce qui bloquerait la fusion (décisions F1, F2 du lot 9) : **même fonction** des deux côtés (les
-  fonctions ne sont jamais fusionnées, aucun historique métier n'est touché) ; **un compte de chaque
-  côté** (compte unique, ADR 0055 ; compte = compte qui porte la fiche ou déjà relié à l'une de ses
-  fonctions). Quand un seul côté a un compte, il liste une à une les fonctions de l'autre côté qui
-  lui seraient rattachées d'office par une fusion (ADR 0056 : livreur, propriétaire, parrain,
-  consultant personne physique, interlocuteur), donc visibles dans l'espace client.
+- **CONTACT-053** — Doublons probables d'entreprises (lot 9a) : `contacts:doublons --acteur=<id>`
+  (droit `contacts.read`, organisation de l'acteur) liste les paires d'entreprises qui se
+  ressemblent, **en lecture seule** : aucune fusion, aucun rattachement, aucune écriture en base. Ce
+  sont des rapprochements, jamais des certitudes : même NIF, même raison sociale normalisée, même
+  e-mail. Fiches supprimées et autres organisations ignorées. `--export=<fichier.csv>` écrit une
+  ligne par paire (séparateur « ; »). **Les personnes ne sont jamais rapprochées** (règle du
+  10/11/2026) : deux numéros de téléphone différents désignent deux personnes différentes, même nom,
+  même ville ou même e-mail compris. Ni le nom ni l'e-mail ne déclenchent un rattachement ou une
+  fusion ; deux fiches d'une même personne ne se fusionnent que sur décision de l'administration
+  (lot 9b).
+- **CONTACT-054** — Pour chaque paire, le rapport donne les fonctions des deux entreprises et ce qui
+  bloquerait la fusion (décision F1 du lot 9) : **même fonction** des deux côtés (les fonctions ne
+  sont jamais fusionnées, aucun historique métier n'est touché).
 
 ## Écrans (lot 2)
 
@@ -475,7 +473,7 @@ Aucune route ajoutée, aucune migration.
 
 | Commande | Rôle |
 | --- | --- |
-| `contacts:doublons --acteur=<id> [--export=<fichier.csv>]` | Doublons probables, blocages et rattachements, en lecture seule (CONTACT-053, CONTACT-054) |
+| `contacts:doublons --acteur=<id> [--export=<fichier.csv>]` | Doublons probables d'entreprises et blocage F1, en lecture seule (CONTACT-053, CONTACT-054) |
 
 ## Routes (lot 6a)
 
