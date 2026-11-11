@@ -126,11 +126,20 @@ class RegistreFiltresPeriodeTest extends TestCase
     }
 
     #[DataProvider('ecrans')]
-    public function test_refuse_une_seule_date(string $route): void
+    public function test_refuse_une_date_de_fin_seule(string $route): void
     {
         $this->actingAs($this->admin)
-            ->get(route($route, ['date_debut' => '2026-11-04']))
-            ->assertSessionHasErrors(['date_fin' => 'Renseignez aussi la date de fin.']);
+            ->get(route($route, ['date_fin' => '2026-11-04']))
+            ->assertSessionHasErrors(['date_debut' => 'Renseignez aussi la date de début.']);
+    }
+
+    #[DataProvider('ecrans')]
+    public function test_accepte_une_date_de_debut_seule_jusqu_a_aujourd_hui(string $route): void
+    {
+        $this->actingAs($this->admin)
+            ->get(route($route, ['date_debut' => now()->subDays(3)->toDateString()]))
+            ->assertOk()
+            ->assertSessionHasNoErrors();
     }
 
     public function test_tableau_de_bord_periodes_rapides_trimestres_et_refus_des_dates(): void

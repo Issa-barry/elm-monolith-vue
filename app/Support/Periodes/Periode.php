@@ -4,7 +4,10 @@ namespace App\Support\Periodes;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Closure;
 use Illuminate\Contracts\Database\Query\Builder;
+use Illuminate\Contracts\Validation\DataAwareRule;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -12,7 +15,7 @@ use Illuminate\Validation\Rule;
 /**
  * Seul calculateur des périodes calendaires de l'application (ADR 0057, docs/periodes.md) :
  * back-office, espace client et API mobile. Le front transmet une clé (`periode`) ou deux dates
- * (`date_debut` + `date_fin`, Y-m-d, incluses) ; les bornes sont toujours résolues ici, avec
+ * (`date_debut` + `date_fin`, Y-m-d, incluses ; sans `date_fin` = jusqu'à aujourd'hui) ; les bornes sont toujours résolues ici, avec
  * l'horloge et le fuseau de l'application (UTC = heure de Conakry). Semaine = lundi → dimanche.
  *
  * Les périodes métier ne passent pas par ici : quinzaines P1/P2 et mois comptable
@@ -76,11 +79,13 @@ final class Periode
     /**
      * @param  ?CarbonImmutable  $debut  début du premier jour (inclus)
      * @param  ?CarbonImmutable  $fin  fin du dernier jour (inclus) ; voir finExclue() pour les requêtes
+     * @param  bool  $finOuverte  dates libres sans `date_fin` : la fin suit le jour courant
      */
     private function __construct(
         public readonly string $cle,
         public readonly ?CarbonImmutable $debut,
         public readonly ?CarbonImmutable $fin,
+        public readonly bool $finOuverte = false,
     ) {}
 
     /**
@@ -119,7 +124,7 @@ final class Periode
         $datesPermises = $cles === null || in_array(self::PERSONNALISEE, $cles, true);
 
         if ($datesPermises && (self::rempli($du) || self::rempli($au))) {
-            $periode = self::personnalisee($du, $au);
+            $periode = self::personnalisee($du, $au, $maintenant);
         } else {
             $cle = self::normaliserCle((string) $request->query($parametre, $defaut));
             $periode = $cles === null || in_array($cle, $cles, true) ? self::rapide($cle, $maintenant) : null;
@@ -130,8 +135,9 @@ final class Periode
     }
 
     /**
-     * Règles communes : `periode` connue, dates Y-m-d renseignées ensemble et ordonnées, `periode`
-     * exclusive des dates. Les anciennes clés (ALIAS) restent acceptées.
+     * Règles communes : `periode` connue, dates Y-m-d ordonnées, `periode` exclusive des dates. Une
+     * date de fin exige une date de début ; une date de début seule va jusqu'à aujourd'hui (donc pas
+     * dans le futur). Les anciennes clés (ALIAS) restent acceptées.
      *
      * @param  list<string>|null  $cles
      * @return array<string, array<int, mixed>>
@@ -152,8 +158,8 @@ final class Periode
 
         return [
             $parametre => ['nullable', 'string', Rule::in($acceptees), 'prohibits:date_debut,date_fin'],
-            'date_debut' => ['nullable', 'date_format:Y-m-d', 'required_with:date_fin'],
-            'date_fin' => ['nullable', 'date_format:Y-m-d', 'required_with:date_debut', 'after_or_equal:date_debut'],
+            'date_debut' => ['nullable', 'date_format:Y-m-d', 'required_with:date_fin', self::debutSansFinPasDansLeFutur()],
+            'date_fin' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_debut'],
         ];
     }
 
@@ -179,7 +185,6 @@ final class Periode
             "{$parametre}.in" => 'Période inconnue.',
             "{$parametre}.prohibits" => 'Choisissez une période ou des dates, pas les deux.',
             'date_debut.required_with' => 'Renseignez aussi la date de début.',
-            'date_fin.required_with' => 'Renseignez aussi la date de fin.',
             'date_debut.date_format' => 'La date de début est invalide.',
             'date_fin.date_format' => 'La date de fin est invalide.',
             'date_fin.after_or_equal' => 'La date de fin doit être postérieure ou égale à la date de début.',
@@ -286,10 +291,11 @@ final class Periode
     {
         $personnalisee = $this->cle === self::PERSONNALISEE;
 
+        // Fin ouverte renvoyée vide : une vue enregistrée continue de suivre le jour courant.
         return [
             $parametre => $this->cle,
             'date_debut' => $personnalisee ? $this->debut?->toDateString() : null,
-            'date_fin' => $personnalisee ? $this->fin?->toDateString() : null,
+            'date_fin' => $personnalisee && ! $this->finOuverte ? $this->fin?->toDateString() : null,
         ];
     }
 
@@ -356,16 +362,47 @@ final class Periode
         return new self(self::TOUT, null, null);
     }
 
-    private static function personnalisee(mixed $du, mixed $au): ?self
+    private static function personnalisee(mixed $du, mixed $au, CarbonImmutable $maintenant): ?self
     {
+        $finOuverte = ! self::rempli($au);
         $debut = self::date($du);
-        $fin = self::date($au);
+        $fin = $finOuverte ? $maintenant->startOfDay() : self::date($au);
 
         if ($debut === null || $fin === null || $debut->greaterThan($fin)) {
             return null;
         }
 
-        return new self(self::PERSONNALISEE, $debut->startOfDay(), $fin->endOfDay());
+        return new self(self::PERSONNALISEE, $debut->startOfDay(), $fin->endOfDay(), $finOuverte);
+    }
+
+    /** Sans date de fin, la période s'arrête aujourd'hui : un début dans le futur serait vide. */
+    private static function debutSansFinPasDansLeFutur(): ValidationRule
+    {
+        return new class implements DataAwareRule, ValidationRule
+        {
+            /** @var array<string, mixed> */
+            private array $donnees = [];
+
+            public function setData(array $data): static
+            {
+                $this->donnees = $data;
+
+                return $this;
+            }
+
+            public function validate(string $attribute, mixed $value, Closure $fail): void
+            {
+                $fin = $this->donnees['date_fin'] ?? null;
+
+                if (is_string($fin) && $fin !== '') {
+                    return;
+                }
+
+                if (is_string($value) && $value > CarbonImmutable::now()->toDateString()) {
+                    $fail("Sans date de fin, la date de début ne peut pas dépasser aujourd'hui.");
+                }
+            }
+        };
     }
 
     /**

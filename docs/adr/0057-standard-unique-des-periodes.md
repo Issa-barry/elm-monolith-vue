@@ -19,7 +19,8 @@ pour « Mois dernier » les 29, 30 et 31 (`subMonth()` débordait).
 1. **Un seul moteur** : `SituationPeriode` est généralisé en `App\Support\Periodes\Periode` (même API
    publique), et non doublé. Il porte les clés, les libellés, les bornes, la validation, le filtrage SQL
    et les options pour le front.
-2. **Deux modes** : `periode=<clé>` ou `date_debut` + `date_fin` (incluses), exclusifs.
+2. **Deux modes** : `periode=<clé>` ou `date_debut` + `date_fin` (incluses), exclusifs. Amendement du
+   10/11/2026 : `date_fin` est facultative ; vide, la période va jusqu'à aujourd'hui (calculé côté serveur).
 3. **Erreur explicite** sur le back-office comme sur l'API (choix de l'utilisateur du 04/11/2026) : plus
    de repli silencieux sur la période par défaut.
 4. **Bornes semi-ouvertes** en SQL, sans fonction sur la colonne.

@@ -229,6 +229,16 @@ seulement — même e-mail, même nom dans la même ville, même NIF, même rais
 F1/F2 et rattachements ADR 0056 par paire ; export CSV. Aucune migration, aucune permission ajoutée
 (`contacts.fusionner` viendra avec la fusion). CONTACT-053, CONTACT-054.
 
+Production du 10/11/2026 : 0 paire (364 personnes, dont 14 avec e-mail et 52 avec ville ;
+5 entreprises, aucune avec NIF). **Règle métier précisée le 10/11/2026** : deux numéros de téléphone
+différents désignent deux personnes différentes, même nom, même ville ou même e-mail compris. La
+détection des personnes est donc retirée : `contacts:doublons` ne rapproche plus que les entreprises
+(critères inchangés, blocage F1). Les blocages F2 et la liste des rattachements ADR 0056, propres aux
+comptes des personnes, relèveront de la fusion. Lot 9b décidé : fusion **manuelle**, des personnes et
+des entreprises, à l'initiative de l'administration (choix de la fiche conservée, simulation,
+confirmation), avec les décisions F1 à F4 ; il démarre après la clôture du 9a, son parcours est
+arrêté à ce moment-là.
+
 ## Conséquences
 
 - Aucune entrée ajoutée au morph map : les comptes auxiliaires stockent le nom de classe des
