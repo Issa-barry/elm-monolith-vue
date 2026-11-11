@@ -53,17 +53,20 @@ class ClientIdentiteSynchronisationTest extends TestCase
             'organization_id' => $this->org->id, 'nom_complet' => 'Fatou Bah', 'telephone' => '+224622123456',
             'email' => 'fatou@exemple.gn', 'ville' => 'Conakry', 'adresse' => 'Kaloum', 'pays' => 'Guinée', 'code_pays' => 'GN', 'code_phone_pays' => '+224',
         ]);
-        $client = $this->client($personne);
+        $client = $this->client($personne, ['ville' => 'Dubréka', 'adresse' => 'Boutique du marché', 'pays' => 'Sénégal', 'code_pays' => 'SN']);
 
         $this->assertSame(1, $this->service->depuisPersonne($personne));
 
         $client->refresh();
         $this->assertSame('Fatou Bah', $client->nom_complet);
         $this->assertSame('+224622123456', $client->telephone);
+        $this->assertSame('+224', $client->code_phone_pays);
         $this->assertSame('fatou@exemple.gn', $client->email);
-        $this->assertSame('Conakry', $client->ville);
-        $this->assertSame('Kaloum', $client->adresse);
-        $this->assertSame('GN', $client->code_pays);
+        // Localisation propre à la fonction client (décision du 10/11/2026) : jamais recopiée.
+        $this->assertSame('Dubréka', $client->ville);
+        $this->assertSame('Boutique du marché', $client->adresse);
+        $this->assertSame('Sénégal', $client->pays);
+        $this->assertSame('SN', $client->code_pays);
     }
 
     public function test_les_donnees_propres_a_la_fonction_client_ne_sont_jamais_touchees(): void
@@ -134,13 +137,14 @@ class ClientIdentiteSynchronisationTest extends TestCase
     public function test_apres_activation_toute_modification_de_la_personne_est_recopiee(): void
     {
         $personne = Personne::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => 'Fatou Bah', 'telephone' => '+224622123456']);
-        $client = $this->client($personne);
+        $client = $this->client($personne, ['ville' => 'Dubréka', 'adresse' => 'Boutique du marché']);
         $this->org->forceFill(['synchronisation_identite_client_le' => now()])->save();
 
-        $personne->update(['nom_complet' => 'Fatoumata Bah', 'ville' => 'Kindia']);
+        $personne->update(['nom_complet' => 'Fatoumata Bah', 'ville' => 'Kindia', 'adresse' => 'Matoto']);
 
         $this->assertSame('Fatoumata Bah', $client->fresh()->nom_complet);
-        $this->assertSame('Kindia', $client->fresh()->ville);
+        $this->assertSame('Dubréka', $client->fresh()->ville);
+        $this->assertSame('Boutique du marché', $client->fresh()->adresse);
         $this->assertSame(ClientType::GROSSISTE, $client->fresh()->type);
     }
 

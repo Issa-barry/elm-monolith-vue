@@ -20,7 +20,7 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 6a — Catégories de contacts | Écran de paramétrage, sous-catégories Fournisseur multiples, catégories libres (Partenaire) et filtre, sous-catégories système en lecture seule | Fait (08/11/2026, commit `f3e1508b`) |
 | 6b — Qualifications Prestataire | Qualifications multiples, `qualifieConsultant()`, D15, reprise des qualifications | Fait (09/11/2026, commit `059e64dd`) |
 | 7c — Nature du client sur la commande | `commandes_ventes.nature_client` figée à la création, lue par les commissions, listes et exports (D12 à D14) | Fait (09/11/2026, commit `74db6f7a`) |
-| 7a — Identité client | La fiche Personne fait foi (R1) ; rapport, arbitrage et activation par organisation (D16) ; modification de l'identité depuis Contacts | Fait (09/11/2026, commit `d268ffe8`) |
+| 7a — Identité client | La fiche Personne fait foi (R1) pour l'identité, sans la localisation (10/11/2026) ; rapport, arbitrage et activation par organisation (D16) ; modification de l'identité depuis Contacts | Fait (09/11/2026, commit `d268ffe8`) ; localisation retirée le 10/11/2026 |
 | 7b — Client professionnel | Client relié à une fiche Entreprise (règles du lot 5), raison sociale comme nom principal (L7-2) | Fait (09/11/2026, commit `ee322eb0`) |
 | 8 — Bascule | Menu « Par fonction », groupe « Contacts » unique dans la recherche du back-office, création Fournisseur / Prestataire par le parcours Contacts (L8-1 à L8-3) | Fait (09/11/2026, commit `0b06d1c6`) |
 | 9a — Détection des doublons | Commande `contacts:doublons` en lecture seule : paires probables d'entreprises et blocage F1 ; personnes jamais rapprochées (10/11/2026) | Fait (09/11/2026, en production le 10/11/2026) ; personnes retirées le 10/11/2026 |
@@ -304,8 +304,12 @@ sur les ventes, commissions, comptabilité ou logistique.
   [commissions.md](commissions.md) (COMM-011).
 
 - **CONTACT-043** — R1 (lot 7a) : la fiche Personne fait foi pour l'identité d'un client
-  (`nom`, `prenom`, `nom_complet`, `telephone`, `email`, `pays`, `code_pays`, `code_phone_pays`,
-  `ville`, `adresse`) ; les colonnes de `clients` en sont une copie. **Active par organisation
+  (`nom`, `prenom`, `nom_complet`, `telephone`, `code_phone_pays`, `email`) ; ces colonnes de
+  `clients` en sont une copie. **La localisation (`pays`, `code_pays`, `ville`, `adresse`) n'en fait
+  pas partie** (décision du 10/11/2026) : chaque fonction garde la sienne — l'adresse d'un client
+  peut être celle de sa boutique, distincte du domicile porté par la Personne. Elle n'est jamais
+  recopiée, ni de la Personne vers le client, ni du client vers la Personne (reprise, synchronisation
+  et création au back-office comprises). **Active par organisation
   seulement** (`organizations.synchronisation_identite_client_le`), après le rapport des écarts et
   leur arbitrage (D16) ; avant, comportement inchangé (CLIENTPERSONNE-002). Une fois active : toute
   modification de la Personne, quel que soit l'écran (Client, Contacts, Propriétaire, espace client,
@@ -321,7 +325,8 @@ sur les ventes, commissions, comptabilité ou logistique.
   Entreprise : téléphone et ville facultatifs ; un renommage est recopié sur son propriétaire
   (CONTACT-029). Journal : noms des champs seulement.
 - **CONTACT-045** — Rapport des écarts : `contacts:ecarts-clients --acteur=<id>` (simulation par
-  défaut) compare chaque client à sa Personne. Un champ vide d'un côté est complété depuis l'autre ;
+  défaut) compare chaque client à sa Personne, sur les seules colonnes d'identité (CONTACT-043 : la
+  localisation n'est jamais comparée ni écrite). Un champ vide d'un côté est complété depuis l'autre ;
   deux clients d'une même Personne qui proposent deux valeurs pour un champ vide de la Personne, ou
   deux valeurs différentes, sont des **conflits** jamais tranchés automatiquement (L7-1). Arbitrage
   explicite client par client : `--personne-fait-foi=<client>` ou `--client-fait-foi=<client>` (sur
