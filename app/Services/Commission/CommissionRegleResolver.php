@@ -6,6 +6,7 @@ use App\Enums\CommissionRegleStatut;
 use App\Enums\CommissionScopeType;
 use App\Models\CommissionRegle;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Résolution stricte, sans héritage (décision AMOA #3) :
@@ -36,6 +37,24 @@ class CommissionRegleResolver
         CarbonInterface $date,
         ?string $typeVehiculeId = null,
     ): ?CommissionRegle {
+        foreach (self::ordreDeRecherche($varianteId, $produitId, $categorieId, $typeVehiculeId) as [$scopeType, $scopeId, $type]) {
+            $regle = self::chercher($organizationId, $processusId, $cibleType, $scopeType, $scopeId, $date, $type);
+            if ($regle) {
+                return $regle;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Ordre de recherche de resolve() : à chaque niveau de portée (variante, produit, catégorie,
+     * globale), l'exception du type de véhicule exact puis le barème standard.
+     *
+     * @return list<array{0: CommissionScopeType, 1: ?string, 2: ?string}> [portée, scope_id, type_vehicule_id]
+     */
+    public static function ordreDeRecherche(?string $varianteId, ?string $produitId, ?string $categorieId, ?string $typeVehiculeId): array
+    {
         $candidats = [];
 
         if ($varianteId !== null) {
@@ -49,21 +68,39 @@ class CommissionRegleResolver
         }
         $candidats[] = [CommissionScopeType::GLOBAL, null];
 
+        $ordre = [];
         foreach ($candidats as [$scopeType, $scopeId]) {
             if ($typeVehiculeId !== null) {
-                $regle = self::chercher($organizationId, $processusId, $cibleType, $scopeType, $scopeId, $date, $typeVehiculeId);
-                if ($regle) {
-                    return $regle;
-                }
+                $ordre[] = [$scopeType, $scopeId, $typeVehiculeId];
             }
-
-            $regle = self::chercher($organizationId, $processusId, $cibleType, $scopeType, $scopeId, $date, null);
-            if ($regle) {
-                return $regle;
-            }
+            $ordre[] = [$scopeType, $scopeId, null];
         }
 
-        return null;
+        return $ordre;
+    }
+
+    /**
+     * Règles d'une cible applicables à une date, de la plus récemment entrée en vigueur à la plus
+     * ancienne — filtres communs à chaque recherche de resolve() (et au chargement groupé de
+     * ReglesCommissionPrechargees), avant le processus, la portée et le type de véhicule.
+     *
+     * @return Builder<CommissionRegle>
+     */
+    public static function requeteApplicables(string $organizationId, string $cibleType, CarbonInterface $date): Builder
+    {
+        return CommissionRegle::query()
+            ->where('organization_id', $organizationId)
+            ->where('cible_type', $cibleType)
+            ->whereIn('statut', [CommissionRegleStatut::ACTIVE->value, CommissionRegleStatut::REMPLACEE->value])
+            // whereDate (comme EquipeLivraisonPartageCategorie::scopeActifA()) : comparaison par
+            // JOUR quel que soit le moteur — une comparaison de chaînes excluait sous SQLite une
+            // règle entrant en vigueur le jour même (valeur stockée « AAAA-MM-JJ 00:00:00 »).
+            ->whereDate('effective_from', '<=', $date->toDateString())
+            ->where(fn ($q) => $q->whereNull('effective_to')->orWhereDate('effective_to', '>=', $date->toDateString()))
+            // Déterminisme si deux versions se chevauchaient (donnée historique incohérente) : la
+            // plus récemment entrée en vigueur l'emporte, jamais un ordre SQL arbitraire.
+            ->orderByDesc('effective_from')
+            ->orderByDesc('created_at');
     }
 
     private static function chercher(
@@ -75,21 +112,9 @@ class CommissionRegleResolver
         CarbonInterface $date,
         ?string $typeVehiculeId,
     ): ?CommissionRegle {
-        $query = CommissionRegle::query()
-            ->where('organization_id', $organizationId)
+        $query = self::requeteApplicables($organizationId, $cibleType, $date)
             ->where('processus_id', $processusId)
-            ->where('cible_type', $cibleType)
-            ->where('scope_type', $scopeType->value)
-            ->whereIn('statut', [CommissionRegleStatut::ACTIVE->value, CommissionRegleStatut::REMPLACEE->value])
-            // whereDate (comme EquipeLivraisonPartageCategorie::scopeActifA()) : comparaison par
-            // JOUR quel que soit le moteur — une comparaison de chaînes excluait sous SQLite une
-            // règle entrant en vigueur le jour même (valeur stockée « AAAA-MM-JJ 00:00:00 »).
-            ->whereDate('effective_from', '<=', $date->toDateString())
-            ->where(fn ($q) => $q->whereNull('effective_to')->orWhereDate('effective_to', '>=', $date->toDateString()))
-            // Déterminisme si deux versions se chevauchaient (donnée historique incohérente) : la
-            // plus récemment entrée en vigueur l'emporte, jamais un ordre SQL arbitraire.
-            ->orderByDesc('effective_from')
-            ->orderByDesc('created_at');
+            ->where('scope_type', $scopeType->value);
 
         if ($scopeId === null) {
             $query->whereNull('scope_id');

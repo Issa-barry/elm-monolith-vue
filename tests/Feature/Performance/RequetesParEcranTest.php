@@ -4,7 +4,9 @@ namespace Tests\Feature\Performance;
 
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
+use App\Models\Categorie;
 use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Livreur;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
@@ -12,8 +14,10 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\Vehicule;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -87,6 +91,35 @@ class RequetesParEcranTest extends TestCase
         $avec7 = $this->requetesSurTable($this->requetesDe(fn () => $this->actingAs($this->user)->get(route('vehicules.index'))->assertOk()), 'personnes');
 
         $this->assertSame($avec2, $avec7);
+    }
+
+    /** Lot 4 : les barèmes Livreur de la colonne « Partages » sont lus en une seule requête. */
+    public function test_la_liste_des_vehicules_lit_les_regles_de_commission_en_une_fois(): void
+    {
+        $orgId = $this->org->id;
+        foreach ([CommissionProcessus::CODE_VENTE, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT] as $code) {
+            CommissionProcessusDefaults::resoudreOuCreer($orgId, $code);
+        }
+        $creer = function (int $n) use ($orgId): void {
+            foreach (range(1, $n) as $_) {
+                Categorie::create(['organization_id' => $orgId, 'nom' => 'Catégorie '.Str::random(6), 'statut' => 'actif']);
+                Vehicule::factory()->create([
+                    'organization_id' => $orgId,
+                    'type_vehicule_id' => TypeVehicule::factory()->create(['organization_id' => $orgId])->id,
+                    'livraison_vente' => true,
+                    'livraison_logistique' => true,
+                ]);
+            }
+        };
+
+        $creer(1);
+        $avec1 = $this->requetesSurTable($this->requetesDe(fn () => $this->actingAs($this->user)->get(route('vehicules.index'))->assertOk()), 'commission_regles');
+
+        $creer(4);
+        $avec5 = $this->requetesSurTable($this->requetesDe(fn () => $this->actingAs($this->user)->get(route('vehicules.index'))->assertOk()), 'commission_regles');
+
+        $this->assertSame(1, $avec1);
+        $this->assertSame(1, $avec5);
     }
 
     public function test_une_reponse_json_ne_calcule_pas_les_donnees_partagees(): void
