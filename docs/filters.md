@@ -442,6 +442,22 @@ panneau.
 </div>
 ```
 
+### Pagination et tri côté serveur (Ventes, 11/11/2026)
+
+La liste **Ventes** ne charge plus toutes les ventes de la période : le serveur renvoie une page de
+20 ventes (`page`), triée côté serveur (`tri`, `sens` = `asc`/`desc`) sur les colonnes triables du
+tableau (référence, date prévue, site, quantité, montant, restant, date, processus, statut ; par
+défaut les plus récentes d'abord). La période par défaut reste « Tout ».
+
+- Les **totaux** (cartes au-dessus du tableau) portent toujours sur **toutes** les ventes filtrées,
+  jamais sur la page affichée : ils sont calculés en SQL par `App\Support\Ventes\ListeVentes::totaux()`
+  avec les mêmes règles que les accesseurs (`FactureVente::montant_restant`, `montant_encaisse`).
+- Changer un filtre revient à la première page ; changer de tri aussi.
+- L'**export** (`/backoffice/ventes/export`) est inchangé : il porte sur tous les résultats choisis
+  dans sa fenêtre, indépendamment de la page affichée.
+- Distribution et Précommandes, servies par la même page, gardent leur liste complète triée dans le
+  navigateur.
+
 ---
 
 ## Réinitialisation

@@ -26,9 +26,12 @@ class ExportCommandeVenteController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        $query = CommandeVente::with(['vehicule.equipe.livreurs', 'client', 'site', 'facture'])
+        // Encaissements préchargés : déjà payé et reste se calculent sans requête par vente.
+        // L'identifiant départage les ventes de même date pour que la lecture par paquets reste stable.
+        $query = CommandeVente::with(['vehicule.equipe.livreurs', 'client', 'site', 'facture.encaissements'])
             ->where('organization_id', $orgId)
-            ->orderByDesc('created_at');
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         // Site (« Agence ») : même règle de périmètre que IndexCommandeVenteController — un
         // utilisateur limité à ses agences ne peut jamais exporter au-delà de ses propres sites, quoi qu'il envoie.
@@ -62,14 +65,12 @@ class ExportCommandeVenteController extends Controller
             : NatureOperation::VENTE_STANDARD;
         $query->where('nature_operation', $natureFiltree->value);
 
-        $commandes = $query->get();
-
         $columns = array_values(array_filter((array) $request->input('columns', [])));
         $format = $request->input('format') === 'csv' ? 'csv' : 'xlsx';
         $prefix = $natureFiltree === NatureOperation::DISTRIBUTION_CLIENT ? 'distributions' : 'ventes';
 
         return Excel::download(
-            new VenteListExport($commandes, $columns, $prefix),
+            new VenteListExport($query, $columns, $prefix),
             "{$prefix}-".now()->format('Y-m-d').".{$format}",
             $format === 'csv' ? ExcelFormat::CSV : ExcelFormat::XLSX,
         );
