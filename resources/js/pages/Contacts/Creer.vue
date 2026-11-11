@@ -40,7 +40,7 @@ interface FicheConnue {
 }
 
 interface ResultatRecherche {
-    statut: 'libre' | 'connu' | 'indisponible' | 'invalide';
+    statut: 'libre' | 'connu' | 'indisponible' | 'secondaire' | 'invalide';
     message?: string;
     message_autre_personne?: string;
     telephone?: string;
@@ -318,6 +318,19 @@ const urlAjoutFonction = computed(() => {
                 data-testid="contact-indisponible"
             >
                 {{ resultat.message }}
+            </section>
+
+            <!-- Lot 9b : numéro secondaire d'une fiche, sans création ni rattachement automatique -->
+            <section
+                v-if="resultat?.statut === 'secondaire' && resultat.fiche"
+                class="space-y-3 rounded-xl border bg-card p-4 text-sm sm:p-6"
+                data-testid="contact-secondaire"
+            >
+                <p class="text-muted-foreground">{{ resultat.message }}</p>
+                <p class="text-base font-semibold">{{ resultat.fiche.nom }}</p>
+                <Link :href="resultat.fiche.lien">
+                    <Button variant="outline" size="sm">Ouvrir la fiche</Button>
+                </Link>
             </section>
 
             <!-- Numéro déjà connu : choix explicite -->

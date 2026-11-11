@@ -55,6 +55,7 @@ unique `(organization_id, telephone_normalise)` refuse la seconde personne : l'u
 | Plusieurs dossiers employés (données anciennes) | « Plusieurs dossiers … choisissez le bon » + la liste | Aucun choix automatique, aucune création |
 | Numéro d'une personne connue sous un autre rôle (livreur, utilisateur, propriétaire…) | Bleu : nom et rôles de la personne | Création possible, rattachée à cette personne ; nom et prénom repris, non modifiables ici |
 | Numéro inconnu | Vert : « Aucun employé trouvé. Vous pouvez créer un nouveau dossier. » | Création, numéro déjà rempli |
+| Numéro secondaire d'une autre fiche (CONTACT-063, 11/11/2026) | Rouge : la fiche (nom, fonctions) et « Ouvrir la fiche », ou un message neutre si elle n'est pas consultable | **Aucune création**, aucun rattachement automatique |
 | Ancien dossier supprimé | Mention « ancien dossier archivé » | Réembauche possible (règle ci-dessus) |
 
 - **Téléphone obligatoire à la création** (décision du 01/11/2026, auparavant facultatif) : pas de

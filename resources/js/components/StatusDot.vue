@@ -10,6 +10,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     active: 'bg-emerald-500',
     valide: 'bg-emerald-500',
     validee: 'bg-emerald-500',
+    // Fusion de fiches Contacts exécutée (lot 9b).
+    executee: 'bg-emerald-500',
     // Période de paie validée (StatutPeriodePaie::VALIDE_RH) : salaires payables.
     valide_rh: 'bg-emerald-500',
     approuve: 'bg-emerald-500',
@@ -120,6 +122,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     sans_objet: 'bg-zinc-400 dark:bg-zinc-500',
     // Encaissement inter-agences retenu dans un règlement en préparation (ADR 0012).
     reserve: 'bg-zinc-400 dark:bg-zinc-500',
+    // Fusion de fiches Contacts annulée (lot 9b) : décision volontaire, pas une anomalie.
+    fusion_annulee: 'bg-zinc-400 dark:bg-zinc-500',
+    // Fusion annulée en partie : des éléments demandent une intervention (lot 9b).
+    fusion_annulee_partiellement: 'bg-orange-500',
 
     // Rouge — impayé / rejeté / annulé
     impaye: 'bg-red-500',

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Vehicules\Parrain;
 use App\Http\Controllers\Controller;
 use App\Models\Personne;
 use App\Models\Vehicule;
+use App\Support\Contacts\NumeroSecondaire;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,8 +50,14 @@ class RechercherTelephoneParrainController extends Controller
             ->where('telephone_normalise', $telephoneNormalise)
             ->first();
 
+        // CONTACT-063 : numéro secondaire d'une autre fiche — ni création, ni rattachement automatique.
+        $secondaire = $personne === null
+            ? NumeroSecondaire::fiche(Personne::class, $vehicule->organization_id, $telephoneNormalise)
+            : null;
+
         return response()->json([
             'found' => (bool) $personne,
+            'secondaire' => $secondaire !== null ? ['message' => NumeroSecondaire::message($secondaire, $request->user())] : null,
             'personne' => $personne ? [
                 'id' => $personne->id,
                 'nom_complet' => $personne->nom_complet,

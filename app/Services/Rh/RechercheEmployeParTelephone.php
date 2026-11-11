@@ -9,6 +9,7 @@ use App\Models\EntrepriseTierce;
 use App\Models\Personne;
 use App\Models\User;
 use App\Services\PhoneCountryInfo;
+use App\Support\Contacts\NumeroSecondaire;
 use App\Support\Rh\PerimetreEmploye;
 
 /**
@@ -20,7 +21,9 @@ use App\Support\Rh\PerimetreEmploye;
  * - `employe` : un dossier employé existe déjà (actif, suspendu ou sorti) → aucun nouveau dossier ;
  * - `personne` : le numéro identifie déjà une personne sous un autre rôle (livreur, utilisateur,
  *   propriétaire…) → le dossier employé lui sera rattaché, son identité n'est pas ressaisie ;
- * - `nouveau` : numéro inconnu → création d'un nouveau dossier.
+ * - `nouveau` : numéro inconnu → création d'un nouveau dossier ;
+ * - `secondaire` : numéro secondaire d'une autre fiche (CONTACT-063) → aucune création, la fiche est
+ *   désignée si le lecteur peut la voir.
  *
  * Simple aide à la saisie : le contrôle qui fait foi reste celui de EmployeController::store()
  * (même clé, sous verrou), car un dossier peut être créé entre la recherche et l'enregistrement.
@@ -132,6 +135,22 @@ class RechercheEmployeParTelephone
             ->where('telephone_normalise', Personne::normaliserTelephone($numero['telephone']))
             ->with(['livreur', 'proprietaire', 'fournisseur', 'prestataire', 'user'])
             ->first();
+
+        // CONTACT-063 : numéro secondaire d'une autre fiche — aucun dossier ne peut être créé avec lui.
+        $secondaire = $personne === null
+            ? NumeroSecondaire::fiche(Personne::class, $acteur->organization_id, Personne::normaliserTelephone($numero['telephone']))
+            : null;
+        if ($secondaire !== null) {
+            return [
+                'statut' => 'secondaire',
+                'telephone' => $numero['telephone'],
+                'pays' => $numero['pays'],
+                'code_pays' => $numero['code_pays'],
+                'indicatif' => $numero['indicatif'],
+                'message' => NumeroSecondaire::message($secondaire, $acteur),
+                'fiche' => NumeroSecondaire::presentation($secondaire, $acteur),
+            ];
+        }
 
         $dossiers = $personne === null ? collect() : Employe::withTrashed()
             ->with(['personne', 'site'])

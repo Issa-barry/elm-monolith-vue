@@ -10,6 +10,7 @@ import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -33,6 +34,8 @@ const props = defineProps<{
     /** contacts.create et au moins une fonction créable (calculé par le serveur). */
     peut_creer: boolean;
 }>();
+
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -111,6 +114,19 @@ function telephone(e: EntrepriseListe): string {
                 </div>
                 <ListPageActions>
                     <template #primary>
+                        <Link
+                            v-if="can('contacts.fusionner')"
+                            href="/backoffice/contacts/fusions"
+                        >
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="h-9 px-3 sm:px-4"
+                                data-testid="contacts-historique-fusions"
+                            >
+                                Historique des fusions
+                            </Button>
+                        </Link>
                         <Link
                             v-if="peut_creer"
                             href="/backoffice/contacts/nouveau?type=entreprise"

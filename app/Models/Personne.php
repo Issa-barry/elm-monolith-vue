@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\Civilite;
 use App\Services\Contacts\ClientIdentiteSynchronisation;
+use App\Support\Contacts\NumeroSecondaire;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -51,6 +52,9 @@ class Personne extends Model
      */
     protected static function booted(): void
     {
+        // CONTACT-063 : jamais une nouvelle identité sur le numéro secondaire d'une autre fiche.
+        static::saving(fn (Personne $personne) => NumeroSecondaire::verifier($personne));
+
         static::updating(function (Personne $personne) {
             if ($personne->isDirty(ClientIdentiteSynchronisation::COLONNES) && ClientIdentiteSynchronisation::estActivePour($personne->organization_id)) {
                 app(ClientIdentiteSynchronisation::class)->depuisPersonne($personne);
@@ -62,6 +66,21 @@ class Personne extends Model
     {
         $v = $value !== null ? trim((string) $value) : null;
         $this->attributes['email'] = $v !== null && $v !== '' ? strtolower($v) : null;
+    }
+
+    /** Lot 9b (décision 3) : copie normalisée, reconnue par la recherche sans aucun rattachement. */
+    public function setTelephoneSecondaireAttribute(mixed $value): void
+    {
+        $v = $value !== null ? trim((string) $value) : null;
+        $this->attributes['telephone_secondaire'] = $v !== null && $v !== '' ? $v : null;
+        $chiffres = $v !== null ? self::normaliserTelephone($v) : '';
+        $this->attributes['telephone_secondaire_normalise'] = $chiffres !== '' ? $chiffres : null;
+    }
+
+    /** Lot 9b : fiche absorbée par une fusion (archivée), redirigée vers celle-ci. */
+    public function fusionneeDans(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'fusionnee_dans_id')->withTrashed();
     }
 
     /**

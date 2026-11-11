@@ -7,6 +7,7 @@ use App\Models\Fournisseur;
 use App\Models\Personne;
 use App\Models\Prestataire;
 use App\Support\Contacts\MessagesContacts;
+use App\Support\Contacts\NumeroSecondaire;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -88,6 +89,8 @@ trait ResolutionIdentiteTiersTrait
         if ($existe) {
             throw ValidationException::withMessages(['phone' => $message]);
         }
+
+        NumeroSecondaire::assertLibre($classe, $organizationId, $normalise, 'phone', $ignorerId);
     }
 
     /** Deux créations simultanées du même numéro : la seconde reçoit le même message, jamais un doublon. */

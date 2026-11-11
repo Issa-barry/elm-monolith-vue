@@ -89,7 +89,8 @@ export type StandalonePermission =
     | 'contacts.create'
     | 'contacts.update'
     | 'contacts.gerer_categories'
-    | 'contacts.gerer_interlocuteurs';
+    | 'contacts.gerer_interlocuteurs'
+    | 'contacts.fusionner';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 /**

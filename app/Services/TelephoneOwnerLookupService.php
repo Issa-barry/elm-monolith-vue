@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Client;
 use App\Models\EntrepriseTierce;
 use App\Models\Personne;
+use App\Support\Contacts\NumeroSecondaire;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * Recherche à qui appartient déjà un numéro de téléphone dans une organisation, tous types de
@@ -27,7 +29,7 @@ use App\Models\Personne;
 class TelephoneOwnerLookupService
 {
     /**
-     * @return array{type: string, label: string, nom: string}|null
+     * @return array{type: string, label: string, nom: string, message?: string}|null
      */
     public static function find(string $organizationId, string $telephone, ?string $excludeClientId = null): ?array
     {
@@ -79,6 +81,33 @@ class TelephoneOwnerLookupService
             };
         }
 
-        return null;
+        return self::numeroSecondaire($organizationId, $digits, $excludeClientId);
+    }
+
+    /**
+     * CONTACT-063 : numéro secondaire d'une fiche Personne — bloquant (aucune nouvelle identité
+     * possible avec lui), jamais rattaché automatiquement. Le client modifié ne se signale pas
+     * lui-même.
+     *
+     * @return array{type: string, label: string, nom: string, message: string}|null
+     */
+    private static function numeroSecondaire(string $organizationId, string $digits, ?string $excludeClientId): ?array
+    {
+        $saufPersonne = $excludeClientId !== null
+            ? Client::where('organization_id', $organizationId)->whereKey($excludeClientId)->value('personne_id')
+            : null;
+        $fiche = NumeroSecondaire::fiche(Personne::class, $organizationId, $digits, $saufPersonne);
+        if ($fiche === null) {
+            return null;
+        }
+
+        $vue = NumeroSecondaire::presentation($fiche, Auth::user());
+
+        return [
+            'type' => 'secondaire',
+            'label' => 'Numéro secondaire',
+            'nom' => $vue['nom'] ?? '',
+            'message' => NumeroSecondaire::message($fiche, Auth::user()),
+        ];
     }
 }
