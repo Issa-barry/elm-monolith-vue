@@ -453,6 +453,13 @@ défaut les plus récentes d'abord). La période par défaut reste « Tout ».
   jamais sur la page affichée : ils sont calculés en SQL par `App\Support\Ventes\ListeVentes::totaux()`
   avec les mêmes règles que les accesseurs (`FactureVente::montant_restant`, `montant_encaisse`).
 - Changer un filtre revient à la première page ; changer de tri aussi.
+- Deux tris diffèrent de l'ancien tri fait dans le navigateur (à valider en recette) :
+  - **Date** : ordre chronologique de création (date et heure). Avant, le navigateur triait le
+    texte affiché « jj/mm/aaaa », donc d'abord par jour du mois, quels que soient le mois et l'année.
+  - **Restant** : trié sur le solde réel de la facture (net − encaissements nets des
+    remboursements), sans le plancher à 0 de l'affichage. Une facture en trop-perçu (affichée 0)
+    vient donc avant les factures soldées en ordre croissant, après elles en ordre décroissant ;
+    une vente sans facture vient en premier en ordre croissant, en dernier en ordre décroissant.
 - L'**export** (`/backoffice/ventes/export`) est inchangé : il porte sur tous les résultats choisis
   dans sa fenêtre, indépendamment de la page affichée.
 - Distribution et Précommandes, servies par la même page, gardent leur liste complète triée dans le
