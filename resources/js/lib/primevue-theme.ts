@@ -5,9 +5,6 @@ import {
 } from '@primeuix/styled';
 import { definePreset } from '@primeuix/themes';
 import Aura from '@primeuix/themes/aura';
-import Lara from '@primeuix/themes/lara';
-import Material from '@primeuix/themes/material';
-import Nora from '@primeuix/themes/nora';
 
 // Mécanique de rendu du thème (palettes, application des variables CSS
 // PrimeVue + du pont vers les tokens shadcn/Tailwind). La DÉCISION de quel
@@ -65,13 +62,21 @@ const DENSITE_APOLLO = {
 
 const AURA = definePreset(Aura, DENSITE_APOLLO);
 
-const PRIMEVUE_PRESETS: Record<PrimeVueThemeName, Record<string, unknown>> = {
-    aura: AURA,
-    lara: definePreset(Lara, DENSITE_APOLLO),
-    material: definePreset(Material, DENSITE_APOLLO),
-    nora: definePreset(Nora, DENSITE_APOLLO),
-    starter: AURA,
-};
+// Aura (preset par défaut, « starter » compris) est dans le bundle principal. Les trois autres
+// pèsent ~100 Ko chacun et ne servent qu'aux organisations qui les ont choisis : ils sont
+// chargés à la demande, une seule fois.
+type PresetChargeable = Exclude<PrimeVueThemeName, 'aura' | 'starter'>;
+
+const CHARGEURS_PRESETS = {
+    lara: () => import('@primeuix/themes/lara'),
+    material: () => import('@primeuix/themes/material'),
+    nora: () => import('@primeuix/themes/nora'),
+} satisfies Record<PresetChargeable, () => Promise<unknown>>;
+
+const PRESETS_CHARGES = new Map<PrimeVueThemeName, Record<string, unknown>>([
+    ['aura', AURA],
+    ['starter', AURA],
+]);
 
 const PRIMARY_PALETTES: Record<PrimeVuePrimaryName, Record<number, string>> = {
     zinc: {
@@ -401,20 +406,39 @@ export function normalizePrimeVueSurface(
     return normalized && normalized in SURFACE_PALETTES ? normalized : 'slate';
 }
 
-export function getPrimeVueThemePreset(value?: string | null): {
-    name: PrimeVueThemeName;
-    preset: object;
-} {
-    const name = normalizePrimeVueTheme(value);
-
-    return {
-        name,
-        preset: PRIMEVUE_PRESETS[name],
-    };
+/** Preset déjà disponible (Aura, ou chargé plus tôt), sinon `undefined`. */
+export function getLoadedPrimeVuePreset(
+    value?: string | null,
+): Record<string, unknown> | undefined {
+    return PRESETS_CHARGES.get(normalizePrimeVueTheme(value));
 }
 
-export function applyPrimeVueThemePreset(value: PrimeVueThemeName) {
-    usePreset(PRIMEVUE_PRESETS[value]);
+/**
+ * Preset prêt à l'emploi, chargé si besoin. Si le chargement échoue (réseau), retombe sur Aura
+ * sans le mémoriser : l'application démarre quand même et un prochain appel réessaie.
+ */
+export async function loadPrimeVuePreset(
+    value?: string | null,
+): Promise<Record<string, unknown>> {
+    const name = normalizePrimeVueTheme(value);
+    const charge = PRESETS_CHARGES.get(name);
+    if (charge) {
+        return charge;
+    }
+
+    try {
+        const module = await CHARGEURS_PRESETS[name as PresetChargeable]();
+        const preset = definePreset(module.default, DENSITE_APOLLO);
+        PRESETS_CHARGES.set(name, preset);
+
+        return preset;
+    } catch {
+        return AURA;
+    }
+}
+
+export function applyPrimeVueThemePreset(preset: Record<string, unknown>) {
+    usePreset(preset);
 }
 
 export function applyPrimeVuePrimaryColor(value: PrimeVuePrimaryName) {

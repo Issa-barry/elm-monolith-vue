@@ -3,6 +3,8 @@ import {
     applyPrimeVuePrimaryColor,
     applyPrimeVueSurfaceColor,
     applyPrimeVueThemePreset,
+    getLoadedPrimeVuePreset,
+    loadPrimeVuePreset,
     type PrimeVuePrimaryName,
     type PrimeVueSurfaceName,
     type PrimeVueThemeName,
@@ -29,12 +31,34 @@ function pageThemeActive(): ThemeActive | undefined {
     return usePage().props?.theme?.active;
 }
 
-export function applyEnvironmentTheme(active: ThemeActive) {
+let derniereDemande = 0;
+
+/**
+ * Preset déjà disponible : application immédiate (synchrone). Sinon, le preset est chargé puis
+ * tout est appliqué dans le même ordre ; une demande plus récente arrivée entre-temps l'emporte.
+ */
+export function applyEnvironmentTheme(active: ThemeActive): Promise<void> {
     if (typeof document === 'undefined') {
-        return;
+        return Promise.resolve();
     }
 
-    applyPrimeVueThemePreset(active.preset);
+    const demande = ++derniereDemande;
+    const preset = getLoadedPrimeVuePreset(active.preset);
+    if (preset) {
+        appliquer(active, preset);
+
+        return Promise.resolve();
+    }
+
+    return loadPrimeVuePreset(active.preset).then((charge) => {
+        if (demande === derniereDemande) {
+            appliquer(active, charge);
+        }
+    });
+}
+
+function appliquer(active: ThemeActive, preset: Record<string, unknown>) {
+    applyPrimeVueThemePreset(preset);
     applyPrimeVuePrimaryColor(active.primary);
     applyPrimeVueSurfaceColor(active.surface);
     applyAppThemeColors(
