@@ -211,7 +211,10 @@ jobs:
     # Désactivé du 2026-09-01 au 2026-09-03 (`false &&` ci-devant) pour accélérer une MEP
     # urgente, réactivé ensuite comme prévu — cf. commit qui a introduit ce commentaire.
     if: github.base_ref == 'pre-prod' && needs.changes.outputs.non_docs == 'true'
-    runs-on: ubuntu-latest
+    # Image figée (12/11/2026) : ubuntu-latest est passé à 26.04, que Playwright 1.58.2 ne
+    # supporte pas (« Playwright does not support chromium on ubuntu26.04-x64 », run #1411).
+    # À relever en même temps qu'une montée de Playwright qui supporte la nouvelle image.
+    runs-on: ubuntu-24.04
     # Shardée le 31/08/2026 (remplace le mode smoke-only introduit le 26/08/2026) : la
     # suite complète (173 tests, 43 fichiers) en --workers=1 dans UN SEUL job dépassait
     # systématiquement le timeout même remonté à 90 min (job tué par le timeout à ~1h30,
@@ -234,7 +237,7 @@ jobs:
     # refusée), soit timeout webServer (tentative de connexion qui traîne). Miroir CI du
     # flow local `npm run e2e:db:reset` (voir package.json). Une base par job de matrix :
     # chaque shard a la sienne, aucun partage de données entre shards.
-    # MySQL 8.0 préinstallé sur l'image ubuntu-latest (service désactivé par défaut) et non
+    # MySQL 8.0 préinstallé sur l'image ubuntu-24.04 (service désactivé par défaut) et non
     # un conteneur `services:` : les 4 shards + le smoke tiraient l'image en parallèle depuis
     # des IP de runners partagées, et Docker Hub puis le miroir ECR Public ont tous deux
     # refusé le pull (toomanyrequests / Data limit exceeded, run #1312) avant même le checkout.
@@ -371,7 +374,7 @@ jobs:
     # smoke-testé, PHPUnit (job `ci`) suffit ici (github.base_ref ne vaut alors ni
     # 'pre-prod' ni 'production', donc ni e2e-full ni e2e-smoke ne tournent).
     if: github.base_ref == 'production' && needs.changes.outputs.non_docs == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # figée, cf. e2e-full
     timeout-minutes: 20
     # MySQL préinstallé sur le runner plutôt qu'un conteneur `services:`, cf. e2e-full.
     steps:
