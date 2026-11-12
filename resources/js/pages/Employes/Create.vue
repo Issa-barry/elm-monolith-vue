@@ -32,8 +32,10 @@ interface Option {
 
 /** Réponse de GET /backoffice/employes/recherche-telephone (RechercheEmployeParTelephone). */
 interface ResultatRecherche {
-    statut: 'employe' | 'personne' | 'nouveau' | 'invalide';
+    statut: 'employe' | 'personne' | 'nouveau' | 'secondaire' | 'invalide';
     message?: string;
+    // Numéro secondaire d'une autre fiche (CONTACT-063) : null si le lecteur ne peut pas la voir.
+    fiche?: { nom: string; fonctions: string[]; lien: string } | null;
     telephone?: string;
     pays?: string;
     code_pays?: string;
@@ -347,6 +349,23 @@ function submit() {
                             Ce dossier relève d’une agence que vous ne gérez pas
                             : demandez à un responsable de cette agence.
                         </p>
+                    </div>
+
+                    <!-- Numéro secondaire d'une autre fiche : aucune création possible. -->
+                    <div
+                        v-else-if="recherche?.statut === 'secondaire'"
+                        class="flex flex-wrap items-start justify-between gap-3 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                        data-testid="resultat-secondaire"
+                    >
+                        <span>{{ recherche.message }}</span>
+                        <Link
+                            v-if="recherche.fiche"
+                            :href="recherche.fiche.lien"
+                        >
+                            <Button variant="outline" size="sm">
+                                <Eye class="mr-1.5 h-4 w-4" />Ouvrir la fiche
+                            </Button>
+                        </Link>
                     </div>
 
                     <!-- Personne connue sous un autre rôle : le dossier lui sera rattaché. -->

@@ -11,6 +11,8 @@ use App\Services\Contacts\QualificationsPrestataire;
 use App\Services\Contacts\ReferentielCategories;
 use App\Services\Contacts\VisibiliteContacts;
 use App\Support\Contacts\PresentationContacts;
+use App\Support\Contacts\RedirectionFusion;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -22,11 +24,14 @@ use Inertia\Response;
  */
 class ShowPersonneController extends Controller
 {
-    public function __invoke(Request $request, Personne $personne, VisibiliteContacts $visibilite): Response
+    public function __invoke(Request $request, Personne $personne, VisibiliteContacts $visibilite): Response|RedirectResponse
     {
         $this->authorize('viewAny', Personne::class);
 
         $user = $request->user();
+        if ($personne->trashed()) {
+            return RedirectionFusion::versFicheConservee($personne, 'personnes', fn (Personne $f) => $visibilite->personneVisible($f, $user));
+        }
         abort_unless($visibilite->personneVisible($personne, $user), 404);
 
         $presentation = new PresentationContacts($user->organization_id);

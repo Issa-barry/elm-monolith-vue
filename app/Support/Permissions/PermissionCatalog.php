@@ -81,6 +81,8 @@ final class PermissionCatalog
         'contacts.update' => "Contacts — modifier l'identité d'une fiche (s'applique à toutes ses fonctions)",
         'contacts.gerer_categories' => 'Contacts — gérer les catégories et sous-catégories',
         'contacts.gerer_interlocuteurs' => "Contacts — ajouter, modifier ou désactiver les interlocuteurs d'une entreprise",
+        // Lot 9b (F4) : attribuée à aucun rôle par défaut (super_admin la reçoit comme toute permission).
+        'contacts.fusionner' => 'Contacts — fusionner deux fiches (personnes ou entreprises) et annuler une fusion',
         'communications.read' => 'Communications — consulter le journal des messages (SMS/WhatsApp)',
         'communications.manage' => 'Communications — configurer les règles de notification (SMS/WhatsApp)',
         'pieces-identite.download' => "Pièces d'identité — télécharger",
@@ -200,7 +202,7 @@ final class PermissionCatalog
                 'Comptes' => ['rattachements-comptes.gerer'],
                 'Référentiel Contacts' => [
                     'contacts.read', 'contacts.create', 'contacts.update',
-                    'contacts.gerer_categories', 'contacts.gerer_interlocuteurs',
+                    'contacts.gerer_categories', 'contacts.gerer_interlocuteurs', 'contacts.fusionner',
                 ],
             ],
         ],

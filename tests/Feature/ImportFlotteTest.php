@@ -16,6 +16,7 @@ use App\Models\ImportFlotte;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Parametre;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -738,6 +739,34 @@ class ImportFlotteTest extends TestCase
 
         $this->assertSame(0, $import->nb_groupes_erreur);
         $this->assertSame(1, $import->nb_groupes_valides);
+    }
+
+    /** CONTACT-063 : le numéro secondaire d'une fiche ne crée ni propriétaire ni livreur, dès l'analyse. */
+    public function test_analyse_refuse_un_numero_secondaire_de_proprietaire(): void
+    {
+        $this->ficheAvecSecondaire('+224622000001');
+
+        $import = $this->importerVehiculeEtChauffeur();
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Téléphone du propriétaire +224622000001 : Ce numéro est le numéro secondaire', implode(' ', $import->rapport['groupes'][0]['erreurs']));
+    }
+
+    public function test_analyse_refuse_un_numero_secondaire_de_livreur(): void
+    {
+        $this->ficheAvecSecondaire('+224623000001');
+
+        $import = $this->importerVehiculeEtChauffeur();
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('téléphone livreur +224623000001 : Ce numéro est le numéro secondaire', implode(' ', $import->rapport['groupes'][0]['erreurs']));
+    }
+
+    private function ficheAvecSecondaire(string $secondaire): Personne
+    {
+        $fiche = new Personne(['organization_id' => $this->org->id, 'nom' => 'Sylla', 'telephone' => '+224622999999', 'telephone_secondaire' => $secondaire]);
+        $fiche->telephone_normalise = '224622999999';
+        $fiche->save();
+
+        return $fiche;
     }
 
     // ── confirmation / création ──────────────────────────────────────────────

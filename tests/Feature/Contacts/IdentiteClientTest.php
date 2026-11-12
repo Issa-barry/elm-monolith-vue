@@ -98,13 +98,13 @@ class IdentiteClientTest extends TestCase
 
     public function test_l_application_complete_les_champs_vides_et_laisse_les_conflits(): void
     {
-        $p = $this->personne(['nom_complet' => 'Fatou Bah', 'telephone' => '+224622000001', 'ville' => 'Conakry']);
-        $c = $this->client($p, ['nom_complet' => 'Fatou Diallo', 'email' => 'fatou@exemple.gn', 'ville' => null]);
+        $p = $this->personne(['nom_complet' => 'Fatou Bah', 'prenom' => 'Fatou', 'telephone' => '+224622000001']);
+        $c = $this->client($p, ['nom_complet' => 'Fatou Diallo', 'email' => 'fatou@exemple.gn', 'prenom' => null]);
 
         $this->assertSame(Command::SUCCESS, $this->lancer(['--apply' => true]));
 
         $this->assertSame('fatou@exemple.gn', $p->fresh()->email);
-        $this->assertSame('Conakry', $c->fresh()->ville);
+        $this->assertSame('Fatou', $c->fresh()->prenom);
         // Conflit : rien n'est tranché automatiquement.
         $this->assertSame('Fatou Bah', $p->fresh()->getAttributes()['nom_complet']);
         $this->assertSame('Fatou Diallo', $c->fresh()->nom_complet);
@@ -137,17 +137,17 @@ class IdentiteClientTest extends TestCase
 
     public function test_l_annulation_restaure_et_signale_ce_qui_a_change_depuis(): void
     {
-        $p = $this->personne(['nom_complet' => 'Fatou Bah', 'telephone' => '+224622000001', 'ville' => 'Conakry']);
-        $c = $this->client($p, ['email' => 'fatou@exemple.gn', 'ville' => null]);
+        $p = $this->personne(['nom_complet' => 'Fatou Bah', 'prenom' => 'Fatou', 'telephone' => '+224622000001']);
+        $c = $this->client($p, ['email' => 'fatou@exemple.gn', 'prenom' => null]);
         $this->lancer(['--apply' => true]);
         $reprise = ContactsReprise::where('mode', ContactsReprise::MODE_APPLICATION)->firstOrFail();
         // Modifié depuis l'exécution : l'annulation n'y touche pas.
-        DB::table('clients')->where('id', $c->id)->update(['ville' => 'Kindia']);
+        DB::table('clients')->where('id', $c->id)->update(['prenom' => 'Fatoumata']);
 
         $this->lancer(['--annuler' => $reprise->id, '--apply' => true]);
 
         $this->assertNull($p->fresh()->email);
-        $this->assertSame('Kindia', $c->fresh()->ville);
+        $this->assertSame('Fatoumata', $c->fresh()->prenom);
         $this->assertSame(1, ContactsRepriseValeur::where('annulation_statut', ContactsRepriseValeur::CONFLIT)->count());
         $this->assertSame(1, ContactsRepriseValeur::where('annulation_statut', ContactsRepriseValeur::ANNULEE)->count());
     }
@@ -205,9 +205,35 @@ class IdentiteClientTest extends TestCase
 
         $client = Client::firstOrFail();
         $this->assertSame('Fatou Bah', $client->nom_complet);
-        $this->assertSame('Quartier Dixinn', $p->fresh()->adresse);
+        // La localisation saisie reste celle du client : jamais recopiée sur la Personne.
+        $this->assertNull($p->fresh()->adresse);
         $this->assertSame('Quartier Dixinn', $client->adresse);
         $this->assertSame('Boké', $client->ville);
+    }
+
+    public function test_la_reprise_ne_touche_jamais_la_localisation_du_client(): void
+    {
+        // Cas Rayanatou (10/11/2026) : domicile à Matoto sur la Personne, boutique à Dubreka sur le client.
+        $p = $this->personne(['prenom' => 'Rayanatou', 'nom' => 'SYLLA', 'nom_complet' => null, 'telephone' => '+224624866799', 'ville' => 'Conakry', 'adresse' => 'Matoto']);
+        $c = $this->client($p, ['nom_complet' => 'Rayanatou', 'ville' => null, 'adresse' => 'Dubreka']);
+        $vide = $this->personne(['nom_complet' => 'Badeya', 'telephone' => '+224622854863']);
+        $c2 = $this->client($vide, ['ville' => 'Conakry', 'adresse' => '622854863']);
+
+        $this->artisan(self::COMMANDE, ['--acteur' => $this->utilisateur()->id, '--personne-fait-foi' => [$c->id]])
+            ->expectsOutputToContain('Conflits à arbitrer : 0')
+            ->doesntExpectOutputToContain('Dubreka')
+            ->doesntExpectOutputToContain('622854863')
+            ->assertSuccessful();
+
+        $this->assertSame(Command::SUCCESS, $this->lancer(['--apply' => true, '--personne-fait-foi' => [$c->id]]));
+
+        $this->assertSame('Rayanatou SYLLA', $c->fresh()->nom_complet);
+        $this->assertSame('Dubreka', $c->fresh()->adresse);
+        $this->assertNull($c->fresh()->ville);
+        $this->assertSame('Matoto', $p->fresh()->adresse);
+        $this->assertSame('622854863', $c2->fresh()->adresse);
+        $this->assertNull($vide->fresh()->adresse);
+        $this->assertNull($vide->fresh()->ville);
     }
 
     // ── Modification de l'identité depuis Contacts ──────────────────────────
@@ -224,9 +250,9 @@ class IdentiteClientTest extends TestCase
         ])->assertSessionHasNoErrors();
 
         $this->assertSame('Fatoumata Bah', $p->fresh()->getAttributes()['nom_complet']);
-        // Synchronisation active : le client suit sa fiche.
+        // Synchronisation active : le client suit l'identité de sa fiche, pas sa localisation.
         $this->assertSame('Fatoumata Bah', $c->fresh()->nom_complet);
-        $this->assertSame('Kindia', $c->fresh()->ville);
+        $this->assertNull($c->fresh()->ville);
         $this->assertTrue(AuditLog::where('auditable_id', $p->id)->where('meta->origine', 'contacts')->exists());
     }
 

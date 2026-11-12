@@ -115,7 +115,8 @@ class UserTest extends TestCase
      * encaissée — cf. CommandeVentePolicy::regulariserApresEncaissement(), ADR 0043) + 2 (parrains.read,
      * rattachements-comptes.gerer — ADR 0050) = 247, puis les 5 droits `contacts.*` du référentiel
      * Contacts (06/11/2026, ADR 0060 — pas de `contacts.delete`) = 252, puis
-     * `commissions.configurer_agences_payeuses` (07/11/2026, Paramètres → Agences payeuses, ADR 0061) = 253.
+     * `commissions.configurer_agences_payeuses` (07/11/2026, Paramètres → Agences payeuses, ADR 0061) = 253,
+     * puis `contacts.fusionner` (11/11/2026, fusion manuelle des fiches, ADR 0060 lot 9b) = 254.
      */
     public function test_permissions_map_returns_211_keys(): void
     {
@@ -125,7 +126,7 @@ class UserTest extends TestCase
         $map = $user->permissionsMap();
 
         $this->assertCount(PermissionCatalog::totalCount(), $map);
-        $this->assertCount(253, $map);
+        $this->assertCount(254, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void
