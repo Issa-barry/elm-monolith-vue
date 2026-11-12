@@ -39,10 +39,12 @@ class VerifierTelephoneClientController extends Controller
 
         return response()->json([
             'found' => $resultat !== null,
-            'blocking' => ($resultat['type'] ?? null) === 'client',
+            // Numéro secondaire d'une fiche (CONTACT-063) : bloquant aussi, refusé à la soumission.
+            'blocking' => in_array($resultat['type'] ?? null, ['client', 'secondaire'], true),
             'type' => $resultat['type'] ?? null,
             'label' => $resultat['label'] ?? null,
             'nom' => $resultat['nom'] ?? null,
+            'message' => $resultat['message'] ?? null,
         ]);
     }
 }

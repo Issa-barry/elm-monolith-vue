@@ -20,6 +20,7 @@ use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\PartageLivraisonVersionService;
 use App\Services\Commission\PartParrainService;
 use App\Services\Commission\RecalculRetroactifParrainService;
+use App\Support\Contacts\NumeroSecondaire;
 use Illuminate\Contracts\Validation\ImplicitRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -1232,7 +1233,13 @@ class EquipeLivraisonController extends Controller
             ->first();
 
         if (! $personneConflit) {
-            return null;
+            // CONTACT-063 : le numéro secondaire d'une autre fiche ne crée jamais un nouveau membre.
+            $saufPersonne = $livreurIdSoumis !== null
+                ? Livreur::where('organization_id', $orgId)->whereKey($livreurIdSoumis)->value('personne_id')
+                : null;
+            $secondaire = NumeroSecondaire::fiche(Personne::class, $orgId, Personne::normaliserTelephone($telephone), $saufPersonne);
+
+            return $secondaire !== null ? NumeroSecondaire::message($secondaire, auth()->user()) : null;
         }
 
         if ($livreurIdSoumis !== null) {

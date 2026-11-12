@@ -24,7 +24,7 @@ paiement et comptes auxiliaires continuent de les référencer sans changement.
 | 7b — Client professionnel | Client relié à une fiche Entreprise (règles du lot 5), raison sociale comme nom principal (L7-2) | Fait (09/11/2026, commit `ee322eb0`) |
 | 8 — Bascule | Menu « Par fonction », groupe « Contacts » unique dans la recherche du back-office, création Fournisseur / Prestataire par le parcours Contacts (L8-1 à L8-3) | Fait (09/11/2026, commit `0b06d1c6`) |
 | 9a — Détection des doublons | Commande `contacts:doublons` en lecture seule : paires probables d'entreprises et blocage F1 ; personnes jamais rapprochées (10/11/2026) | Fait (09/11/2026, en production le 10/11/2026) ; personnes retirées le 10/11/2026 |
-| 9b — Fusion manuelle | Fusion décidée par l'administration, personnes et entreprises (10/11/2026) | À venir, après la clôture du 9a |
+| 9b — Fusion manuelle | Écran de fusion des personnes et des entreprises : simulation, arbitrage champ par champ, confirmation, archivage de la fiche absorbée, historique et annulation sûre (F1 à F4, décisions 1 à 8) | Développé le 11/11/2026, non commité |
 
 Le lot 1 n'ajoute ni écran ni route. Le lot 2 ajoute 4 routes GET en lecture seule. Le lot 3
 ajoute la création (2 routes GET, 4 routes POST) et change deux comportements existants, par
@@ -391,6 +391,77 @@ sur les ventes, commissions, comptabilité ou logistique.
 - **CONTACT-054** — Pour chaque paire, le rapport donne les fonctions des deux entreprises et ce qui
   bloquerait la fusion (décision F1 du lot 9) : **même fonction** des deux côtés (les fonctions ne
   sont jamais fusionnées, aucun historique métier n'est touché).
+- **CONTACT-055** — Fusion manuelle (lot 9b) : jamais automatique. Depuis une fiche Personne ou
+  Entreprise (fiche A, conservée), l'administrateur cherche la fiche B (même type, même
+  organisation, visible), compare les deux fiches et arbitre chaque champ différent. Chaque choix
+  relance une **simulation sans écriture** ; rien n'est fusionné sans confirmation explicite. Par
+  défaut, les noms (nom, prénom, nom complet, surnom, raison sociale, nom commercial) restent ceux de
+  A, même vides — le nom affiché peut venir d'une fonction ; les autres champs vides de A sont
+  complétés par B. « Conserver plutôt B » inverse les rôles. Entreprises : contact principal
+  arbitré comme un champ, interlocuteur principal choisi si A et B en ont chacune un (décision 8).
+- **CONTACT-056** — Blocages : même fonction des deux côtés, **fonction archivée comprise** (F1) ;
+  A et B interlocuteurs de la même entreprise (décision 4) ; un compte utilisateur de chaque côté
+  (F2) ; une fonction ou un lien que l'utilisateur ne peut pas consulter (décision 6, message
+  neutre) ; une donnée liée d'une autre organisation ou un compte sans organisation ; identité
+  retenue en conflit d'unicité avec un autre client quand la synchronisation R1 est active.
+- **CONTACT-057** — Historique métier intact : les fonctions changent de fiche **avec leur id**
+  (ventes, factures, paiements, commissions, écritures et comptes auxiliaires pointent vers elles) ;
+  rien n'est supprimé, recréé ni réaffecté à une autre fonction. Sont transférés vers A : les
+  fonctions, le compte, les liens d'interlocuteur, le rôle de contact d'une entreprise, les
+  catégories libres, les pièces d'identité. Une catégorie ou un interlocuteur déjà présent sur A
+  reste sur la fiche archivée. La fiche B est **archivée** (suppression logique, jamais physique)
+  avec un lien vers A ; son adresse redirige vers A. Le journal de reprise du lot 6 n'est jamais
+  réécrit.
+- **CONTACT-058** — Téléphones (F3, décision 2) : un principal et un secondaire au plus, choisis
+  parmi les numéros des deux fiches (par défaut : principal de A ; secondaire de A, sinon numéro de
+  B). Les autres quittent la fiche avec confirmation et restent au journal. Le numéro principal de
+  B est libéré à l'archivage, son numéro secondaire aussi (il peut devenir un numéro de A).
+  Décision 3 : un numéro secondaire est reconnu par la recherche
+  « téléphone d'abord » (statut `secondaire`, lien vers la fiche) mais n'ouvre ni création ni
+  rattachement automatique ; la création Contacts avec ce numéro est refusée.
+- **CONTACT-059** — Compte utilisateur (F2, décision 5, précision 1) : un seul compte — la
+  simulation montre ses rôles, ses identifiants de connexion et les fonctions qui pourront lui être
+  rattachées (ADR 0056, visibles dans l'espace client) ; confirmation explicite et permission
+  `users.update` exigées. Compte sur B : il passe sur A, confirmation renforcée (saisir
+  `TRANSFERER`). Les identifiants de connexion du compte ne sont **jamais** modifiés par la fusion :
+  garder le numéro de B comme principal aligne la fiche sur le numéro de connexion.
+- **CONTACT-060** — Sécurité d'exécution : transaction, verrou sur A et B (ordre fixe), simulation
+  refaite sous verrou, **empreinte** des deux fiches et de leurs liens comparée à celle de la
+  simulation (toute modification concurrente refuse la fusion), jeton de formulaire (un double envoi
+  ne fusionne qu'une fois), vérification qu'aucune table ne pointe encore vers B avant de valider.
+- **CONTACT-061** — Journal : chaque valeur écrite, avant et après — champs arbitrés, liens
+  transférés, numéro libéré, archivage, effets induits (identité recopiée sur le client si R1 est
+  active, raison sociale recopiée sur le propriétaire et le client professionnel, rattachement au
+  compte, rôle ajouté au compte) — et éléments laissés tels quels (numéros retirés, doublons de
+  catégorie ou d'interlocuteur). Écran « Historique des fusions ».
+- **CONTACT-062** — Annulation (décision 7, précision 3) : sans délai, depuis le détail d'une
+  fusion. Le journal est relu à rebours : une valeur n'est remise que si elle est encore celle que
+  la fusion a écrite ; sinon elle n'est **jamais écrasée** et apparaît « à traiter ». Un rôle ajouté
+  au compte n'est jamais retiré automatiquement. Un numéro repris depuis par une autre fiche n'est
+  pas restauré. Si la fiche absorbée n'est plus archivée par cette fusion, rien n'est restauré.
+  Statuts : exécutée, annulée, annulée partiellement (éléments à traiter).
+- **CONTACT-063** — Numéro secondaire dans toute l'application (11/11/2026, demandé à la revue du
+  9b) : le numéro secondaire d'une fiche active ne peut devenir le numéro principal d'**aucune autre
+  fiche du même type** de l'organisation. Règle portée par les modèles `Personne` et
+  `EntrepriseTierce` (création et tout changement de numéro principal) : aucun formulaire ni
+  parcours ne peut créer une nouvelle identité avec ce numéro — Client, Fournisseur, Prestataire,
+  Propriétaire, Parrain, Livreur, Employé, membres d'une équipe de livraison, interlocuteur,
+  utilisateur, invitation, import de flotte, conversion d'une proposition. **Jamais de
+  rattachement automatique** : le numéro principal d'une fiche reste la seule clé de
+  rapprochement (règle inchangée). Le message désigne la fiche (nom et fonctions) si l'utilisateur
+  peut la voir, sinon il reste neutre (décision 1 du lot 3). Détection **avant** la saisie
+  complète : vérification en direct du formulaire Client (bloquante), recherche « téléphone
+  d'abord » de Nouvel employé (statut `secondaire`, lien vers la fiche), recherche du parrain
+  (création impossible), contrôle en direct des membres d'équipe, recherche d'interlocuteur,
+  analyse de l'import de flotte (erreur dès la prévisualisation). Une fiche peut reprendre son
+  propre secondaire comme principal ; une fiche archivée ne bloque plus ; un numéro d'une autre
+  organisation ne compte pas. **Exception métier** (numéro réattribué à quelqu'un d'autre) : aucune
+  case « forcer » ; on retire d'abord ce numéro secondaire de la fiche existante (Contacts →
+  Modifier, geste explicite et tracé), puis on crée la nouvelle identité. Fusion : un numéro
+  retenu comme principal qui est le secondaire d'une troisième fiche bloque la simulation ;
+  l'annulation ne remet pas un numéro devenu depuis le principal ou le secondaire d'une autre fiche.
+  Non couvert (choix volontaire, non demandé) : enregistrer comme **secondaire** un numéro déjà
+  porté par une autre fiche reste possible (numéro partagé d'une famille, par exemple).
 
 ## Écrans (lot 2)
 
@@ -475,6 +546,20 @@ Aucune route ajoutée, aucune migration.
 | --- | --- |
 | `contacts:doublons --acteur=<id> [--export=<fichier.csv>]` | Doublons probables d'entreprises et blocage F1, en lecture seule (CONTACT-053, CONTACT-054) |
 
+## Écrans et routes (lot 9b)
+
+| Route | Rôle |
+| --- | --- |
+| `GET /backoffice/contacts/fusion/{personne\|entreprise}/{fiche}` | Écran de fusion depuis la fiche A : `recherche`, `b`, `choix[...]` ; simulation sans écriture |
+| `POST /backoffice/contacts/fusions` | Confirmation : `type`, `fiche_a`, `fiche_b`, `choix`, `confirmations`, `empreinte`, `jeton` |
+| `GET /backoffice/contacts/fusions` | Historique des fusions de l'organisation |
+| `GET /backoffice/contacts/fusions/{fusion}` | Détail, journal, ce que l'annulation restaurerait et ce qui demande une intervention |
+| `POST /backoffice/contacts/fusions/{fusion}/annulation` | Annulation sûre |
+| `GET /backoffice/contacts/{personnes\|entreprises}/{id}` (existante) | Une fiche absorbée redirige vers la fiche conservée |
+
+Fiches Personne et Entreprise : bouton « Fusionner ». Listes : bouton « Historique des fusions ».
+Les deux avec `contacts.fusionner` seulement.
+
 ## Routes (lot 6a)
 
 | Route | Rôle |
@@ -502,6 +587,7 @@ Personne et Entreprise : bloc « Catégories » dans l'onglet Informations. List
 | `contacts.update` | Modifier l'identité (s'applique à toutes les fonctions de la fiche) ; attribuer les catégories libres d'une fiche (lot 6a) |
 | `contacts.gerer_categories` | Consulter et paramétrer les sous-catégories et les catégories libres (écran « Catégories de contacts », lot 6a) |
 | `contacts.gerer_interlocuteurs` | Ajouter, modifier, désigner, désactiver, réactiver un interlocuteur (lot 4, avec l'entreprise visible) |
+| `contacts.fusionner` | Fusionner deux fiches et annuler une fusion (lot 9b, avec `contacts.read` ; `users.update` en plus quand une fiche a un compte). Attribuée à **aucun rôle** par défaut (F4) : seul `super_admin` l'a, comme toute permission |
 
 Pas de `contacts.delete` : une fiche se désactive. Ajoutées par migration à `super_admin` et
 `admin_entreprise` ; les autres rôles les reçoivent dans « Rôles ». Les blocs de chaque fonction
@@ -563,6 +649,26 @@ restent soumis à leurs permissions existantes (`clients.read`, `fournisseurs.re
   modèle `ContactsRepriseValeur`, migration `2026_11_09_220000`.
 - Doublons (lot 9a) : service `App\Services\Contacts\DetectionDoublons`, commande
   `ContactsDoublonsCommand`.
+- Fusion (lot 9b) : services `App\Services\Contacts\Fusion\FusionContacts` (simulation,
+  blocages, exécution), `AnnulationFusionContacts`, `ReferencesFusion` (registre des liens, comparé
+  au schéma par `ReferencesFusionTest`), `JournalFusion` ; modèles `ContactsFusion`,
+  `ContactsFusionOperation` ; contrôleurs `App\Http\Controllers\Contacts\Fusions\*` ;
+  redirection `App\Support\Contacts\RedirectionFusion` ; pages `Contacts/Fusion.vue`,
+  `Contacts/Fusions/Index.vue`, `Contacts/Fusions/Show.vue` ; migration `2026_11_11_120000`
+  (`fusionnee_dans_id`, `fusionnee_le`, `telephone_secondaire_normalise`, tables de journal).
+- Numéro secondaire (CONTACT-063) : `App\Support\Contacts\NumeroSecondaire` (garde des modèles
+  `Personne` et `EntrepriseTierce`, présentation selon la visibilité), branchée sur
+  `TelephoneOwnerLookupService`, `RechercheEmployeParTelephone`, `RechercherTelephoneParrainController`,
+  `EquipeLivraisonController::detecterConflitTelephone`, `RechercheTelephoneContact`,
+  `ResolutionIdentiteTiersTrait` (champ `phone`) et `ImportFlotteParser` ; tests
+  `NumeroSecondaireApplicationTest`, `ImportFlotteTest`.
+- Défaut connu des tests (constaté le 11/11/2026, non corrigé, sans effet en production) :
+  `LivreurFactory::create(['personne_id' => …])` ignore la Personne fournie et en crée une
+  nouvelle. Cause : avec des attributs, `parent::create()` rappelle la méthode avec un tableau vide,
+  et le verrou de réentrance n'est posé que lorsque `personne_id` est absent. Impact : un test qui
+  croit relier un livreur à une Personne existante teste en réalité une autre fiche (faux négatif
+  possible sur les blocages par fonction, la visibilité ou la fusion). Contournement utilisé par
+  les tests du lot 9b : créer le livreur, puis poser `personne_id` par une mise à jour directe.
 - Client professionnel (lot 7b) : `ProprietaireEntreprise` étendu au client (`Proprietaire|Client`),
   règles de saisie `App\Http\Controllers\Concerns\SaisieEntrepriseLiee`, relations
   `Client::entrepriseTierce()` / `EntrepriseTierce::clients()`, migration `2026_11_09_230000`,

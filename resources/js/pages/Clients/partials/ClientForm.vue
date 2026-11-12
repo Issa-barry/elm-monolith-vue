@@ -193,6 +193,8 @@ interface TelephoneConflict {
     blocking: boolean;
     label: string;
     nom: string;
+    // Numéro secondaire d'une fiche (CONTACT-063) : message complet fourni par le serveur.
+    message: string | null;
 }
 
 const phoneConflict = ref<TelephoneConflict | null>(null);
@@ -236,7 +238,12 @@ async function checkTelephoneConflict(): Promise<void> {
         if (res.ok) {
             const data = await res.json();
             phoneConflict.value = data.found
-                ? { blocking: data.blocking, label: data.label, nom: data.nom }
+                ? {
+                      blocking: data.blocking,
+                      label: data.label,
+                      nom: data.nom,
+                      message: data.message ?? null,
+                  }
                 : null;
         }
     } catch {
@@ -504,6 +511,13 @@ function onSubmit() {
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.telephone }}
+                    </p>
+                    <p
+                        v-else-if="phoneConflict?.message"
+                        class="mt-1 text-xs text-destructive"
+                        data-testid="client-telephone-secondaire"
+                    >
+                        {{ phoneConflict.message }}
                     </p>
                     <p
                         v-else-if="phoneConflict?.blocking"

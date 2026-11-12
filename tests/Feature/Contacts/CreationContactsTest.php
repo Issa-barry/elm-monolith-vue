@@ -419,7 +419,8 @@ class CreationContactsTest extends TestCase
             ->map(fn ($r) => $r->getName().':'.implode('|', $r->methods()))
             ->sort()->values()->all();
 
-        // Lot 6a : catégories ; lot 7a : modification de l'identité d'une fiche, par décision.
+        // Lot 6a : catégories ; lot 7a : modification de l'identité d'une fiche ; lot 9b : fusion et
+        // annulation, par décision.
         $this->assertSame([
             'contacts.categories.libres.store:POST',
             'contacts.categories.libres.update:PATCH',
@@ -435,6 +436,8 @@ class CreationContactsTest extends TestCase
             'contacts.entreprises.interlocuteurs.update:PATCH',
             'contacts.entreprises.store:POST',
             'contacts.entreprises.update:PATCH',
+            'contacts.fusions.annuler:POST',
+            'contacts.fusions.store:POST',
             'contacts.personnes.categories.update:PUT',
             'contacts.personnes.fonctions.store:POST',
             'contacts.personnes.store:POST',

@@ -16,6 +16,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useFlashToast } from '@/composables/useFlashToast';
+import { usePermissions } from '@/composables/usePermissions';
 import { useUrlTab } from '@/composables/useUrlTab';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -25,6 +26,7 @@ import {
     ArrowLeft,
     Building2,
     CircleHelp,
+    GitMerge,
     Layers,
     MoreVertical,
     Plus,
@@ -71,6 +73,7 @@ const props = defineProps<{
 }>();
 
 useFlashToast();
+const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
 
@@ -192,6 +195,19 @@ function telephone(valeur: string | null, code: string | null): string {
                         <Plus class="mr-1.5 h-4 w-4" />
                         Ajouter une fonction
                     </Button>
+                    <Link
+                        v-if="can('contacts.fusionner')"
+                        :href="`/backoffice/contacts/fusion/entreprise/${entreprise.id}`"
+                    >
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            data-testid="fiche-fusionner"
+                        >
+                            <GitMerge class="mr-1.5 h-4 w-4" />
+                            Fusionner
+                        </Button>
+                    </Link>
                     <Link href="/backoffice/contacts/entreprises">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />

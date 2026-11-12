@@ -239,6 +239,39 @@ des entreprises, à l'initiative de l'administration (choix de la fiche conserv�
 confirmation), avec les décisions F1 à F4 ; il démarre après la clôture du 9a, son parcours est
 arrêté à ce moment-là.
 
+## Lot 9b (fusion manuelle) — décisions du 11/11/2026
+
+Démarré sans attendre la mise en production du 9a (décision du 11/11/2026). **F5 est révisée** :
+la fusion et son annulation se font depuis un écran (bouton « Fusionner » de la fiche A, historique
+des fusions), plus par commande. F1 à F4 inchangées. Décisions : (1) écran de fusion et
+d'annulation ; (2) un téléphone principal et un secondaire au plus, les autres numéros visibles dans
+la simulation et le journal ; (3) un numéro secondaire est reconnu par la recherche « téléphone
+d'abord » sans aucun rattachement automatique ; (4) refus si A et B sont interlocuteurs de la même
+entreprise ; (5) compte sur B seulement : la simulation montre les identifiants de connexion — que
+la fusion ne modifie jamais — et le numéro de B peut rester principal ; (6) refus si l'utilisateur
+ne peut pas consulter toutes les fonctions et tous les liens des deux fiches ; (7) annulation sans
+délai, seulement quand la restauration est sûre ; (8) entreprises : contact principal et
+interlocuteur principal arbitrés. Précisions : un compte de chaque côté bloque ; un seul compte
+demande une confirmation explicite (renforcée s'il est sur B) et `users.update` ; aucune vente,
+facture, commission, écriture ou pièce n'est supprimée, recréée ou réaffectée à une autre fonction ;
+une valeur modifiée depuis la fusion n'est jamais écrasée par l'annulation.
+
+Mise en œuvre : registre `ReferencesFusion` (12 liens pour une personne, 6 pour une entreprise,
+comparé au schéma par un test), F1 étendue aux fonctions archivées, transaction verrouillée avec
+empreinte et jeton, fiche B archivée avec `fusionnee_dans_id`, numéro libéré, journal valeur par
+valeur (effets induits compris : synchronisation R1, raison sociale, rattachement ADR 0056, rôles),
+annulation par relecture du journal à rebours (un rôle ajouté n'est jamais retiré
+automatiquement). Par défaut les noms restent ceux de A. Nouvelle permission `contacts.fusionner`,
+donnée à aucun rôle (seul `super_admin` l'a, comme toutes). CONTACT-055 à CONTACT-062.
+
+Complément du 11/11/2026 (revue du 9b) : la reconnaissance du numéro secondaire, limitée jusque-là
+au parcours Contacts, devient une **règle de toute l'application** (CONTACT-063). Elle est posée
+sur les modèles `Personne` et `EntrepriseTierce` plutôt que formulaire par formulaire, pour
+qu'aucun parcours présent ou futur ne recrée les doublons que la fusion résout. Aucun rattachement
+automatique ; l'exception métier passe par le retrait explicite du numéro sur la fiche existante,
+sans option « forcer ». La fusion libère aussi le numéro secondaire de B, et son annulation
+contrôle les deux numéros.
+
 ## Conséquences
 
 - Aucune entrée ajoutée au morph map : les comptes auxiliaires stockent le nom de classe des
