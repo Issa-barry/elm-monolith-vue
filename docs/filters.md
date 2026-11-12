@@ -453,7 +453,7 @@ défaut les plus récentes d'abord). La période par défaut reste « Tout ».
   jamais sur la page affichée : ils sont calculés en SQL par `App\Support\Ventes\ListeVentes::totaux()`
   avec les mêmes règles que les accesseurs (`FactureVente::montant_restant`, `montant_encaisse`).
 - Changer un filtre revient à la première page ; changer de tri aussi.
-- Deux tris diffèrent de l'ancien tri fait dans le navigateur (à valider en recette) :
+- Deux tris diffèrent de l'ancien tri fait dans le navigateur (comportements validés le 12/11/2026) :
   - **Date** : ordre chronologique de création (date et heure). Avant, le navigateur triait le
     texte affiché « jj/mm/aaaa », donc d'abord par jour du mois, quels que soient le mois et l'année.
   - **Restant** : trié sur le solde réel de la facture (net − encaissements nets des
