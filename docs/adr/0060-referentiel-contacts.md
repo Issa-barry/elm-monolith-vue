@@ -184,6 +184,14 @@ annulables. Les cinq points d'écriture passent par la Personne (création au ba
 l'inscription : `apresCreation()` ; modification au back-office et espace client : déjà écrits sur la
 Personne, recopiés par `Personne::booted()`). Modification de l'identité depuis les fiches Contacts
 (`contacts.update`). CLIENTPERSONNE-002 inversée après activation ; ADR 0051 et ADR 0056 inchangés.
+
+Précision du 10/11/2026, avant l'activation en production : R1 porte sur l'identité seulement (nom,
+prénom, nom complet, téléphone et indicatif, e-mail). La localisation (pays, ville, adresse) reste
+propre à chaque fonction — l'adresse d'un client peut être celle de sa boutique, distincte du
+domicile de la Personne (cas réel : domicile et agence à Matoto, boutique à Dubreka). Elle n'est
+plus comparée par le rapport des écarts ni recopiée dans un sens ou dans l'autre ; les adresses
+existantes sont conservées telles quelles. Les différences de coordonnées entre fiches relèveront de
+la fusion manuelle (lot 9b).
 CONTACT-043 à CONTACT-046.
 
 Lot 7b : client professionnel relié à une fiche Entreprise (`clients.entreprise_tierce_id`) avec le
