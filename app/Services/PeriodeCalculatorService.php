@@ -37,7 +37,36 @@ class PeriodeCalculatorService
     /** @var Collection<string, Collection<int, PaiementFiche>> fiches figées par "type:bénéficiaire" */
     private Collection $figeesParBeneficiaire;
 
+    /** @var Collection<int, string> fiches ouvertes de la période en cours de recalcul */
+    private Collection $ficheIdsEnRecalcul;
+
+    /** @var list<array{attributs: array<string, mixed>, lignes: Collection<int, array<string, mixed>>, report: float}> */
+    private array $fichesPrevues = [];
+
     public function calculer(PaiementPeriode $periode): array
+    {
+        $resultat = $this->recalculerFiches($periode);
+
+        // Des commissions déjà validées (ex. propriétaire/site/consultant, validées à la
+        // génération) peuvent rendre la période complète dès son calcul.
+        app(PeriodeValidationService::class)->validerSiComplete($periode->refresh());
+
+        return $resultat;
+    }
+
+    /**
+     * Recalcule les fiches sans validation automatique : la réouverture d'une période validée
+     * l'appelle dans sa propre transaction (PeriodeValidationService::rouvrirSiDesynchronisee).
+     *
+     * Seules les fiches ouvertes dont le contenu change sont remplacées : leur pièce « fiche
+     * validée » est contrepassée, puis elles sont recréées. Une fiche identique est conservée avec
+     * sa pièce. Sans cette comparaison, chaque commission arrivée dans une période en cours
+     * contrepassait et recomptabilisait toutes les fiches de la période (incident du 12/11/2026 :
+     * 310 000 paires de pièces en un mois, base de production presque pleine).
+     *
+     * @return array{nb_fiches: int}
+     */
+    public function recalculerFiches(PaiementPeriode $periode, ?string $motifContrepassation = null): array
     {
         if ($periode->isValidee() || $periode->isCloturee()) {
             throw new \LogicException('Impossible de recalculer une période validée ou clôturée.');
@@ -46,15 +75,16 @@ class PeriodeCalculatorService
         $nbFiches = 0;
         $hash = $this->signatureSource($periode);
 
-        DB::transaction(function () use ($periode, $hash, &$nbFiches) {
+        DB::transaction(function () use ($periode, $hash, $motifContrepassation, &$nbFiches) {
             // ADR 0010 : une fiche figée (paiement reçu, même partiel, ou déduction reportée)
             // n'est jamais supprimée ni recréée — seules les fiches encore ouvertes sont
-            // reconstruites. forceDelete() : la contrainte d'unicité inclut les lignes
-            // supprimées en douceur.
+            // recalculées.
             $fiches = $periode->fiches()->with('lignes')->get();
             $figees = $fiches->filter(fn (PaiementFiche $f) => $f->estFigee());
-            $fiches->reject(fn (PaiementFiche $f) => $f->estFigee())->each(fn (PaiementFiche $f) => $f->forceDelete());
+            $ouvertes = $fiches->reject(fn (PaiementFiche $f) => $f->estFigee());
 
+            $this->ficheIdsEnRecalcul = $ouvertes->pluck('id');
+            $this->fichesPrevues = [];
             $this->lignesFigees = $figees->flatMap(fn (PaiementFiche $f) => $f->lignes)
                 ->mapWithKeys(fn (PaiementFicheLigne $l) => ["{$l->source_type}:{$l->source_id}" => true]);
             $this->figeesParBeneficiaire = $figees->groupBy(fn (PaiementFiche $f) => "{$f->beneficiaire_type}:{$f->beneficiaire_id}");
@@ -68,6 +98,8 @@ class PeriodeCalculatorService
                 TypePeriodePaiement::PARRAIN => $this->calculerParrains($periode),
             };
 
+            $this->appliquerFichesPrevues($periode, $ouvertes, $motifContrepassation ?? "Recalcul de la période {$periode->reference}");
+
             // Le hash/horodatage sont enregistrés même à 0 fiche : sans données source, on ne
             // veut pas retenter le calcul à chaque ouverture de la page (cf. needsRecalcul()).
             $periode->update([
@@ -77,11 +109,103 @@ class PeriodeCalculatorService
             ]);
         });
 
-        // Des commissions déjà validées (ex. propriétaire/site/consultant, validées à la
-        // génération) peuvent rendre la période complète dès son calcul.
-        app(PeriodeValidationService::class)->validerSiComplete($periode->refresh());
-
         return ['nb_fiches' => $nbFiches];
+    }
+
+    /**
+     * Conserve les fiches ouvertes identiques à leur calcul, remplace les autres. Les fiches
+     * remplacées sont supprimées avant la création des nouvelles (unicité période/bénéficiaire/
+     * rang) ; forceDelete() car la contrainte d'unicité inclut les fiches supprimées en douceur.
+     *
+     * @param  Collection<int, PaiementFiche>  $ouvertes
+     */
+    private function appliquerFichesPrevues(PaiementPeriode $periode, Collection $ouvertes, string $motifContrepassation): void
+    {
+        $ouvertesParBeneficiaire = $ouvertes->groupBy(fn (PaiementFiche $f) => "{$f->beneficiaire_type}:{$f->beneficiaire_id}");
+        $conservees = [];
+        $aCreer = [];
+
+        foreach ($this->fichesPrevues as $prevue) {
+            $existantes = $ouvertesParBeneficiaire->get("{$prevue['attributs']['beneficiaire_type']}:{$prevue['attributs']['beneficiaire_id']}", collect());
+
+            if ($existantes->count() === 1 && $this->signatureFiche($existantes->first()) === $this->signaturePrevue($prevue)) {
+                $conservees[] = $existantes->first()->id;
+
+                continue;
+            }
+
+            $aCreer[] = $prevue;
+        }
+
+        $aRemplacer = $ouvertes->reject(fn (PaiementFiche $f) => in_array($f->id, $conservees, true));
+        if ($aRemplacer->isNotEmpty()) {
+            app(PeriodeValidationService::class)->contrepasserPiecesFiches($periode, $aRemplacer->pluck('id'), $motifContrepassation);
+            $aRemplacer->each(fn (PaiementFiche $f) => $f->forceDelete());
+        }
+
+        foreach ($aCreer as $prevue) {
+            $fiche = PaiementFiche::create([
+                ...$prevue['attributs'],
+                'reference' => $this->genererReferenceFiche($periode),
+                'montant_paye' => 0,
+            ]);
+
+            $fiche->lignes()->createMany($prevue['lignes']->toArray());
+
+            // Posé après les lignes : une fiche portant un report est figée, ses lignes aussi.
+            if ($prevue['report'] > 0) {
+                $fiche->update(['report_a_deduire' => $prevue['report']]);
+            }
+        }
+
+        $this->fichesPrevues = [];
+    }
+
+    /** @param  array{attributs: array<string, mixed>, lignes: Collection<int, array<string, mixed>>, report: float}  $prevue */
+    private function signaturePrevue(array $prevue): string
+    {
+        $a = $prevue['attributs'];
+
+        return $this->signature(
+            [$a['beneficiaire_nom'], $a['rang'], $a['fiche_origine_id'], $a['site_id'], $a['site_rattachement_id'],
+                $a['montant_brut'], $a['total_deductions'], $a['montant_net'], $a['statut'], $prevue['report']],
+            $prevue['lignes']->map(fn (array $l) => [
+                $l['source_type'], $l['source_id'], $l['type_ligne'], $l['libelle'], $l['montant'], $l['ordre'],
+            ]),
+        );
+    }
+
+    private function signatureFiche(PaiementFiche $fiche): string
+    {
+        return $this->signature(
+            [$fiche->beneficiaire_nom, $fiche->rang, $fiche->fiche_origine_id, $fiche->site_id, $fiche->site_rattachement_id,
+                $fiche->montant_brut, $fiche->total_deductions, $fiche->montant_net, $fiche->statut?->value, (float) $fiche->report_a_deduire],
+            $fiche->lignes->map(fn (PaiementFicheLigne $l) => [
+                $l->source_type, $l->source_id, $l->type_ligne?->value, $l->libelle, $l->montant, $l->ordre,
+            ]),
+        );
+    }
+
+    /**
+     * Montants arrondis au centime (colonnes decimal:2), lignes triées par ordre puis source.
+     *
+     * @param  list<mixed>  $entete
+     * @param  Collection<int, list<mixed>>  $lignes
+     */
+    private function signature(array $entete, Collection $lignes): string
+    {
+        $normaliser = fn (array $valeurs) => array_map(
+            fn ($v) => is_numeric($v) ? round((float) $v, 2) : $v,
+            $valeurs,
+        );
+
+        return md5(json_encode([
+            $normaliser($entete),
+            $lignes->map($normaliser)
+                ->sortBy(fn (array $l) => sprintf('%05d|%s|%s', (int) $l[5], $l[0], $l[1]))
+                ->values()
+                ->all(),
+        ]));
     }
 
     /**
@@ -453,7 +577,7 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            if ($this->creerFiche($periode, 'livreur', $livreurId, $livreur->libelleAffichage(), $this->resolveSitePrincipal($montantParSite), $lignes)) {
+            if ($this->prevoirFiche($periode, 'livreur', $livreurId, $livreur->libelleAffichage(), $this->resolveSitePrincipal($montantParSite), $lignes)) {
                 $count++;
             }
         }
@@ -575,7 +699,7 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            if ($this->creerFiche($periode, 'proprietaire', $proprietaireId, $proprietaire->nom_complet, $this->resolveSitePrincipal($montantParSite), $lignes)) {
+            if ($this->prevoirFiche($periode, 'proprietaire', $proprietaireId, $proprietaire->nom_complet, $this->resolveSitePrincipal($montantParSite), $lignes)) {
                 $count++;
             }
         }
@@ -656,7 +780,7 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            if ($this->creerFiche($periode, CommissionEnveloppePart::TYPE_SITE, $siteId, $site->nom, $siteId, $lignes)) {
+            if ($this->prevoirFiche($periode, CommissionEnveloppePart::TYPE_SITE, $siteId, $site->nom, $siteId, $lignes)) {
                 $count++;
             }
         }
@@ -738,7 +862,7 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            if ($this->creerFiche($periode, CommissionEnveloppePart::TYPE_PRESTATAIRE, $prestataireId, $prestataire->nom_complet ?? $prestataire->reference, null, $lignes)) {
+            if ($this->prevoirFiche($periode, CommissionEnveloppePart::TYPE_PRESTATAIRE, $prestataireId, $prestataire->nom_complet ?? $prestataire->reference, null, $lignes)) {
                 $count++;
             }
         }
@@ -817,7 +941,7 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            if ($this->creerFiche($periode, CommissionEnveloppePart::TYPE_PARRAIN, $parrainId, BeneficiaireFiche::nomParrain($parrain), $this->resolveSitePrincipal($montantParSite), $lignes)) {
+            if ($this->prevoirFiche($periode, CommissionEnveloppePart::TYPE_PARRAIN, $parrainId, BeneficiaireFiche::nomParrain($parrain), $this->resolveSitePrincipal($montantParSite), $lignes)) {
                 $count++;
             }
         }
@@ -875,7 +999,7 @@ class PeriodeCalculatorService
                 ]);
             }
 
-            if ($this->creerFiche($periode, 'salarie', $ligne->employe_id, $ligne->employe->nom_complet, $ligne->employe->site_id, $lignesData)) {
+            if ($this->prevoirFiche($periode, 'salarie', $ligne->employe_id, $ligne->employe->nom_complet, $ligne->employe->site_id, $lignesData)) {
                 $count++;
             }
         }
@@ -908,16 +1032,17 @@ class PeriodeCalculatorService
     }
 
     /**
-     * Crée la fiche ouverte d'un bénéficiaire (ADR 0010). $siteId est son agence de rattachement ;
+     * Prévoit la fiche ouverte d'un bénéficiaire (ADR 0010), créée ou conservée ensuite par
+     * appliquerFichesPrevues(). $siteId est son agence de rattachement ;
      * l'agence qui paie suit la politique de l'organisation (AgencePayeuseCommissionService, ADR 0061). Les lignes déjà portées par une de
      * ses fiches figées sont écartées ; s'il en reste, elles vont sur une fiche de rang
      * suivant (fiche complémentaire), rattachée à la fiche d'origine. Les déductions reportées
      * encore en attente pour ce bénéficiaire y sont imputées. Un solde négatif sur une fiche
      * complémentaire (ou portant un report) est à son tour reporté, jamais perdu.
      *
-     * @return bool true si une fiche a été créée
+     * @return bool true si une fiche est prévue
      */
-    private function creerFiche(PaiementPeriode $periode, string $type, string $beneficiaireId, string $nom, ?string $siteId, $lignes): bool
+    private function prevoirFiche(PaiementPeriode $periode, string $type, string $beneficiaireId, string $nom, ?string $siteId, $lignes): bool
     {
         $lignes = collect($lignes)
             ->reject(fn (array $l) => $this->lignesFigees->has("{$l['source_type']}:{$l['source_id']}"))
@@ -948,10 +1073,9 @@ class PeriodeCalculatorService
         $net = $brut - $deductions;
         $aReporter = $net < 0 && ($estComplement || $reports->isNotEmpty()) ? round(-$net, 2) : 0.0;
 
-        $fiche = PaiementFiche::create([
+        $this->fichesPrevues[] = ['attributs' => [
             'organization_id' => $periode->organization_id,
             'periode_id' => $periode->id,
-            'reference' => $this->genererReferenceFiche($periode),
             'beneficiaire_type' => $type,
             'beneficiaire_id' => $beneficiaireId,
             'beneficiaire_nom' => $nom,
@@ -964,25 +1088,18 @@ class PeriodeCalculatorService
             'montant_brut' => $brut,
             'total_deductions' => $deductions,
             'montant_net' => max(0, $net),
-            'montant_paye' => 0,
             // Rien à payer quand tout le solde est reporté sur la fiche suivante.
             'statut' => $aReporter > 0 ? StatutFichePaiement::PAYE->value : StatutFichePaiement::A_PAYER->value,
-        ]);
-
-        $fiche->lignes()->createMany($lignes->toArray());
-
-        // Posé après les lignes : une fiche portant un report est figée, ses lignes aussi.
-        if ($aReporter > 0) {
-            $fiche->update(['report_a_deduire' => $aReporter]);
-        }
+        ], 'lignes' => $lignes, 'report' => $aReporter];
 
         return true;
     }
 
     /**
      * Déductions reportées par des fiches du bénéficiaire et pas encore imputées : une
-     * imputation est une ligne REPORT pointant la fiche d'origine ; si la fiche qui l'imputait
-     * est reconstruite, la ligne disparaît avec elle et le report redevient en attente.
+     * imputation est une ligne REPORT pointant la fiche d'origine ; une imputation par une fiche
+     * ouverte en cours de recalcul ne compte pas (la fiche est reconstruite ou reprend la même
+     * ligne).
      *
      * @return Collection<int, PaiementFiche>
      */
@@ -994,7 +1111,8 @@ class PeriodeCalculatorService
             ->where('report_a_deduire', '>', 0)
             ->whereNotExists(fn ($q) => $q->from('paiement_fiche_lignes')
                 ->where('paiement_fiche_lignes.source_type', PaiementFiche::class)
-                ->whereColumn('paiement_fiche_lignes.source_id', 'paiement_fiches.id'))
+                ->whereColumn('paiement_fiche_lignes.source_id', 'paiement_fiches.id')
+                ->whereNotIn('paiement_fiche_lignes.fiche_id', $this->ficheIdsEnRecalcul))
             ->orderBy('created_at')
             ->get();
     }

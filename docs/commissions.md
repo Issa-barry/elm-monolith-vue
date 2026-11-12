@@ -1345,7 +1345,9 @@ Aucune règle de validation ne change : seule la façon d'exécuter une grande s
   **rouverte automatiquement** (repasse « Calculée », fiches non figées recalculées), **même si un
   paiement existe déjà** : une fiche figée (paiement reçu) n'est jamais recalculée, la commission
   tardive va sur une fiche complémentaire du bénéficiaire (ou sur sa propre fiche s'il n'en avait
-  pas). Seules les pièces « fiche validée » des fiches non figées sont contrepassées. L'alerte
+  pas). Seules les fiches non figées dont le contenu change sont remplacées et voient leur pièce
+  « fiche validée » contrepassée ; une fiche inchangée garde son identifiant et sa pièce (correctif
+  du 12/11/2026). L'alerte
   orange (nombre, montant) ne subsiste que sur une période **clôturée** ou dont la réouverture a
   échoué (contrepassation impossible, journalisée).
 - Une commission **annulée** portée par une fiche figée ne déclenche pas de réouverture (le
@@ -1471,8 +1473,11 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
 - **Réouverture automatique** d'une période validée quand ses fiches ne reflètent plus les
   commissions ou les dépenses (nouvelle commission datée dans la période, commission
   annulée/supprimée sur une fiche non figée, dépense validée ou dévalidée après la validation —
-  révision du 03/11/2026) : contrepassation des pièces « fiche validée » des fiches non figées, recalcul,
-  puis revalidation si tout est validé. Depuis le 30/09/2026, une période déjà payée en partie est
+  révision du 03/11/2026) : recalcul dans la même transaction, contrepassation des pièces « fiche
+  validée » des seules fiches non figées qui changent, puis revalidation si tout est validé. Une
+  fiche inchangée est conservée avec sa pièce : avant le correctif du 12/11/2026, chaque commission
+  d'une période en cours contrepassait et recomptabilisait toutes ses fiches (environ 310 000 paires
+  de pièces en un mois en production). Depuis le 30/09/2026, une période déjà payée en partie est
   aussi rouverte : ses fiches payées restent intactes et la nouvelle commission va sur une fiche
   complémentaire (ADR 0010, point 4). Une période clôturée n'est jamais rouverte.
 - **Retour de livraison / annulation exceptionnelle** : seule une décision humaine ou une période

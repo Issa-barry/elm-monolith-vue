@@ -109,7 +109,7 @@ class CommissionPaymentService
      * Soldes agrégés par livreur pour toute une organisation.
      * Retourne les colonnes : livreur_id, beneficiaire_nom, impaye, paye, premiere_echeance, fiche_id.
      *
-     * Dès qu'une PaiementFiche a repris une part (PeriodeCalculatorService::creerFiche), le
+     * Dès qu'une PaiementFiche a repris une part (PeriodeCalculatorService::prevoirFiche), le
      * paiement direct de cette part est verrouillé (PeriodePayabilityChecker::assertPartsNotClaimedByFiche)
      * et son solde ne se lit plus sur montant_verse/statut — jamais mis à jour par un paiement
      * de fiche (PaiementFichePaiementController ne touche que PaiementFiche/PaiementFichePaiement).
