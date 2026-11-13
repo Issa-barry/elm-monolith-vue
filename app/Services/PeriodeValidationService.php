@@ -20,6 +20,7 @@ use App\Models\PieceComptable;
 use App\Models\User;
 use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\FicheComptabilisationService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -174,8 +175,10 @@ class PeriodeValidationService
      * ne touche jamais une fiche figée, et une commission arrivée ensuite va sur une fiche
      * complémentaire. Une ligne annulée sur une fiche figée ne justifie donc pas de réouverture,
      * puisque le recalcul ne pourrait pas la retirer.
-     * Les pièces comptables des fiches recalculées (non figées) sont contrepassées avant le
-     * recalcul, sinon la revalidation engagerait la dette une seconde fois.
+     * Le recalcul se fait dans la même transaction que la réouverture : seules les fiches dont le
+     * contenu change ont leur pièce contrepassée (sinon la revalidation engagerait la dette une
+     * seconde fois) ; une fiche inchangée garde sa pièce (incident du 12/11/2026). La période est
+     * ensuite revalidée automatiquement si toutes ses commissions sont validées.
      */
     public function rouvrirSiDesynchronisee(PaiementPeriode $periode, bool $strict = false): bool
     {
@@ -198,10 +201,6 @@ class PeriodeValidationService
 
         try {
             DB::transaction(function () use ($periode, $motif) {
-                foreach ($this->piecesARecalculer($periode) as $piece) {
-                    $this->ecritures->contrepasser($piece, "Réouverture de la période {$periode->reference}");
-                }
-
                 $periode->update([
                     'statut' => StatutPeriodePaiement::CALCULEE->value,
                     'validated_by' => null,
@@ -217,10 +216,13 @@ class PeriodeValidationService
                     'statut_apres' => StatutPeriodePaiement::CALCULEE->value,
                     'description' => "Période {$periode->reference} rouverte automatiquement : {$motif}",
                 ]);
+
+                app(PeriodeCalculatorService::class)->recalculerFiches($periode, "Réouverture de la période {$periode->reference}");
             });
         } catch (\Throwable $e) {
             // Une contrepassation impossible laisse la période validée (et la commission
             // signalée) plutôt que de risquer une dette comptabilisée deux fois.
+            $periode->refresh();
             Log::error('Réouverture automatique de période échouée', [
                 'periode_id' => $periode->id,
                 'error' => $e->getMessage(),
@@ -235,6 +237,8 @@ class PeriodeValidationService
 
             return false;
         }
+
+        $this->validerSiComplete($periode->refresh());
 
         return true;
     }
@@ -292,19 +296,15 @@ class PeriodeValidationService
     }
 
     /**
-     * Pièces « fiche validée » encore actives des fiches que le recalcul va supprimer
-     * (toutes sauf les fiches figées, cf. PaiementFiche::estFigee() et
-     * PeriodeCalculatorService::calculer()).
+     * Contrepasse les pièces « fiche validée » encore actives des fiches que le recalcul remplace
+     * (PeriodeCalculatorService::recalculerFiches) : la dette d'une fiche supprimée ne doit jamais
+     * rester engagée, ni l'être deux fois après la revalidation.
      *
-     * @return iterable<PieceComptable>
+     * @param  Collection<int, string>  $ficheIds
      */
-    private function piecesARecalculer(PaiementPeriode $periode): iterable
+    public function contrepasserPiecesFiches(PaiementPeriode $periode, Collection $ficheIds, string $motif): void
     {
-        $ficheIds = $periode->fiches()->get()
-            ->reject(fn (PaiementFiche $f) => $f->estFigee())
-            ->pluck('id');
-
-        return PieceComptable::query()
+        $pieces = PieceComptable::query()
             ->where('organization_id', $periode->organization_id)
             ->where('source_type', (new PaiementFiche)->getMorphClass())
             ->whereIn('source_id', $ficheIds)
@@ -313,5 +313,9 @@ class PeriodeValidationService
             ->whereNotExists(fn ($q) => $q->from('compta_pieces as extournes')
                 ->whereColumn('extournes.piece_origine_id', 'compta_pieces.id'))
             ->get();
+
+        foreach ($pieces as $piece) {
+            $this->ecritures->contrepasser($piece, $motif);
+        }
     }
 }

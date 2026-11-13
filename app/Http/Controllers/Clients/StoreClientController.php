@@ -98,9 +98,11 @@ class StoreClientController extends Controller
             $personne = Personne::resoudreOuCreer($orgId, $identite);
 
             // R1 activée (ADR 0060, lot 7a) : la Personne existante fait foi ; seuls ses champs vides
-            // sont complétés depuis la saisie (L7-1), puis le client reçoit son identité.
+            // d'identité sont complétés depuis la saisie (L7-1), puis le client reçoit son identité.
+            // La localisation saisie reste celle du client (jamais recopiée sur la Personne).
             if (ClientIdentiteSynchronisation::estActivePour($orgId) && ! $personne->wasRecentlyCreated) {
-                $personne->fill(array_filter($identite, fn ($valeur, string $champ) => $valeur !== null && $valeur !== '' && blank($personne->getAttributes()[$champ] ?? null), ARRAY_FILTER_USE_BOTH));
+                $identiteCommune = array_intersect_key($identite, array_flip(ClientIdentiteSynchronisation::COLONNES));
+                $personne->fill(array_filter($identiteCommune, fn ($valeur, string $champ) => $valeur !== null && $valeur !== '' && blank($personne->getAttributes()[$champ] ?? null), ARRAY_FILTER_USE_BOTH));
                 if ($personne->isDirty()) {
                     $personne->save();
                 }

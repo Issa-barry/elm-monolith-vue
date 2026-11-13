@@ -42,6 +42,12 @@ class EntrepriseTiercePolicy
         return $user->can('contacts.update');
     }
 
+    /** Lot 9b (F4) : fusion et annulation ; visibilité, organisation et blocages vérifiés par FusionContacts. */
+    public function fusionner(User $user): bool
+    {
+        return $user->can('contacts.read') && $user->can('contacts.fusionner');
+    }
+
     public function view(User $user, EntrepriseTierce $entreprise): Response
     {
         if (! $user->can('contacts.read')) {

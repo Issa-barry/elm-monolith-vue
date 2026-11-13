@@ -230,6 +230,8 @@ function confirmerRetrait() {
 const searching = ref(false);
 const searchError = ref<string | null>(null);
 const personneTrouvee = ref<PersonneTrouvee | null>(null);
+// Numéro secondaire d'une autre fiche (CONTACT-063) : aucune création possible avec ce numéro.
+const numeroSecondaire = ref<string | null>(null);
 
 const searchForm = useForm({
     code_pays: 'GN',
@@ -422,6 +424,7 @@ async function rechercher() {
 
         const body = await response.json();
         personneTrouvee.value = body.found ? body.personne : null;
+        numeroSecondaire.value = body.secondaire?.message ?? null;
         step.value = 'resultat';
     } catch {
         searchError.value = 'Impossible de vérifier ce numéro pour le moment.';
@@ -620,6 +623,13 @@ function onHide() {
                     sera pas dupliquée.
                 </p>
             </template>
+            <p
+                v-else-if="numeroSecondaire"
+                class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                data-testid="parrain-numero-secondaire"
+            >
+                {{ numeroSecondaire }}
+            </p>
             <template v-else>
                 <p class="text-sm text-muted-foreground">
                     Aucune personne trouvée avec ce numéro.
@@ -973,7 +983,7 @@ function onHide() {
                         Utiliser cette personne
                     </Button>
                     <Button
-                        v-else
+                        v-else-if="!numeroSecondaire"
                         data-testid="parrain-creer-personne-btn"
                         @click="ouvrirCreation"
                     >

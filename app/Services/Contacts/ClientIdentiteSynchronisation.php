@@ -24,14 +24,16 @@ use Illuminate\Support\Facades\DB;
  * Tout ou rien : les clients de la personne sont mis à jour dans une seule transaction ; un conflit
  * d'unicité (téléphone ou e-mail déjà porté par un autre client) refuse l'ensemble avec un message.
  * Seules les colonnes d'identité sont écrites : nature, cashback, dérogation et tarifs grossiste ne
- * sont jamais touchés.
+ * sont jamais touchés. La localisation (pays, ville, adresse) n'en fait pas partie (décision du
+ * 10/11/2026) : chaque fonction garde la sienne — l'adresse d'un client peut être celle de sa
+ * boutique, distincte du domicile porté par la Personne. Elle n'est jamais recopiée dans un sens ni
+ * dans l'autre.
  */
 final class ClientIdentiteSynchronisation
 {
-    /** Colonnes de `clients` alimentées depuis la Personne. */
+    /** Colonnes de `clients` alimentées depuis la Personne (identité seulement, sans localisation). */
     public const COLONNES = [
-        'nom', 'prenom', 'nom_complet', 'telephone', 'email',
-        'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse',
+        'nom', 'prenom', 'nom_complet', 'telephone', 'code_phone_pays', 'email',
     ];
 
     /**
@@ -106,12 +108,8 @@ final class ClientIdentiteSynchronisation
             'prenom' => $personne->prenom,
             'nom_complet' => $nomComplet === '' ? null : $nomComplet,
             'telephone' => $personne->telephone,
-            'email' => $personne->email,
-            'pays' => $personne->pays,
-            'code_pays' => $personne->code_pays,
             'code_phone_pays' => $personne->code_phone_pays,
-            'ville' => $personne->ville,
-            'adresse' => $personne->adresse,
+            'email' => $personne->email,
         ];
     }
 }

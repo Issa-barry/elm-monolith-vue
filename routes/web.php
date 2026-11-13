@@ -103,6 +103,11 @@ use App\Http\Controllers\Contacts\Entreprises\ShowEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\StoreEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\StoreFonctionEntrepriseController;
 use App\Http\Controllers\Contacts\Entreprises\UpdateEntrepriseController;
+use App\Http\Controllers\Contacts\Fusions\AnnulerFusionController;
+use App\Http\Controllers\Contacts\Fusions\CreateFusionController;
+use App\Http\Controllers\Contacts\Fusions\IndexFusionController;
+use App\Http\Controllers\Contacts\Fusions\ShowFusionController;
+use App\Http\Controllers\Contacts\Fusions\StoreFusionController;
 use App\Http\Controllers\Contacts\Interlocuteurs\DefinirPrincipalInterlocuteurController;
 use App\Http\Controllers\Contacts\Interlocuteurs\DesactiverInterlocuteurController;
 use App\Http\Controllers\Contacts\Interlocuteurs\ReactiverInterlocuteurController;
@@ -513,9 +518,10 @@ Route::prefix('backoffice')->group(function () {
         // (organisation, fonctions lisibles, périmètre d'agences des parrains) vérifiées par les
         // contrôleurs.
         Route::get('contacts/personnes', IndexPersonneController::class)->name('contacts.personnes.index');
-        Route::get('contacts/personnes/{personne}', ShowPersonneController::class)->name('contacts.personnes.show');
+        // withTrashed : une fiche absorbée par une fusion (lot 9b) redirige vers la fiche conservée.
+        Route::get('contacts/personnes/{personne}', ShowPersonneController::class)->withTrashed()->name('contacts.personnes.show');
         Route::get('contacts/entreprises', IndexEntrepriseController::class)->name('contacts.entreprises.index');
-        Route::get('contacts/entreprises/{entreprise}', ShowEntrepriseController::class)->name('contacts.entreprises.show');
+        Route::get('contacts/entreprises/{entreprise}', ShowEntrepriseController::class)->withTrashed()->name('contacts.entreprises.show');
 
         // Lot 3 — création « téléphone d'abord » et ajout explicite d'une fonction (ADR 0060).
         // contacts.create + permission et module de la fonction ; visibilité vérifiée par les contrôleurs.
@@ -550,6 +556,14 @@ Route::prefix('backoffice')->group(function () {
         Route::patch('contacts/entreprises/{entreprise}', UpdateEntrepriseController::class)->name('contacts.entreprises.update');
         Route::put('contacts/personnes/{personne}/categories', AttribuerCategoriesPersonneController::class)->name('contacts.personnes.categories.update');
         Route::put('contacts/entreprises/{entreprise}/categories', AttribuerCategoriesEntrepriseController::class)->name('contacts.entreprises.categories.update');
+        // Lot 9b — fusion manuelle (contacts.fusionner) : écran et simulation, confirmation,
+        // historique et annulation. Organisation, visibilité et blocages vérifiés par FusionContacts.
+        Route::get('contacts/fusion/{type}/{fiche}', CreateFusionController::class)
+            ->whereIn('type', ['personne', 'entreprise'])->name('contacts.fusion.create');
+        Route::post('contacts/fusions', StoreFusionController::class)->name('contacts.fusions.store');
+        Route::get('contacts/fusions', IndexFusionController::class)->name('contacts.fusions.index');
+        Route::get('contacts/fusions/{fusion}', ShowFusionController::class)->name('contacts.fusions.show');
+        Route::post('contacts/fusions/{fusion}/annulation', AnnulerFusionController::class)->name('contacts.fusions.annuler');
 
         // ── Module : PDV ──────────────────────────────────────────────────────────
         // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune

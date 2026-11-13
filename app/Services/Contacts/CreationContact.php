@@ -51,6 +51,10 @@ final class CreationContact
         if ($classe::where('organization_id', $acteur->organization_id)->where('telephone_normalise', $normalise)->exists()) {
             throw ValidationException::withMessages(['telephone' => MessagesContacts::NUMERO_CONNU]);
         }
+        // Lot 9b (décision 3) : un numéro secondaire n'ouvre ni création ni rattachement automatique.
+        if ($classe::where('organization_id', $acteur->organization_id)->where('telephone_secondaire_normalise', $normalise)->exists()) {
+            throw ValidationException::withMessages(['telephone' => MessagesContacts::NUMERO_SECONDAIRE_CONNU]);
+        }
 
         try {
             return DB::transaction(function () use ($classe, $identite, $normalise, $fonction, $donneesFonction, $acteur) {

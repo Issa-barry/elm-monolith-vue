@@ -6,6 +6,7 @@ use App\Models\EntrepriseTierce;
 use App\Models\Personne;
 use App\Models\User;
 use App\Support\Contacts\MessagesContacts;
+use App\Support\Contacts\NumeroSecondaire;
 use App\Support\Contacts\PresentationContacts;
 
 /**
@@ -16,7 +17,8 @@ use App\Support\Contacts\PresentationContacts;
  * - connu : une fiche visible du lecteur le porte ; elle est présentée (nom, ville, fonctions
  *   visibles, fonctions ajoutables) pour que l'utilisateur choisisse explicitement ;
  * - indisponible : une fiche le porte mais le lecteur ne peut pas la voir (parrain d'une autre
- *   agence, fonction sans permission, compte seul) : message neutre, aucune donnée (décision 1).
+ *   agence, fonction sans permission, compte seul) : message neutre, aucune donnée (décision 1) ;
+ * - secondaire (lot 9b) : numéro secondaire d'une fiche visible ; aucune création ni rattachement.
  */
 final class RechercheTelephoneContact
 {
@@ -47,7 +49,7 @@ final class RechercheTelephoneContact
         ];
 
         if (! $fiche) {
-            return ['statut' => 'libre', ...$base];
+            return $this->numeroSecondaire($classe, $type, $chiffres, $lecteur, $base) ?? ['statut' => 'libre', ...$base];
         }
 
         $visible = $fiche instanceof Personne
@@ -86,6 +88,42 @@ final class RechercheTelephoneContact
     }
 
     /**
+     * Lot 9b (décision 3) : numéro secondaire d'une fiche — reconnu comme tel, présenté avec un lien
+     * vers la fiche, sans fonction ajoutable ni rattachement automatique ; message neutre si la fiche
+     * n'est pas visible.
+     *
+     * @param  class-string<Personne|EntrepriseTierce>  $classe
+     * @return array<string, mixed>|null
+     */
+    private function numeroSecondaire(string $classe, string $type, string $chiffres, User $lecteur, array $base): ?array
+    {
+        $fiche = $classe::where('organization_id', $lecteur->organization_id)->where('telephone_secondaire_normalise', $chiffres)->first();
+        if (! $fiche) {
+            return null;
+        }
+
+        $visible = $fiche instanceof Personne
+            ? $this->visibilite->personneVisible($fiche, $lecteur)
+            : $this->visibilite->entrepriseVisible($fiche, $lecteur);
+        if (! $visible) {
+            return ['statut' => 'indisponible', 'message' => MessagesContacts::NUMERO_NON_VISIBLE, ...$base];
+        }
+
+        $presentation = new PresentationContacts($lecteur->organization_id);
+        $dossier = $fiche instanceof Personne ? 'personnes' : 'entreprises';
+        $nom = $fiche instanceof Personne
+            ? $presentation->nomPersonne($fiche, $this->visibilite->fonctionsDesPersonnes(collect([$fiche]), $lecteur)[$fiche->id] ?? [])
+            : $fiche->raison_sociale;
+
+        return [
+            'statut' => 'secondaire',
+            'message' => MessagesContacts::NUMERO_SECONDAIRE,
+            ...$base,
+            'fiche' => ['id' => $fiche->id, 'type' => $type, 'nom' => $nom, 'ville' => $fiche->ville, 'lien' => "/backoffice/contacts/{$dossier}/{$fiche->id}"],
+        ];
+    }
+
+    /**
      * « Rechercher » de l'ajout d'un interlocuteur (lot 4). Mêmes règles que rechercher() : une
      * personne non visible du lecteur ne renvoie qu'un message neutre (décision 1 du lot 4).
      * Statuts : libre, connu, deja_interlocuteur, indisponible.
@@ -101,7 +139,12 @@ final class RechercheTelephoneContact
             ->first();
 
         if (! $personne) {
-            return ['statut' => 'libre', ...$base];
+            // CONTACT-063 : numéro secondaire d'une fiche — aucune nouvelle personne avec lui.
+            $secondaire = NumeroSecondaire::fiche(Personne::class, $entreprise->organization_id, Personne::normaliserTelephone($numero['telephone']));
+
+            return $secondaire !== null
+                ? ['statut' => 'indisponible', 'message' => NumeroSecondaire::message($secondaire, $lecteur), ...$base]
+                : ['statut' => 'libre', ...$base];
         }
         if (! $this->visibilite->personneVisible($personne, $lecteur)) {
             return ['statut' => 'indisponible', 'message' => MessagesContacts::NUMERO_NON_VISIBLE, ...$base];

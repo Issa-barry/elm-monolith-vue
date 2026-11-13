@@ -19,8 +19,10 @@ use App\Services\ImportFlotte\Normalizers\ImportTextNormalizer;
 use App\Services\ImportFlotte\Normalizers\ImportValeurNormalizer;
 use App\Services\ImportFlotte\Normalizers\PhoneNormalizer;
 use App\Services\ImportFlotte\Normalizers\ReferenceValueResolver;
+use App\Support\Contacts\NumeroSecondaire;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -957,6 +959,21 @@ class ImportFlotteParser
         ];
     }
 
+    /**
+     * CONTACT-063 : un numéro qui n'est le principal d'aucune personne mais le secondaire d'une fiche
+     * ne crée jamais de nouvelle identité — refusé dès la prévisualisation, pas à l'exécution.
+     */
+    private function numeroSecondaire(string $orgId, string $telephone): ?string
+    {
+        $normalise = Personne::normaliserTelephone($telephone);
+        if (Personne::where('organization_id', $orgId)->where('telephone_normalise', $normalise)->exists()) {
+            return null;
+        }
+        $fiche = NumeroSecondaire::fiche(Personne::class, $orgId, $normalise);
+
+        return $fiche !== null ? NumeroSecondaire::message($fiche, Auth::user()) : null;
+    }
+
     private function resoudreProprietaire(Collection $ligne, string $orgId, array &$erreurs, array &$normalisations, array &$telephonesProprietairesVus): ?array
     {
         $nom = trim((string) ($ligne['proprietaire_nom'] ?? ''));
@@ -993,6 +1010,12 @@ class ImportFlotteParser
         $data = $this->resolveCountryData(['code_pays' => $codePays]);
         $data['telephone'] = $phone['telephone'];
         $data = $this->normalizePersonData(array_merge($data, ['nom' => $nom, 'prenom' => $prenom]));
+
+        if (($message = $this->numeroSecondaire($orgId, $data['telephone'])) !== null) {
+            $erreurs[] = "Téléphone du propriétaire {$data['telephone']} : {$message}";
+
+            return null;
+        }
 
         $existant = Proprietaire::where('organization_id', $orgId)
             ->whereNull('deleted_at')
@@ -1108,6 +1131,12 @@ class ImportFlotteParser
 
             // Déjà membre de CETTE équipe (si elle existe) → rattachement déjà en place, on l'ignore.
             if ($membresExistants->has($telephone)) {
+                continue;
+            }
+
+            if (($message = $this->numeroSecondaire($orgId, $telephone)) !== null) {
+                $erreurs[] = "Ligne {$numero} : téléphone livreur {$telephone} : {$message}";
+
                 continue;
             }
 

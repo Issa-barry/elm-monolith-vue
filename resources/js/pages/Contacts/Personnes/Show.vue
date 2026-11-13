@@ -7,6 +7,7 @@ import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
+import { usePermissions } from '@/composables/usePermissions';
 import { useUrlTab } from '@/composables/useUrlTab';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -16,6 +17,7 @@ import {
     ArrowLeft,
     Building2,
     CircleHelp,
+    GitMerge,
     Layers,
     Plus,
     UserRound,
@@ -54,6 +56,7 @@ const props = defineProps<{
 }>();
 
 useFlashToast();
+const { can } = usePermissions();
 const ajoutVisible = ref(false);
 const identiteVisible = ref(false);
 const valeursIdentite = computed(
@@ -144,6 +147,19 @@ const telephone = computed(
                         <Plus class="mr-1.5 h-4 w-4" />
                         Ajouter une fonction
                     </Button>
+                    <Link
+                        v-if="can('contacts.fusionner')"
+                        :href="`/backoffice/contacts/fusion/personne/${personne.id}`"
+                    >
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            data-testid="fiche-fusionner"
+                        >
+                            <GitMerge class="mr-1.5 h-4 w-4" />
+                            Fusionner
+                        </Button>
+                    </Link>
                     <Link href="/backoffice/contacts/personnes">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
