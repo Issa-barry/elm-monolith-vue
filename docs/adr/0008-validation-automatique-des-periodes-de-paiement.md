@@ -61,6 +61,13 @@ n'étaient validables depuis aucun écran : leurs périodes restaient bloquées 
   validation manuelle à faire.
 - Une période en cours peut être validée puis rouverte plusieurs fois au fil des nouvelles
   commissions ; l'historique d'audit trace chaque passage (validation automatique, réouverture).
+  **Correctif du 12/11/2026** : chaque réouverture contrepassait et recomptabilisait toutes les
+  fiches non figées de la période, même celles que la commission ne touchait pas. Avec des parts
+  propriétaire/site/consultant/parrain validées dès la génération, chaque vente rouvrait la période :
+  environ 25 000 pièces par jour, 2,2 Go en un mois, base de production presque pleine. Désormais le
+  recalcul (`PeriodeCalculatorService::recalculerFiches`, appelé dans la transaction de réouverture)
+  ne remplace que les fiches dont le contenu change ; les autres gardent leur identifiant et leur
+  pièce. Règle métier inchangée.
 - ~~Limite connue : une période validée et déjà partiellement payée ne peut pas intégrer une
   commission tardive.~~ Levée le 30/09/2026 : fiche complémentaire de la même période (décision
   utilisateur, ADR 0010 point 4 appliqué à ce cas).

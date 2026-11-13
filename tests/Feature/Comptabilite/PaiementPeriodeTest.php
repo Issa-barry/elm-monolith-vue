@@ -7,6 +7,7 @@ use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
 use App\Enums\StatutPeriodePaiement;
+use App\Enums\StatutPieceComptable;
 use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\Client;
@@ -21,8 +22,11 @@ use App\Models\Livreur;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Personne;
+use App\Models\PieceComptable;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\Comptabilite\FicheComptabilisationService;
+use App\Services\Comptabilite\PlanComptableBootstrapService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\Tresorerie\DecaissementFicheResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -642,6 +646,47 @@ class PaiementPeriodeTest extends TestCase
 
         $this->assertSame(2, PaiementFiche::where('periode_id', $periode->id)->count(), 'la nouvelle commission a sa fiche');
         $this->assertNull($periode->fresh()->validated_at);
+    }
+
+    /**
+     * Incident du 12/11/2026 : chaque commission arrivée dans une période en cours contrepassait et
+     * recomptabilisait TOUTES les fiches (310 000 paires de pièces en un mois). Seule la fiche du
+     * bénéficiaire concerné est désormais remplacée ; les autres gardent leur identifiant et leur pièce.
+     */
+    public function test_reouverture_ne_contrepasse_que_la_fiche_qui_change(): void
+    {
+        app(PlanComptableBootstrapService::class)->bootstrap($this->org->id);
+        $this->travelTo('2026-06-10 12:00:00');
+        $concerne = $this->makeLivreur('Oumar Bah');
+        $autre = $this->makeLivreur('Alpha Sow');
+        $this->makeEnveloppeAvecPart(300000, null, $concerne);
+        $this->makeEnveloppeAvecPart(200000, null, $autre);
+
+        $periode = $this->makePeriode();
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $periode->refresh()->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
+        foreach ($periode->fiches as $fiche) {
+            app(FicheComptabilisationService::class)->comptabiliserFicheValidee($fiche);
+        }
+        $ficheAutre = PaiementFiche::where('periode_id', $periode->id)->where('beneficiaire_id', $autre->id)->sole();
+        $pieceAutre = PieceComptable::where('source_id', $ficheAutre->id)->sole();
+        $pieceConcerne = PieceComptable::where('source_id', PaiementFiche::where('beneficiaire_id', $concerne->id)->value('id'))->sole();
+
+        $this->makeEnveloppeAvecPart(45000, null, $concerne);
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+
+        $this->assertSame(StatutPeriodePaiement::CALCULEE, $periode->fresh()->statut);
+        $this->assertTrue(PaiementFiche::whereKey($ficheAutre->id)->exists(), 'la fiche inchangée est conservée');
+        $this->assertSame(StatutPieceComptable::VALIDEE, $pieceAutre->fresh()->statut, 'sa pièce reste engagée');
+        $this->assertSame(StatutPieceComptable::CONTREPASSEE, $pieceConcerne->fresh()->statut);
+        $this->assertSame(1, PieceComptable::where('type_evenement', 'like', 'contrepassation_de_%')->count());
+        $this->assertEquals(345000.0, (float) PaiementFiche::where('periode_id', $periode->id)->where('beneficiaire_id', $concerne->id)->value('montant_net'));
+
+        // Nouveau passage sans changement : rien n'est rejoué.
+        $piecesAvant = PieceComptable::count();
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $this->assertSame($piecesAvant, PieceComptable::count());
+        $this->assertTrue(PaiementFiche::whereKey($ficheAutre->id)->exists());
     }
 
     private function depenseLivreur(Livreur $livreur, float $montant, StatutDepense $statut = StatutDepense::VALIDE): Depense
