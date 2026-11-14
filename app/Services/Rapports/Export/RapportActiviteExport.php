@@ -33,7 +33,7 @@ class RapportActiviteExport implements WithMultipleSheets
     /** @return list<RapportFeuille> */
     public function sheets(): array
     {
-        return [
+        return array_values(array_filter([
             $this->resume(),
             $this->ventes(),
             $this->encaissements(),
@@ -41,7 +41,51 @@ class RapportActiviteExport implements WithMultipleSheets
             $this->mobileMoney(),
             $this->caisse(),
             $this->comptesMobileMoney(),
+            $this->charges(),
+            $this->agents(),
+        ]));
+    }
+
+    /** Charges saisies par les agents (dépenses validées ou en attente de validation). */
+    private function charges(): RapportFeuille
+    {
+        return new RapportFeuille(
+            'Charges',
+            ['Date', 'Type', 'Catégorie', 'Avance récupérable', 'Agence', 'Saisie par', 'Montant', 'Statut'],
+            array_map(fn (array $l) => [
+                $l['date'], $l['type'], $l['categorie'], $l['avance_tiers'] ? 'Oui' : 'Non', $l['site_nom'], $l['agent'],
+                $l['montant'], $l['statut_label'],
+            ], $this->rapport['charges']['lignes'] ?? []),
+        );
+    }
+
+    /** Rapport d'activité : le tableau par agent de l'écran (absent de « Ma situation »). */
+    private function agents(): ?RapportFeuille
+    {
+        if (($this->rapport['agents'] ?? null) === null) {
+            return null;
+        }
+
+        $moyens = $this->rapport['moyens'];
+        $entetes = [
+            'Agent', 'Agence de rattachement', 'Ventes (nombre)', 'Ventes',
+            ...array_map(fn (array $m) => 'Encaissé '.$m['libelle'], $moyens),
+            'Total encaissé', 'Dettes clients', 'Charges saisies', 'dont en attente',
+            "Remis à l'agence (sur la période)", 'En transit (à ce jour)', 'Reste à remettre (à ce jour)', 'Statut de remise',
         ];
+
+        $lignes = array_map(function (array $a) use ($moyens) {
+            $r = $a['remise'];
+
+            return [
+                $a['agent'], implode(', ', $a['agences']), $a['ventes_nombre'], $a['ventes_montant'],
+                ...array_map(fn (array $m) => $a['par_moyen'][$m['cle']]['montant'] ?? 0.0, $moyens),
+                $a['encaisse_montant'], $a['dettes_montant'], $a['charges_saisies'], $a['charges_en_attente'],
+                $r['remis'] ?? '', $r['en_transit'] ?? '', $r['reste_a_remettre'] ?? '', $r['statut_label'] ?? 'Aucune caisse dédiée',
+            ];
+        }, $this->rapport['agents']['lignes']);
+
+        return new RapportFeuille('Agents', $entetes, $lignes);
     }
 
     private function resume(): RapportFeuille
@@ -63,15 +107,32 @@ class RapportActiviteExport implements WithMultipleSheets
         $lignes[] = ['Reste à payer sur ces ventes', $v['reste']];
         $lignes[] = ['Ventes annulées / retournées (hors CA)', $v['annulees_nombre'].' — '.$v['annulees_montant']];
         $lignes[] = ['Encaissements de la période (nombre)', $e['resume']['nombre']];
-        $lignes[] = ['Montant encaissé', $e['resume']['montant']];
-        $lignes[] = ["  dont pour d'autres agences (à reverser)", $e['resume']['pour_autres_agences_montant']];
-        foreach ($e['par_moyen'] as $moyen) {
-            $lignes[] = ['  dont '.$moyen['libelle'], $moyen['montant']];
+        // Mêmes colonnes que l'écran (Espèces, Orange Money, puis tout moyen utilisé) ; total = leur somme.
+        $parMoyen = array_column($e['par_moyen'], 'montant', 'cle');
+        foreach ($this->rapport['moyens'] ?? [] as $moyen) {
+            $lignes[] = ['Encaissé '.$moyen['libelle'], $parMoyen[$moyen['cle']] ?? 0.0];
         }
+        $lignes[] = ['Total encaissé', $e['resume']['montant']];
+        $lignes[] = ["  dont pour d'autres agences (à reverser)", $e['resume']['pour_autres_agences_montant']];
         $lignes[] = ['Dettes clients sur la période (factures de la période encore dues)', $c['nombre']];
         $lignes[] = ['  dont impayées', $c['impayees']];
         $lignes[] = ['  dont partielles', $c['partielles']];
         $lignes[] = ['Reste dû', $c['reste']];
+        $ch = $this->rapport['charges']['resume'] ?? null;
+        if ($ch !== null) {
+            $lignes[] = ['Charges saisies (validées + en attente)', $ch['charges_saisies']];
+            $lignes[] = ['  dont validées (payées)', $ch['charges_payees']];
+            $lignes[] = ['  dont en attente de validation', $ch['charges_en_attente']];
+            $lignes[] = ['  dont avances récupérables', $ch['charges_avances_tiers']];
+        }
+        $r = $this->rapport['remise'] ?? null;
+        $lignes[] = ["Remise à l'agence de rattachement", $r === null ? 'Aucune caisse dédiée' : implode(', ', $r['agences'])];
+        if ($r !== null) {
+            $lignes[] = ['  Remis sur la période (réception confirmée)', $r['remis']];
+            $lignes[] = ['  En transit (à ce jour)', $r['en_transit']];
+            $lignes[] = ['  Reste à remettre (à ce jour)', $r['reste_a_remettre']];
+            $lignes[] = ['  Statut', $r['statut_label']];
+        }
         $lignes[] = ['Mobile Money — références absentes', $m['reference_absente']];
         $lignes[] = ['Mobile Money — références déjà utilisées', $m['reference_dupliquee']];
         $lignes[] = ['Caisse — solde de début', $k['solde_debut']];

@@ -2,7 +2,9 @@
 
 namespace App\Services\Rapports;
 
+use App\Features\ModuleFeature;
 use App\Models\User;
+use App\Services\ModuleService;
 use App\Support\Rapports\RapportPerimetre;
 
 /**
@@ -45,6 +47,10 @@ class RapportActivitePresenter
             'agent' => $p->maSituation ? ['id' => $user->id, 'nom' => $user->name] : null,
             'limite_lignes' => RapportActiviteService::LIMITE_LIGNES,
             'rapport' => $this->rapports->rapport($p),
+            // Lien vers une charge : mêmes conditions que la route depenses.show (module, DepensePolicy::view).
+            'peut_voir_depenses' => $user->can('depenses.read')
+                && $user->organization !== null
+                && ModuleService::isActive(ModuleFeature::DEPENSES, $user->organization),
         ];
     }
 }

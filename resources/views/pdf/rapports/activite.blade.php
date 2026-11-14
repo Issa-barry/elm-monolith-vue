@@ -80,15 +80,47 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
     </table>
 </div>
 
+@php
+    $ch = $rapport['charges']['resume'];
+    $re = $rapport['remise'];
+    $parMoyen = array_column($e['par_moyen'], 'montant', 'cle');
+@endphp
 <table class="kpis">
     <tr>
         <td><div class="lbl">Ventes de la période</div><div class="val">{{ $v['resume']['nombre'] }} — {{ $gnf($v['resume']['facture']) }} GNF</div></td>
-        <td><div class="lbl">Encaissements de la période</div><div class="val">{{ $gnf($e['resume']['montant']) }} GNF</div></td>
-        <td><div class="lbl">Dettes clients (toutes dates)</div><div class="val">{{ $gnf($c['resume']['reste']) }} GNF</div></td>
-        <td><div class="lbl">Caisse — solde actuel (théorique)</div><div class="val">{{ $gnf($k['resume']['solde_actuel']) }} GNF</div></td>
+        <td><div class="lbl">Total encaissé</div><div class="val">{{ $gnf($e['resume']['montant']) }} GNF</div></td>
+        <td><div class="lbl">Dettes clients</div><div class="val">{{ $gnf($c['resume']['reste']) }} GNF</div></td>
+        <td><div class="lbl">Charges saisies</div><div class="val">{{ $gnf($ch['charges_saisies']) }} GNF</div></td>
+        <td><div class="lbl">Remis à l'agence (période)</div><div class="val">{{ $re ? $gnf($re['remis']).' GNF' : 'Aucune caisse dédiée' }}</div></td>
+        <td><div class="lbl">Reste à remettre (à ce jour)</div><div class="val">{{ $re ? $gnf($re['reste_a_remettre']).' GNF' : '—' }}</div></td>
     </tr>
 </table>
-<p class="note">Chaque bloc est calculé indépendamment : ventes = factures créées dans la période ; encaissements = paiements reçus dans la période, quelle que soit la date de la vente ; dettes clients = ce que les clients doivent encore, état actuel, toutes dates confondues.</p>
+<p class="note">Chaque bloc est calculé indépendamment : ventes = factures créées dans la période ; encaissements = paiements reçus dans la période, quelle que soit la date de la vente ; dettes clients = factures de la période encore dues. Un agent remet à son agence de rattachement
+    @if ($re) ({{ implode(', ', $re['agences']) }} — {{ $re['statut_label'] }}, en transit {{ $gnf($re['en_transit']) }} GNF) @endif ; « remis » = réceptions confirmées par l'agence pendant la période.</p>
+
+@if ($rapport['agents'] !== null)
+<h2>Détail par agent</h2>
+<table class="data">
+    <thead><tr><th>Agent</th><th>Agence</th><th class="right">Ventes</th>
+        @foreach ($rapport['moyens'] as $moyen)<th class="right">{{ $moyen['libelle'] }}</th>@endforeach
+        <th class="right">Total encaissé</th><th class="right">Dettes</th><th class="right">Charges saisies</th><th class="right">Remis</th><th class="right">En transit</th><th class="right">Reste</th><th>Statut</th></tr></thead>
+    <tbody>
+    @forelse ($rapport['agents']['lignes'] as $a)
+        <tr><td>{{ $a['agent'] }}</td><td>{{ implode(', ', $a['agences']) ?: '—' }}</td><td class="right">{{ $gnf($a['ventes_montant']) }}</td>
+            @foreach ($rapport['moyens'] as $moyen)<td class="right">{{ $gnf($a['par_moyen'][$moyen['cle']]['montant'] ?? 0) }}</td>@endforeach
+            <td class="right">{{ $gnf($a['encaisse_montant']) }}</td><td class="right">{{ $gnf($a['dettes_montant']) }}</td><td class="right">{{ $gnf($a['charges_saisies']) }}</td>
+            @if ($a['remise'])
+                <td class="right">{{ $gnf($a['remise']['remis']) }}</td><td class="right">{{ $gnf($a['remise']['en_transit']) }}</td><td class="right">{{ $gnf($a['remise']['reste_a_remettre']) }}</td><td>{{ $a['remise']['statut_label'] }}</td>
+            @else
+                <td colspan="4">Aucune caisse dédiée</td>
+            @endif
+        </tr>
+    @empty
+        <tr><td colspan="{{ 10 + count($rapport['moyens']) }}" class="vide">Aucune activité d'agent sur la période.</td></tr>
+    @endforelse
+    </tbody>
+</table>
+@endif
 
 <h2>Ventes</h2>
 <p class="note">Encaissé {{ $gnf($v['resume']['encaisse']) }} GNF et reste {{ $gnf($v['resume']['reste']) }} GNF sur ces ventes (état actuel).
@@ -108,11 +140,10 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
 <h2>Encaissements</h2>
 <table class="kpis">
     <tr>
-    @foreach ($e['par_moyen'] as $moyen)
-        <td><div class="lbl">{{ $moyen['libelle'] }} ({{ $moyen['nombre'] }})</div><div class="val">{{ $gnf($moyen['montant']) }} GNF</div></td>
-        @if ($loop->iteration % 4 === 0 && ! $loop->last)</tr><tr>@endif
+    @foreach ($rapport['moyens'] as $moyen)
+        <td><div class="lbl">{{ $moyen['libelle'] }}</div><div class="val">{{ $gnf($parMoyen[$moyen['cle']] ?? 0) }} GNF</div></td>
     @endforeach
-    @if (count($e['par_moyen']) === 0)<td>Aucun encaissement.</td>@endif
+        <td><div class="lbl">Total encaissé</div><div class="val">{{ $gnf($e['resume']['montant']) }} GNF</div></td>
     </tr>
 </table>
 @if ($e['resume']['pour_autres_agences_nombre'] > 0)
@@ -197,6 +228,22 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
         @endif
     @endforeach
 @endif
+
+<h2>Charges saisies</h2>
+<p class="note">Dépenses saisies sur la période : {{ $gnf($ch['charges_payees']) }} GNF validées (payées), {{ $gnf($ch['charges_en_attente']) }} GNF en attente de validation, dont {{ $gnf($ch['charges_avances_tiers']) }} GNF d'avances récupérables.</p>
+<table class="data">
+    <thead><tr><th>Date</th><th>Type</th><th>Catégorie</th><th>Agence</th><th>Saisie par</th><th class="right">Montant</th><th>Statut</th></tr></thead>
+    <tbody>
+    @forelse ($rapport['charges']['lignes'] as $l)
+        <tr><td>{{ \Carbon\Carbon::parse($l['date'])->format('d/m/Y') }}</td><td>{{ $l['type'] ?? '—' }}</td><td>{{ $l['categorie'] ?? '—' }}{{ $l['avance_tiers'] ? ' (avance)' : '' }}</td><td>{{ $l['site_nom'] ?? '—' }}</td><td>{{ $l['agent'] ?? '—' }}</td><td class="right">{{ $gnf($l['montant']) }}</td><td>{{ $l['statut_label'] }}</td></tr>
+    @empty
+        <tr><td colspan="7" class="vide">Aucune charge saisie sur la période.</td></tr>
+    @endforelse
+    @if (count($rapport['charges']['lignes']) > 0)
+        <tr class="total"><td colspan="5" class="right">TOTAL</td><td class="right">{{ $gnf($ch['charges_saisies']) }}</td><td></td></tr>
+    @endif
+    </tbody>
+</table>
 
 </body>
 </html>

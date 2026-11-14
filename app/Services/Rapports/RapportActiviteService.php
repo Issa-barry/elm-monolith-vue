@@ -8,7 +8,9 @@ use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
 use App\Models\CompteTresorerie;
 use App\Models\EncaissementVente;
+use App\Models\User;
 use App\Services\Tresorerie\FicheCaisseService;
+use App\Services\Tresorerie\RemisesAgencesService;
 use App\Support\Rapports\RapportPerimetre;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
@@ -62,22 +64,246 @@ class RapportActiviteService
         StatutCommandeVente::PREPAREE,
     ];
 
-    public function __construct(private readonly FicheCaisseService $ficheCaisse) {}
+    public function __construct(
+        private readonly FicheCaisseService $ficheCaisse,
+        private readonly ChargesRapportService $charges,
+    ) {}
 
     /**
      * Toutes les sections du rapport (écran : lignes limitées ; export : $limite = null).
+     *
+     * - `moyens` : colonnes d'encaissement communes aux trois rapports (colonnesMoyens()) ;
+     * - `charges` : charges saisies PAR les agents du périmètre (ChargesRapportService, axe agent) ;
+     * - `remise` : remise des agents à LEUR agence (ADR 0064), tirée des fiches de caisse et de compte
+     *   Mobile Money — jamais un encaissement compté comme remis ;
+     * - `agents` : une ligne par agent (rapport d'activité seulement, pas « Ma situation »).
      *
      * @return array<string, mixed>
      */
     public function rapport(RapportPerimetre $p, ?int $limite = self::LIMITE_LIGNES): array
     {
+        $encaissements = $this->encaissements($p, $limite);
+        $caisse = $this->caisse($p);
+        $comptesMobileMoney = $this->comptesMobileMoney($p);
+        $fiches = [...$caisse['fiches'], ...$comptesMobileMoney['fiches']];
+
         return [
             'ventes' => $this->ventes($p, $limite),
-            'encaissements' => $this->encaissements($p, $limite),
+            'encaissements' => $encaissements,
             'creances' => $this->creances($p, $limite),
             'mobile_money' => $this->mobileMoney($p, $limite),
-            'caisse' => $this->caisse($p),
-            'comptes_mobile_money' => $this->comptesMobileMoney($p),
+            'caisse' => $caisse,
+            'comptes_mobile_money' => $comptesMobileMoney,
+            'moyens' => self::colonnesMoyens($encaissements['par_moyen']),
+            'charges' => $this->charges->section($p, $limite),
+            'remise' => self::remiseAgents($fiches),
+            'agents' => $p->maSituation ? null : $this->parAgent($p, $fiches),
+        ];
+    }
+
+    // ── Moyens d'encaissement : colonnes communes aux trois rapports ─────────
+
+    /**
+     * Colonnes de moyens (décision du 14/11/2026, ADR 0063 point 7) : Espèces et Orange Money
+     * toujours, les moyens utilisés aujourd'hui. Un autre moyen (Kulu, virement, chèque…) n'a de
+     * colonne que s'il a réellement été encaissé : le total encaissé reste la somme des colonnes
+     * affichées, sans montant caché. Ordre : espèces, Mobile Money (Orange Money en tête), virement, chèque.
+     *
+     * @param  iterable<array{mode_paiement: ?string, operateur_mobile_money?: ?string}>  $utilises
+     * @return list<array{cle: string, libelle: string}>
+     */
+    public static function colonnesMoyens(iterable $utilises): array
+    {
+        $toujours = [
+            ['mode_paiement' => ModePaiement::ESPECES->value, 'operateur_mobile_money' => null],
+            ['mode_paiement' => ModePaiement::MOBILE_MONEY->value, 'operateur_mobile_money' => OperateurMobileMoney::ORANGE_MONEY->value],
+        ];
+
+        return collect($toujours)
+            ->concat(collect($utilises)->values())
+            ->map(fn (array $m) => [
+                'cle' => self::cleMoyen((string) $m['mode_paiement'], $m['operateur_mobile_money'] ?? null),
+                'libelle' => self::libelleMoyen((string) $m['mode_paiement'], $m['operateur_mobile_money'] ?? null),
+                'ordre' => self::ordreMoyen($m['mode_paiement']).self::ordreOperateur($m['operateur_mobile_money'] ?? null),
+            ])
+            ->unique('cle')
+            ->sortBy(fn (array $m) => $m['ordre'].$m['libelle'])
+            ->map(fn (array $m) => ['cle' => $m['cle'], 'libelle' => $m['libelle']])
+            ->values()
+            ->all();
+    }
+
+    /** Rang de l'opérateur dans OperateurMobileMoney (Orange Money d'abord) ; sans opérateur en dernier. */
+    private static function ordreOperateur(?string $operateur): string
+    {
+        $rang = array_search(OperateurMobileMoney::tryFrom((string) $operateur), OperateurMobileMoney::cases(), true);
+
+        return str_pad((string) ($rang === false ? 99 : $rang), 2, '0', STR_PAD_LEFT);
+    }
+
+    // ── Remise des agents à leur agence (ADR 0064) ───────────────────────────
+
+    /**
+     * Remise des agents à LEUR agence de rattachement (agence de la caisse ou du compte Mobile Money),
+     * jamais à la trésorerie principale — qui est le niveau agence (ADR 0016). Tirée des fiches
+     * (FicheCaisseService, grand livre et vrais versements / transferts) :
+     *
+     * - remis      = versements reçus par l'agence (réception confirmée) pendant la période ;
+     * - en transit = envoyés ou contestés, réception pas encore confirmée, à ce jour ;
+     * - reste      = solde à ce jour des caisses et comptes Mobile Money (il baisse dès l'envoi) ;
+     * - statut     = même règle que les agences (RemisesAgencesService::statut()).
+     *
+     * Null sans aucune caisse dédiée ni compte Mobile Money (rien ne peut être remis).
+     *
+     * @param  list<array<string, mixed>>  $fiches
+     * @return array<string, mixed>|null
+     */
+    public static function remiseAgents(array $fiches): ?array
+    {
+        if ($fiches === []) {
+            return null;
+        }
+
+        $fiches = collect($fiches);
+        $remis = round((float) $fiches->sum(fn (array $f) => $f['recus_periode']['montant'] ?? 0.0), 2);
+        $enTransit = round((float) $fiches->sum(fn (array $f) => $f['en_cours']['montant'] + $f['contestes']['montant']), 2);
+        $reste = round((float) $fiches->sum('solde_actuel'), 2);
+        $statut = RemisesAgencesService::statut($reste, $enTransit, $remis);
+
+        return [
+            'remis' => $remis,
+            'en_transit' => $enTransit,
+            'reste_a_remettre' => $reste,
+            'agences' => $fiches->pluck('caisse.site_nom')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values()->all(),
+            'derniere_remise' => $fiches->pluck('dernier_versement.date_envoi')->filter()->max(),
+            'statut' => $statut,
+            'statut_label' => RemisesAgencesService::LIBELLES[$statut],
+        ];
+    }
+
+    // ── Une ligne par agent (rapport d'activité) ─────────────────────────────
+
+    /**
+     * Une ligne par agent ayant une activité sur la période dans le périmètre (ventes, encaissements,
+     * dettes, charges) ou une caisse / un compte Mobile Money concerné. Mêmes bases et mêmes règles
+     * que les blocs du rapport (requêtes regroupées par agent) : la somme des lignes redonne les
+     * totaux du rapport. Agent = créateur de la vente (ventes, dettes), auteur de l'encaissement,
+     * auteur de la dépense (charges), titulaire de la caisse (remise).
+     *
+     * @param  list<array<string, mixed>>  $fiches
+     * @return array{lignes: list<array<string, mixed>>, totaux: array<string, mixed>}
+     */
+    public function parAgent(RapportPerimetre $p, array $fiches): array
+    {
+        $vide = ['lignes' => [], 'totaux' => $this->totauxAgents(collect())];
+        if ($p->aucuneAgence()) {
+            return $vide;
+        }
+
+        $debut = $p->debut();
+        $fin = $p->fin();
+        $cle = fn ($id) => $id === null ? '' : (string) $id;
+
+        $ventes = $this->horsAnnulations($this->ventesBase($p)->whereBetween('fv.created_at', [$debut, $fin]))
+            ->groupBy('cv.created_by')
+            ->selectRaw('cv.created_by as agent_id, COUNT(*) as nombre, COALESCE(SUM(fv.montant_net), 0) as montant')
+            ->get()->keyBy(fn ($l) => $cle($l->agent_id));
+
+        $encaissements = $this->encaissementsBase($p)
+            ->groupBy('ev.created_by', 'ev.mode_paiement', 'ev.operateur_mobile_money')
+            ->selectRaw('ev.created_by as agent_id, ev.mode_paiement, ev.operateur_mobile_money, COUNT(*) as nombre, COALESCE(SUM(ev.montant), 0) as montant')
+            ->get()->groupBy(fn ($l) => $cle($l->agent_id));
+
+        $pourAutres = $this->encaissementsBase($p)
+            ->whereColumn('ev.site_encaissement_id', '<>', 'fv.site_id')
+            ->groupBy('ev.created_by')
+            ->selectRaw('ev.created_by as agent_id, COALESCE(SUM(ev.montant), 0) as montant')
+            ->get()->keyBy(fn ($l) => $cle($l->agent_id));
+
+        $dettes = DB::query()
+            ->fromSub($this->ventesBase($p)
+                ->whereBetween('fv.created_at', [$debut, $fin])
+                ->whereIn('fv.statut_facture', [StatutFactureVente::IMPAYEE->value, StatutFactureVente::PARTIEL->value])
+                ->select('cv.created_by as agent_id', 'fv.montant_net')
+                ->selectRaw($this->encaisseSql().' as encaisse'), 't')
+            ->groupBy('agent_id')
+            ->selectRaw('agent_id, COUNT(*) as nombre')
+            ->selectRaw('COALESCE(SUM(CASE WHEN montant_net - encaisse > 0 THEN montant_net - encaisse ELSE 0 END), 0) as reste')
+            ->get()->keyBy(fn ($l) => $cle($l->agent_id));
+
+        $charges = collect($this->charges->parAgent($p));
+        $fichesParAgent = collect($fiches)->filter(fn (array $f) => $f['caisse']['agent_id'] !== null)->groupBy(fn (array $f) => (string) $f['caisse']['agent_id']);
+
+        $ids = collect([...$ventes->keys(), ...$encaissements->keys(), ...$dettes->keys(), ...$charges->keys(), ...$fichesParAgent->keys()])
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        $utilisateurs = User::query()->whereIn('id', $ids->filter()->all())->with(['personne', 'sites'])->get()->keyBy('id');
+
+        $lignes = $ids->map(function (string $id) use ($ventes, $encaissements, $pourAutres, $dettes, $charges, $fichesParAgent, $utilisateurs) {
+            $parMoyen = collect($encaissements->get($id, []))
+                ->map(fn ($l) => [
+                    'cle' => self::cleMoyen((string) $l->mode_paiement, $l->operateur_mobile_money),
+                    'mode_paiement' => $l->mode_paiement,
+                    'operateur_mobile_money' => $l->operateur_mobile_money,
+                    'montant' => round((float) $l->montant, 2),
+                    'nombre' => (int) $l->nombre,
+                ])
+                ->groupBy('cle')
+                ->map(fn (Collection $m) => [...$m->first(), 'montant' => round((float) $m->sum('montant'), 2), 'nombre' => (int) $m->sum('nombre')]);
+            $fichesAgent = $fichesParAgent->get($id, collect())->all();
+            $remise = self::remiseAgents($fichesAgent);
+            $utilisateur = $utilisateurs->get($id);
+            $agences = $remise['agences'] ?? [];
+            if ($agences === [] && $utilisateur !== null) {
+                $agences = $utilisateur->sites->pluck('nom')->sort(SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
+            }
+
+            return [
+                'agent_id' => $id !== '' ? $id : null,
+                'agent' => $utilisateur?->name ?: ($id === '' ? 'Agent non renseigné' : 'Utilisateur sans nom'),
+                'agences' => $agences,
+                'ventes_nombre' => (int) ($ventes->get($id)?->nombre ?? 0),
+                'ventes_montant' => round((float) ($ventes->get($id)?->montant ?? 0), 2),
+                'par_moyen' => $parMoyen->all(),
+                'encaisse_nombre' => (int) $parMoyen->sum('nombre'),
+                'encaisse_montant' => round((float) $parMoyen->sum('montant'), 2),
+                'pour_autres_agences' => round((float) ($pourAutres->get($id)?->montant ?? 0), 2),
+                'dettes_nombre' => (int) ($dettes->get($id)?->nombre ?? 0),
+                'dettes_montant' => round((float) ($dettes->get($id)?->reste ?? 0), 2),
+                ...($charges->get($id) ?? ChargesRapportService::VIDES),
+                'remise' => $remise,
+            ];
+        })
+            ->sortBy('agent', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+
+        return ['lignes' => $lignes->all(), 'totaux' => $this->totauxAgents($lignes)];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $lignes
+     * @return array<string, mixed>
+     */
+    private function totauxAgents(Collection $lignes): array
+    {
+        $somme = fn (string $champ) => round((float) $lignes->sum($champ), 2);
+        $remises = $lignes->pluck('remise')->filter();
+
+        return [
+            'ventes_nombre' => (int) $lignes->sum('ventes_nombre'),
+            'ventes_montant' => $somme('ventes_montant'),
+            'par_moyen' => $lignes->flatMap(fn (array $l) => array_values($l['par_moyen']))
+                ->groupBy('cle')->map(fn (Collection $m) => round((float) $m->sum('montant'), 2))->all(),
+            'encaisse_montant' => $somme('encaisse_montant'),
+            'pour_autres_agences' => $somme('pour_autres_agences'),
+            'dettes_montant' => $somme('dettes_montant'),
+            'charges_saisies' => $somme('charges_saisies'),
+            'charges_en_attente' => $somme('charges_en_attente'),
+            'remis' => round((float) $remises->sum('remis'), 2),
+            'en_transit' => round((float) $remises->sum('en_transit'), 2),
+            'reste_a_remettre' => round((float) $remises->sum('reste_a_remettre'), 2),
         ];
     }
 

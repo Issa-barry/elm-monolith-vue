@@ -54,6 +54,26 @@ class RemisesAgencesService
         private readonly SiteCentralTresorerieResolver $siteCentral,
     ) {}
 
+    /**
+     * Statut d'une remise, dans cet ordre de priorité (ADR 0016) — règle unique, appliquée aux deux
+     * niveaux : agence → trésorerie principale, et agent → son agence (ADR 0064).
+     *
+     * @param  ?float  $reste  reste à remettre à ce jour (null = position non fiable)
+     * @param  float  $enTransit  envoyé, réception pas encore confirmée
+     * @param  float  $remis  réception confirmée pendant la période
+     */
+    public static function statut(?float $reste, float $enTransit, float $remis): string
+    {
+        return match (true) {
+            $reste === null => self::STATUT_DONNEES_INCOMPLETES,
+            $enTransit > 0.0 => self::STATUT_REMISE_EN_COURS,
+            $remis > 0.0 && $reste > 0.0 => self::STATUT_PARTIELLEMENT_REMIS,
+            $remis > 0.0 => self::STATUT_REMIS,
+            $reste > 0.0 => self::STATUT_A_REMETTRE,
+            default => self::STATUT_RIEN_A_REMETTRE,
+        };
+    }
+
     public function central(string $organizationId): ?Site
     {
         return $this->siteCentral->centralOuNull($organizationId);
@@ -172,14 +192,7 @@ class RemisesAgencesService
         $reste = $row['total_a_remettre'] === null ? null : round((float) $row['total_a_remettre'], 2);
         $derniere = $remises->max(fn (MouvementFonds $m) => $m->date_envoi);
 
-        $statut = match (true) {
-            $reste === null => self::STATUT_DONNEES_INCOMPLETES,
-            $enTransit > 0.0 => self::STATUT_REMISE_EN_COURS,
-            $dejaRemis > 0.0 && $reste > 0.0 => self::STATUT_PARTIELLEMENT_REMIS,
-            $dejaRemis > 0.0 => self::STATUT_REMIS,
-            $reste > 0.0 => self::STATUT_A_REMETTRE,
-            default => self::STATUT_RIEN_A_REMETTRE,
-        };
+        $statut = self::statut($reste, $enTransit, $dejaRemis);
 
         return [
             'site_id' => $row['site_id'],
