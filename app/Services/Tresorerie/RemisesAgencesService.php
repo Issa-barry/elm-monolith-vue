@@ -43,8 +43,9 @@ class RemisesAgencesService
         self::STATUT_DONNEES_INCOMPLETES => 'Données incomplètes',
         self::STATUT_REMISE_EN_COURS => 'Remise en cours',
         self::STATUT_PARTIELLEMENT_REMIS => 'Partiellement remis',
-        self::STATUT_REMIS => 'Remis',
-        self::STATUT_A_REMETTRE => 'À remettre',
+        // Libellés du 13/11/2026, communs à cette vue et au rapport par agence (clés inchangées).
+        self::STATUT_REMIS => 'Totalement remis',
+        self::STATUT_A_REMETTRE => 'Non remis',
         self::STATUT_RIEN_A_REMETTRE => 'Rien à remettre',
     ];
 
@@ -187,6 +188,7 @@ class RemisesAgencesService
             'deja_remis' => $dejaRemis,
             'en_transit' => $enTransit,
             'reste_a_recevoir' => $reste,
+            'disponible' => $row['disponible'],
             'remise_obligatoire' => $row['remise_obligatoire'],
             'excedent_a_remettre' => $row['excedent_a_remettre'],
             'derniere_remise' => $derniere?->toDateString(),

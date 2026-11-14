@@ -42,7 +42,7 @@ const rapports = (liste: NavItem[]) =>
     liste.find((i) => i.title === 'Rapports');
 
 describe('AppSidebar — navigation Rapports', () => {
-    it('regroupe Ma situation et Rapport d’activité sous Rapports (Pilotage)', () => {
+    it('regroupe Ma situation, Rapport d’activité et Rapport par agence sous Rapports (Pilotage)', () => {
         const liste = items({
             'rapports.read_own': true,
             'rapports.read': true,
@@ -56,6 +56,7 @@ describe('AppSidebar — navigation Rapports', () => {
         expect(rapports(liste)?.items?.map((i) => i.title)).toEqual([
             'Ma situation',
             "Rapport d'activité",
+            'Rapport par agence',
         ]);
     });
 

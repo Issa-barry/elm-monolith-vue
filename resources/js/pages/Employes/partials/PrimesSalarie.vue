@@ -40,6 +40,11 @@ import {
 import Dialog from 'primevue/dialog';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import {
+    CARTE_FICHE,
+    ENTETE_CARTE_FICHE,
+    TITRE_CARTE_FICHE,
+} from './carteFiche';
 
 interface TypeOption {
     value: string;
@@ -232,6 +237,13 @@ function formatDate(iso: string | null): string {
     if (!iso) return '';
     const [y, m, d] = iso.split('-');
     return `${d}/${m}/${y}`;
+}
+
+/** Rythme de versement, affiché en étiquette (catégorie, pas un statut). */
+function rythme(a: Affectation): string {
+    if (a.type.periodicite === 'ponctuelle') return 'Ponctuelle';
+    if (a.type.nature_montant === 'variable') return 'Mensuelle · variable';
+    return 'Mensuelle';
 }
 
 function periode(a: Affectation): string {
@@ -742,19 +754,17 @@ const champSelect =
 </script>
 
 <template>
-    <div
-        class="overflow-hidden rounded-xl border bg-card"
-        data-testid="employe-primes"
-    >
-        <div
-            class="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4"
-        >
-            <h3
-                class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-            >
-                <Gift class="h-4 w-4" />
+    <section :class="CARTE_FICHE" data-testid="employe-primes">
+        <div :class="ENTETE_CARTE_FICHE">
+            <h2 :class="TITRE_CARTE_FICHE">
+                <Gift class="h-4 w-4 text-muted-foreground" />
                 Primes et avantages
-            </h3>
+                <span
+                    v-if="primesActuelles.length > 0"
+                    class="text-sm font-normal text-muted-foreground"
+                    >({{ primesActuelles.length }})</span
+                >
+            </h2>
             <Button
                 v-if="
                     can('rh-affectations-remuneration.create') &&
@@ -774,7 +784,7 @@ const champSelect =
                 options.premier_jour_modifiable &&
                 can('rh-affectations-remuneration.create')
             "
-            class="border-b bg-muted/50 px-5 py-2 text-xs text-muted-foreground"
+            class="border-b bg-muted/50 px-5 py-2 text-xs text-muted-foreground sm:px-6"
         >
             La paie est figée jusqu’à fin {{ dernierMoisFige }} : toute nouvelle
             date d’effet commence au plus tôt le
@@ -801,24 +811,25 @@ const champSelect =
                         ? [...primesActuelles, ...primesAnciennes]
                         : primesActuelles"
                     :key="a.id"
-                    class="flex flex-wrap items-start justify-between gap-3 p-4 text-sm"
+                    class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2 px-5 py-4 text-sm sm:px-6"
                     :data-testid="`prime-${a.id}`"
                 >
-                    <div class="min-w-0 flex-1">
+                    <div class="min-w-0">
                         <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span class="font-medium">{{
+                            <span class="font-semibold">{{
                                 a.type.libelle
                             }}</span>
-                            <span class="tabular-nums">{{
-                                a.valeur_label
-                            }}</span>
+                            <span
+                                class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                                >{{ rythme(a) }}</span
+                            >
                             <span
                                 v-if="a.type.valorise"
-                                class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+                                class="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
                                 >Avantage en nature · hors net à payer</span
                             >
                         </p>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
+                        <p class="mt-1 text-xs text-muted-foreground">
                             {{ periode(a) }}
                             <template v-if="a.est_changement">
                                 · Changement de montant</template
@@ -844,9 +855,22 @@ const champSelect =
                         </p>
                     </div>
 
-                    <div class="flex items-start gap-2">
-                        <div class="text-right">
+                    <div class="flex items-start gap-2 sm:gap-3">
+                        <div class="flex flex-col items-end text-right">
+                            <span
+                                class="text-[15px] font-semibold whitespace-nowrap tabular-nums"
+                                :class="{
+                                    'text-muted-foreground':
+                                        a.type.valorise ||
+                                        ['terminee', 'annulee'].includes(
+                                            a.etat,
+                                        ),
+                                }"
+                                data-testid="prime-valeur"
+                                >{{ a.valeur_label }}</span
+                            >
                             <StatusDot
+                                class="mt-1"
                                 :status="
                                     a.attend_validation ? 'a_valider' : a.etat
                                 "
@@ -883,9 +907,10 @@ const champSelect =
                         <DropdownMenu>
                             <DropdownMenuTrigger as-child>
                                 <Button
-                                    variant="ghost"
+                                    variant="outline"
                                     size="icon"
                                     class="h-8 w-8"
+                                    title="Actions sur la prime"
                                     :aria-label="`Actions : ${a.type.libelle}`"
                                     :data-testid="`affectation-actions-${a.id}`"
                                 >
@@ -969,7 +994,7 @@ const champSelect =
                 }}
             </button>
         </template>
-    </div>
+    </section>
 
     <!-- Attribuer / modifier une proposition -->
     <Dialog

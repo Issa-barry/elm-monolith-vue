@@ -569,7 +569,8 @@ class RapportActiviteService
         return ModePaiement::tryFrom($mode)?->label() ?? $mode;
     }
 
-    private function ordreMoyen(?string $mode): string
+    /** Ordre d'affichage des moyens : espèces, Mobile Money, virement, chèque (aussi pour le rapport par agence). */
+    public static function ordreMoyen(?string $mode): string
     {
         return match ($mode) {
             ModePaiement::ESPECES->value => '1',

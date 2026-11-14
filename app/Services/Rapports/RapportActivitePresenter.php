@@ -28,9 +28,7 @@ class RapportActivitePresenter
             'url' => $baseUrl,
             'export_url' => $baseUrl.'/export',
             'filters' => [
-                'periode' => $p->periode->cle,
-                'date_debut' => $p->periode->cle === 'personnalisee' ? $p->debut()->toDateString() : null,
-                'date_fin' => $p->periode->cle === 'personnalisee' ? $p->fin()->toDateString() : null,
+                ...$p->periode->valeursFiltre('periode', RapportPerimetreResolver::PERIODES),
                 'site_ids' => $p->maSituation || $p->siteIds === null ? [] : $p->siteIds,
                 'agent_id' => $p->maSituation ? null : $p->agentId,
             ],

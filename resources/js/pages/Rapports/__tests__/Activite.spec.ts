@@ -175,47 +175,43 @@ describe('Rapports/Activite', () => {
         ).toBe('rapport-periode');
     });
 
-    it('le drawer du rapport conserve Agent et Agence, sans la période', () => {
-        const filtres = monter('rapport').findComponent(DataFilters);
+    it('le panneau du rapport regroupe Agence, Agent et Période, sans sélecteur dans l’en-tête', () => {
+        const wrapper = monter('rapport');
+        const filtres = wrapper.findComponent(DataFilters);
 
         expect(
             filtres.props('fields').map((f: { key: string }) => f.key),
-        ).toEqual(['agent_id']);
+        ).toEqual(['agent_id', 'periode']);
         expect(filtres.props('hideAgenceSelector')).toBe(false);
+        expect(filtres.props('fields')[1]).toMatchObject({
+            type: 'period',
+            defaultValue: 'aujourd_hui',
+            options: [
+                { value: 'aujourd_hui', label: "Aujourd'hui" },
+                { value: 'hier', label: 'Hier' },
+                { value: 'personnalisee', label: 'Période personnalisée' },
+            ],
+        });
+        expect(wrapper.find('[data-testid="rapport-periode"]').exists()).toBe(
+            false,
+        );
     });
 
-    it('applique directement un raccourci en conservant agence, agent et onglet', async () => {
+    it('transmet la période appliquée au panneau, sans la dupliquer dans les paramètres de base', async () => {
         url.valeur = '/backoffice/rapports/activite?tab=creances';
         const wrapper = monter('rapport');
-        await wrapper.setProps({
-            filters: {
-                periode: 'personnalisee',
-                date_debut: '2026-09-01',
-                date_fin: '2026-09-25',
-                site_ids: ['s1'],
-                agent_id: 'u1',
-            },
-        });
-        wrapper.findComponent(Select).vm.$emit('update:modelValue', 'hier');
-        expect(router.get).toHaveBeenLastCalledWith(
-            '/backoffice/rapports/activite',
-            {
-                tab: 'creances',
-                periode: 'hier',
-                site_ids: ['s1'],
-                agent_id: 'u1',
-            },
-            expect.any(Object),
-        );
+        const filters = {
+            periode: 'personnalisee',
+            date_debut: '2026-09-01',
+            date_fin: '2026-09-25',
+            site_ids: ['s1'],
+            agent_id: 'u1',
+        };
+        await wrapper.setProps({ filters });
+        const filtres = wrapper.findComponent(DataFilters);
 
-        wrapper
-            .findComponent(Select)
-            .vm.$emit('update:modelValue', 'aujourd_hui');
-        expect(router.get).toHaveBeenLastCalledWith(
-            '/backoffice/rapports/activite',
-            { tab: 'creances', site_ids: ['s1'], agent_id: 'u1' },
-            expect.any(Object),
-        );
+        expect(filtres.props('values')).toEqual(filters);
+        expect(filtres.props('baseParams')).toEqual({ tab: 'creances' });
     });
 
     it('applique une plage personnalisée complète sur validation, en rejetant les dates inversées', async () => {
@@ -242,31 +238,23 @@ describe('Rapports/Activite', () => {
         );
     });
 
-    it('conserve la période serveur dans le drawer, même pendant la saisie d’une autre plage', async () => {
-        const wrapper = monter('rapport');
-        await wrapper.setProps({
-            filters: {
-                periode: 'personnalisee',
-                date_debut: '2026-09-01',
-                date_fin: '2026-09-20',
-                site_ids: [],
-                agent_id: null,
-            },
-        });
-        expect(
-            wrapper.get('[aria-label="Date de début"]').element,
-        ).toHaveProperty('value', '2026-09-01');
-        expect(
-            wrapper.get('[aria-label="Date de fin"]').element,
-        ).toHaveProperty('value', '2026-09-20');
+    it('Ma situation : une date précise envoie le même jour en début et en fin', async () => {
+        const wrapper = monter('ma_situation');
+        wrapper
+            .findComponent(Select)
+            .vm.$emit('update:modelValue', 'date_precise');
+        await wrapper.vm.$nextTick();
+        expect(router.get).not.toHaveBeenCalled();
+        expect(wrapper.find('[aria-label="Date de fin"]').exists()).toBe(false);
         await wrapper
-            .get('[aria-label="Date de début"]')
-            .setValue('2026-09-02');
-        expect(wrapper.findComponent(DataFilters).props('baseParams')).toEqual({
-            tab: 'caisse',
-            date_debut: '2026-09-01',
-            date_fin: '2026-09-20',
-        });
+            .get('[data-testid="rapport-periode-date"]')
+            .setValue('2026-09-13');
+        await wrapper.get('form').trigger('submit');
+        expect(router.get).toHaveBeenCalledWith(
+            '/backoffice/ma-situation',
+            { tab: 'caisse', date_debut: '2026-09-13', date_fin: '2026-09-13' },
+            expect.any(Object),
+        );
     });
 
     it('regroupe les filtres dans le drawer et conserve la section lors du filtrage', async () => {

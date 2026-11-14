@@ -27,6 +27,16 @@ final class Periode
 
     public const PERSONNALISEE = 'personnalisee';
 
+    /**
+     * « Date précise » : une seule journée choisie au calendrier. Ce n'est pas un troisième mode :
+     * l'écran envoie `date_debut` = `date_fin` (période personnalisée d'un jour) ; la clé ne sert qu'à
+     * afficher le bon choix. Proposée seulement par les écrans qui la listent dans leurs choix.
+     */
+    public const DATE_PRECISE = 'date_precise';
+
+    /** Choix traduits en dates libres : jamais envoyés au serveur comme clé `periode`. */
+    private const CHOIX_DATES = [self::DATE_PRECISE, self::PERSONNALISEE];
+
     public const RAPIDES = [
         'aujourd_hui',
         'hier',
@@ -60,6 +70,7 @@ final class Periode
         'cette_annee' => 'Cette année',
         'annee_precedente' => 'Année dernière',
         self::TOUT => 'Toutes les périodes',
+        self::DATE_PRECISE => 'Date précise',
         self::PERSONNALISEE => 'Période personnalisée',
     ];
 
@@ -121,7 +132,7 @@ final class Periode
         $maintenant ??= CarbonImmutable::now();
         $du = self::lireDate($request, 'date_debut');
         $au = self::lireDate($request, 'date_fin');
-        $datesPermises = $cles === null || in_array(self::PERSONNALISEE, $cles, true);
+        $datesPermises = self::datesPermises($cles);
 
         if ($datesPermises && (self::rempli($du) || self::rempli($au))) {
             $periode = self::personnalisee($du, $au, $maintenant);
@@ -148,7 +159,7 @@ final class Periode
         $acceptees = self::clesAcceptees($cles);
 
         // Écran sans dates libres (ex. tableau de bord) : des dates sont refusées, jamais ignorées.
-        if (! in_array(self::PERSONNALISEE, $cles, true)) {
+        if (! self::datesPermises($cles)) {
             return [
                 $parametre => ['nullable', 'string', Rule::in($acceptees)],
                 'date_debut' => ['prohibited'],
@@ -172,7 +183,7 @@ final class Periode
      */
     public static function clesAcceptees(?array $cles = null): array
     {
-        $acceptees = array_values(array_diff($cles ?? self::STANDARD, [self::PERSONNALISEE]));
+        $acceptees = array_values(array_diff($cles ?? self::STANDARD, self::CHOIX_DATES));
         $alias = array_keys(array_filter(self::ALIAS, fn (string $cible) => in_array($cible, $acceptees, true)));
 
         return [...$acceptees, ...$alias];
@@ -274,7 +285,7 @@ final class Periode
     public function pourFront(?array $cles = null): array
     {
         return [
-            'cle' => $this->cle,
+            'cle' => $this->cleAffichee($cles),
             'date_debut' => $this->debut?->toDateString(),
             'date_fin' => $this->fin?->toDateString(),
             'options' => self::options($cles),
@@ -283,17 +294,19 @@ final class Periode
 
     /**
      * Valeurs à renvoyer au champ `period` de DataFilters : la clé, et les dates seulement pour une
-     * période personnalisée (une période rapide se rejoue toujours côté serveur).
+     * période personnalisée (une période rapide se rejoue toujours côté serveur). Une journée unique
+     * revient en « Date précise » quand l'écran propose ce choix.
      *
+     * @param  list<string>|null  $cles  choix proposés par l'écran
      * @return array<string, ?string>
      */
-    public function valeursFiltre(string $parametre = 'periode'): array
+    public function valeursFiltre(string $parametre = 'periode', ?array $cles = null): array
     {
         $personnalisee = $this->cle === self::PERSONNALISEE;
 
         // Fin ouverte renvoyée vide : une vue enregistrée continue de suivre le jour courant.
         return [
-            $parametre => $this->cle,
+            $parametre => $this->cleAffichee($cles),
             'date_debut' => $personnalisee ? $this->debut?->toDateString() : null,
             'date_fin' => $personnalisee && ! $this->finOuverte ? $this->fin?->toDateString() : null,
         ];
@@ -352,6 +365,31 @@ final class Periode
         }, self::options($cles));
     }
 
+    /**
+     * Clé à afficher : une période personnalisée d'une seule journée (début et fin saisis) est une
+     * « Date précise » pour un écran qui propose ce choix ; sinon la clé résolue.
+     *
+     * @param  list<string>|null  $cles
+     */
+    public function cleAffichee(?array $cles = null): string
+    {
+        $journeeUnique = $this->cle === self::PERSONNALISEE
+            && ! $this->finOuverte
+            && $this->debut !== null
+            && $this->fin !== null
+            && $this->debut->isSameDay($this->fin);
+
+        return $journeeUnique && $cles !== null && in_array(self::DATE_PRECISE, $cles, true)
+            ? self::DATE_PRECISE
+            : $this->cle;
+    }
+
+    /** @param  list<string>|null  $cles */
+    private static function datesPermises(?array $cles): bool
+    {
+        return $cles === null || array_intersect(self::CHOIX_DATES, $cles) !== [];
+    }
+
     public static function normaliserCle(string $cle): string
     {
         return self::ALIAS[$cle] ?? $cle;
@@ -407,7 +445,7 @@ final class Periode
 
     /**
      * Anciens liens : `date_from`/`date_to` deviennent `date_debut`/`date_fin` ; une clé « sans
-     * effet » (`all`, `tout`, `personnalisee`) envoyée avec des dates est retirée plutôt que de
+     * effet » (`all`, `tout`, `personnalisee`, `date_precise`) envoyée avec des dates est retirée plutôt que de
      * rendre la requête contradictoire (vues enregistrées de Ventes, qui ajoutaient `periode=all`).
      */
     private static function normaliserRequete(Request $request, string $parametre): void
@@ -420,7 +458,7 @@ final class Periode
 
         $avecDates = self::rempli($request->query('date_debut')) || self::rempli($request->query('date_fin'));
 
-        if ($avecDates && in_array($request->query($parametre), ['all', self::TOUT, self::PERSONNALISEE], true)) {
+        if ($avecDates && in_array($request->query($parametre), ['all', self::TOUT, ...self::CHOIX_DATES], true)) {
             $request->query->remove($parametre);
         }
     }

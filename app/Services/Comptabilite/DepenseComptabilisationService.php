@@ -29,6 +29,18 @@ use Illuminate\Support\Carbon;
  */
 class DepenseComptabilisationService
 {
+    /**
+     * Catégories comptabilisées en avance récupérable sur le tiers (DEPENSE_AVANCE_TIERS_VALIDEE),
+     * jamais en charge — mêmes catégories que les deux `match` ci-dessous (contrôlé par
+     * DepenseComptabilisationCategoriesTest). Lue aussi par le rapport par agence.
+     */
+    public const CATEGORIES_AVANCE_TIERS = [
+        CategorieDepense::VEHICULE,
+        CategorieDepense::PROPRIETAIRE,
+        CategorieDepense::LIVREUR,
+        CategorieDepense::PARRAIN,
+    ];
+
     public function __construct(
         private readonly EcritureComptableService $ecritures,
     ) {}

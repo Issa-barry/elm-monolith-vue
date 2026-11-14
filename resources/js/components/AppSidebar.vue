@@ -560,8 +560,8 @@ const mainNavItems = computed((): NavItem[] => {
             group: 'Organisation',
         });
 
-    // Rapports (docs/rapports.md) : « Ma situation » (agent imposé) et le rapport d'activité ;
-    // Stock, Achats et Dépenses viendront s'ajouter ici (lot 2).
+    // Rapports (docs/rapports.md) : « Ma situation » (agent imposé), le rapport d'activité et le
+    // rapport par agence ; Stock, Achats et Dépenses viendront s'ajouter ici (lot 2).
     const rapportsSousItems: NavItem[] = [];
     if (can('rapports.read_own'))
         rapportsSousItems.push({
@@ -573,10 +573,16 @@ const mainNavItems = computed((): NavItem[] => {
                     : undefined,
         });
     if (can('rapports.read'))
-        rapportsSousItems.push({
-            title: "Rapport d'activité",
-            href: '/backoffice/rapports/activite',
-        });
+        rapportsSousItems.push(
+            {
+                title: "Rapport d'activité",
+                href: '/backoffice/rapports/activite',
+            },
+            {
+                title: 'Rapport par agence',
+                href: '/backoffice/rapports/agences',
+            },
+        );
     if (rapportsSousItems.length > 0)
         items.push({
             title: 'Rapports',
