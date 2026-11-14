@@ -1,6 +1,7 @@
-# Rapports — rapport d'activité et « Ma situation »
+# Rapports — rapport d'activité, rapport par agence et « Ma situation »
 
 Lot 1 livré le 2026-09-26. Décisions : [ADR 0007](adr/0007-rapport-activite-perimetre-et-regles-de-calcul.md).
+Rapport par agence et périodes communes : [ADR 0063](adr/0063-rapport-activite-par-agence.md) (13/11/2026).
 
 ## Où
 
@@ -8,7 +9,8 @@ Lot 1 livré le 2026-09-26. Décisions : [ADR 0007](adr/0007-rapport-activite-pe
 |---|---|---|---|
 | **Ma situation** | `GET /backoffice/ma-situation` (`ma-situation`) | `rapports.read_own` | Chaque utilisateur : ses propres ventes, encaissements, créances et caisse |
 | **Rapport d'activité** | `GET /backoffice/rapports/activite` (`rapports.activite`) | `rapports.read` | Responsables : agences accessibles, tous les agents ou un agent |
-| Exports | `…/export?format=xlsx\|pdf` (`ma-situation.export`, `rapports.activite.export`) | idem écran | Mêmes filtres, même périmètre que l'écran |
+| **Rapport par agence** | `GET /backoffice/rapports/agences` (`rapports.agences`) | `rapports.read` | Responsables : une ligne par agence accessible, avec la remise à l'agence principale (RAP-011) |
+| Exports | `…/export?format=xlsx\|pdf` (`ma-situation.export`, `rapports.activite.export`) ; `rapports/agences/export` (Excel, `rapports.agences.export`) | idem écran | Mêmes filtres, même périmètre que l'écran |
 
 Menu : **Tableau de bord** reste en tête (limité aux agences de l'utilisateur, cf. RAP-010). Ses entrées
 sont des vues statistiques, toujours préfixées `Stat-` pour ne jamais être confondues avec le module
@@ -16,8 +18,9 @@ métier homonyme : **Stat-Ventes** (`/backoffice/dashboard`) et **Stat-Commissio
 (`/backoffice/tableau-de-bord/commissions`), alors que **Ventes** (Commercial) et **Comptabilité ›
 Commissions** (Finance) restent les modules de travail. Toute nouvelle vue statistique du tableau de
 bord suit cette convention (protégée par `AppSidebarTableauDeBord.spec.ts`). Groupe
-« Pilotage » : **Rapports › Ma situation** et **Rapports › Rapport d'activité** (chaque sous-entrée
-selon sa permission ; le menu Rapports n'apparaît que si l'une des deux est accordée). « Ma situation »
+« Pilotage » : **Rapports › Ma situation**, **Rapports › Rapport d'activité** et **Rapports › Rapport
+par agence** (chaque sous-entrée selon sa permission ; le menu Rapports n'apparaît que si l'une est
+accordée). « Ma situation »
 reste en accès direct dans le menu mobile `MobileQuickMenu`. Ce n'est jamais un filtre du rapport
 d'activité : c'est une vue distincte dont l'agent est imposé côté serveur. Stock, Achats et Dépenses
 viendront s'ajouter au menu Rapports (lot 2).
@@ -41,12 +44,26 @@ un paramètre).
   une vente / enregistré un encaissement ; un agent hors périmètre est ignoré.
 - Toujours limité à l'organisation de l'utilisateur.
 
-Barre de filtres (standard `DataFilters`) : **[Agence] → [Agent] → [Période]**.
+Barre de filtres (standard `DataFilters`) : **[Agence] → [Agent] → [Période]**, toutes trois dans le
+panneau **Filtres** du rapport d'activité (13/11/2026 : la période y a rejoint l'agence et l'agent ; elle
+n'est plus un sélecteur séparé dans l'en-tête). « Ma situation », sans panneau (ni Agence ni Agent),
+garde son sélecteur de période dans l'en-tête, après le bouton PDF.
 
 ## Période (RAP-002)
 
-Raccourcis **Aujourd'hui / Hier / Cette semaine / Ce mois** + **Période personnalisée**
-(`date_debut`, `date_fin`, bornes incluses ; `date_from`/`date_to` encore acceptés). Résolus **côté
+Mêmes choix sur **tous les rapports** (Ma situation, rapport d'activité, rapport par agence —
+`RapportPerimetreResolver::PERIODES`) : **Aujourd'hui / Hier / Cette semaine / Ce mois / Mois dernier**,
+**Date précise** et **Période personnalisée** (`date_debut`, `date_fin`, bornes incluses ;
+`date_from`/`date_to` encore acceptés). « Mois dernier » et « Date précise » ajoutés le 13/11/2026.
+
+- **Date précise** : un seul calendrier ; une journée = **date de début et date de fin identiques**
+  (ex. `date_debut=2026-11-13&date_fin=2026-11-13`), jamais une période incomplète. Le serveur renvoie
+  la clé `date_precise` pour réafficher ce choix (`Periode::cleAffichee()`). Une période personnalisée
+  saisie avec deux dates identiques revient aussi en « Date précise » (même journée).
+- La période s'applique à tous les blocs et se combine avec l'agence et l'agent ; elle est conservée
+  dans l'URL (actualisation, liens, exports).
+
+Résolus **côté
 serveur** par `Periode` (ADR 0057, [periodes.md](periodes.md) ; la même classe que l'onglet Situation
 d'un véhicule), fuseau de l'application (`UTC` = heure de Conakry), **semaine du lundi au dimanche**.
 Défaut : Aujourd'hui. Dates invalides ou inversées : **refusées avec un message** (plus de repli sur
@@ -181,6 +198,89 @@ Fiche de chaque **caisse dédiée** du périmètre, calculée par `App\Services\
   un agent est ciblé (Ma situation, filtre Agent).
 - **Agent sans caisse dédiée** : « Aucune caisse dédiée », jamais un solde à zéro.
 - Caisses listées : actives, ou inactives encore concernées (solde, mouvement ou versement en attente).
+
+## Rapport par agence (RAP-011, 13/11/2026)
+
+Une ligne par agence du périmètre (mêmes agences que le rapport d'activité, filtre **[Agence] →
+[Période]** dans le panneau Filtres, sans filtre Agent : la remise est une donnée d'agence). Calcul :
+`App\Services\Rapports\RapportAgencesService` — une **consolidation** des moteurs existants, jamais un
+second calcul ([ADR 0063](adr/0063-rapport-activite-par-agence.md)).
+
+| Colonne | Source | Règle |
+|---|---|---|
+| Ventes | `RapportActiviteService::ventes()` pour l'agence | RAP-004 (agence de la commande) |
+| **Encaissements de la période** : Espèces, Orange Money (toujours), autre moyen seulement s'il a été encaissé, puis **Total encaissé** | `RapportActiviteService::encaissements()` | RAP-005 (agence qui a reçu l'argent) ; voir « Encaissements » ci-dessous |
+| Pour d'autres agences (sous le total encaissé) | idem | encaissé pour des commandes d'autres agences (à reverser, ADR 0012) |
+| Dettes clients | `RapportActiviteService::creances()` | RAP-006 (factures de la période encore dues) |
+| **Charges payées** (+ en attente, dont avances) | module Dépenses (`depenses`) | voir « Charges » ci-dessous |
+| **Remis à l'agence principale** : Remis, En transit, Reste à remettre, Statut | `RemisesAgencesService` (ADR 0016) | voir ci-dessous |
+
+**Encaissements** (14/11/2026, décision de l'utilisateur) — groupe « Encaissements de la période » :
+
+- Colonnes **Espèces** et **Orange Money** toujours affichées (même à zéro) : ce sont les moyens
+  utilisés aujourd'hui. Virement, Chèque, Kulu et les autres opérateurs n'ont **pas** de colonne…
+- … **sauf** s'ils ont réellement été encaissés sur la période dans le périmètre : la colonne apparaît
+  alors, pour que le total ne cache jamais d'argent reçu. Les moyens de paiement et les encaissements
+  eux-mêmes ne changent pas ; un nouveau moyen s'ajoute à la liste « toujours affichés » de
+  `RapportAgencesService::moyens()`.
+- **Total encaissé** = **somme des colonnes de moyens** (par agence et ligne Total), jamais un montant
+  tiré des ventes : il se rapproche colonne par colonne des caisses et des comptes Mobile Money.
+  Placé en dernier dans le groupe, sur fond légèrement distinct.
+- Mêmes colonnes, même ordre dans l'export Excel (« Encaissé Espèces », « Encaissé Orange Money »,
+  « Total encaissé », feuilles Agences et Résumé), dans la liste mobile et la carte « Total encaissé ».
+
+**Remis à l'agence principale** — exactement les chiffres de Comptabilité → Trésorerie → « Remises
+des agences » :
+
+- **Remis** = remises **reçues** par la trésorerie principale pendant la période (mouvement de fonds
+  de l'agence vers la trésorerie principale, « Transfert entre agences » ou « Règlement
+  inter-agences », confirmé à réception). Un montant encaissé n'est **jamais** un montant remis ; une
+  remise envoyée mais non confirmée est **En transit** ; un financement (trésorerie principale →
+  agence) n'est jamais compté ; brouillons et annulations exclus.
+- **Reste à remettre** = calcul du moment de `FinancementAgenceService` (`total_a_remettre` : fonds
+  d'autres agences + excédent après les obligations que l'agence conserve — commissions,
+  propriétaires, salaires, factures fournisseurs), quelle que soit la période. **Jamais « encaissé −
+  remis »** : une remise baisse déjà le reste dès son envoi.
+- **Statut** (`StatusDot`, même ordre de priorité que les remises) : Données incomplètes, Remise en
+  cours, **Partiellement remis**, **Totalement remis**, **Non remis**, Rien à remettre. La trésorerie
+  principale elle-même : « Trésorerie principale » (fonds déjà centralisés, ni remis ni reste).
+
+**Période et « à ce jour » ne se mélangent pas** : seul **Remis** suit la période choisie (colonne
+« Remis — sur la période ») ; **En transit** (toutes les remises envoyées non confirmées) et **Reste à
+remettre** sont des montants **à ce jour**, indiqués comme tels dans les en-têtes, les cartes, la
+liste mobile et l'export (« (à ce jour) »). Le statut combine les deux, comme dans « Remises des
+agences » (ex. « Partiellement remis » = reçu sur la période et reste à ce jour > 0).
+
+**Charges** (14/11/2026, décisions de l'utilisateur) — dépenses saisies dans l'agence
+(`depenses.site_id`), datées par `date_depense` dans la période :
+
+- **Charges payées** = dépenses **validées**. Dans l'application, la validation d'une dépense passe
+  aussitôt l'écriture de sortie de trésorerie (`DepenseComptabilisationService`) : il n'existe pas de
+  dépense validée non payée.
+- **En attente** = dépenses **soumises**, pas encore validées (rien n'est sorti de la trésorerie),
+  affichées à part (« + X en attente »), jamais additionnées aux payées.
+- **dont avances** = part des payées comptabilisée en avance récupérable sur un tiers (catégories
+  Véhicule, Propriétaire, Livreur, Parrain — `DepenseComptabilisationService::CATEGORIES_AVANCE_TIERS`),
+  retenue ensuite sur la commission du bénéficiaire : ce n'est pas une charge de l'entreprise.
+- Exclues : brouillons, rejetées, annulées, supprimées ; une dépense sans agence n'apparaît dans aucune ligne.
+- Les charges ne sont **jamais déduites** du remis ni du reste à remettre : la trésorerie de l'agence
+  les intègre déjà par ses propres écritures (le reste est calculé sur ses soldes réels).
+
+**Présentation** (refonte du 14/11/2026) : en-tête compact (titre, périmètre · période, Excel et
+Filtres) ; six indicateurs `KpiCard` en variante `compact` — Ventes, Total encaissé, Dettes clients,
+Charges payées, Remis à l'agence principale (reçu sur la période), Reste à remettre (à ce jour, avec
+l'en transit) —, sommes des lignes, sur une ligne dès 92 rem de largeur (3 puis 2 colonnes en
+dessous : un montant en milliards ne déborde jamais). Tableau ≥ 640 px : montants sans unité
+(« Montants en GNF » en tête), alignés à droite en chiffres tabulaires, zéros atténués, colonne
+Agence fixe au défilement horizontal, groupe « Remis à l'agence principale » sur fond distinct,
+statut `StatusDot`, ligne Total. Liste empilée en dessous de 640 px (bloc remise sur fond distinct,
+total).
+
+Détail : le nom de l'agence et l'icône **Opérations** ouvrent le rapport d'activité de l'agence sur la même période (ventes,
+encaissements, dettes, Mobile Money, caisses) ; **Remises** ouvre le détail de l'agence dans
+« Remises des agences », affiché seulement avec `tresorerie.read` et le module Comptabilité (mêmes
+conditions que cette route). Export Excel : feuille Résumé (périmètre, période, totaux) + feuille
+Agences (le tableau).
 
 ## Écran et exports
 

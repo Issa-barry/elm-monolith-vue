@@ -41,6 +41,21 @@ Le nombre reste insécable ; GNF peut passer à la ligne.
 Pour cinq cartes monétaires, les rapports utilisent trois colonnes dès 70 rem
 et cinq dès 90 rem de largeur disponible.
 
+### Variante compacte
+
+`compact` garde le même langage (Poppins, ombre, hiérarchie titre / chiffre / détail) en plus dense :
+padding 20 × 16 px, titre 13 px, chiffre 22 px en chiffres tabulaires, détail 12,5 px. Réservée à une
+ligne de cinq ou six indicateurs de synthèse au-dessus d'un tableau (Rapport par agence). Grille :
+une colonne, deux dès 30 rem, trois dès 52 rem, six dès 92 rem — un montant en milliards de GNF tient
+sans réduire la police. La variante normale reste la référence des autres écrans (tailles inchangées).
+
+```vue
+<KpiCard compact title="Encaissé" :value="formatQuantite(total)" unit="GNF" detail="12 paiements" />
+```
+
+Toujours `value` sans unité (`formatQuantite`) et `unit="GNF"` : jamais `formatGNF` dans `value`,
+sinon « GNF » s'affiche deux fois.
+
 ## Bouton d'information
 
 Utiliser `resources/js/components/InfoTooltip.vue` à côté du titre :

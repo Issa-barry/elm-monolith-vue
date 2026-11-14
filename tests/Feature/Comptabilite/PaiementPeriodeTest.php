@@ -689,6 +689,42 @@ class PaiementPeriodeTest extends TestCase
         $this->assertTrue(PaiementFiche::whereKey($ficheAutre->id)->exists());
     }
 
+    /**
+     * Invariant de volume (incident du 12/11/2026) : rejoue la boucle de production — parts
+     * validées dès la génération, validation automatique, comptabilisation, puis réouverture à
+     * chaque vente. Le nombre de pièces doit croître avec le nombre de ventes, jamais avec le
+     * nombre de fiches de la période (avant le correctif : 2 pièces par fiche et par vente).
+     */
+    public function test_ventes_successives_ne_font_pas_croitre_les_pieces_avec_le_nombre_de_fiches(): void
+    {
+        app(PlanComptableBootstrapService::class)->bootstrap($this->org->id);
+        $this->travelTo('2026-06-10 12:00:00');
+        $nbFiches = 5;
+        $nbVentes = 8;
+
+        $livreurs = collect(range(1, $nbFiches))->map(fn (int $i) => $this->makeLivreur("Livreur {$i}"));
+        foreach ($livreurs as $livreur) {
+            $this->makeEnveloppeAvecPart(100000, null, $livreur)->update(['validated_at' => now()]);
+        }
+
+        $periode = $this->makePeriode();
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $this->assertSame(StatutPeriodePaiement::VALIDEE, $periode->fresh()->statut, 'validation automatique');
+        $this->assertSame($nbFiches, PieceComptable::count(), 'une pièce par fiche validée');
+
+        for ($vente = 1; $vente <= $nbVentes; $vente++) {
+            $this->makeEnveloppeAvecPart(10000, null, $livreurs->first())->update(['validated_at' => now()]);
+            $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+            $this->assertSame(StatutPeriodePaiement::VALIDEE, $periode->fresh()->statut, "revalidée après la vente {$vente}");
+        }
+
+        $this->assertSame($nbVentes, PieceComptable::where('type_evenement', 'like', 'contrepassation_de_%')->count(), 'une seule contrepassation par vente');
+        $this->assertSame($nbFiches + 2 * $nbVentes, PieceComptable::count(), 'croissance proportionnelle aux ventes, pas aux fiches');
+        $this->assertSame($nbFiches - 1, PieceComptable::where('statut', StatutPieceComptable::VALIDEE)
+            ->whereIn('source_id', PaiementFiche::where('beneficiaire_id', '!=', $livreurs->first()->id)->pluck('id'))
+            ->count(), 'les fiches des autres livreurs gardent leur pièce d\'origine');
+    }
+
     private function depenseLivreur(Livreur $livreur, float $montant, StatutDepense $statut = StatutDepense::VALIDE): Depense
     {
         return Depense::create([

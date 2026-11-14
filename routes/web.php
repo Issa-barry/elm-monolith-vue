@@ -223,8 +223,10 @@ use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\Proprietaires\EntreprisesCorrespondantesController;
 use App\Http\Controllers\Rapports\ExportRapportActiviteController;
+use App\Http\Controllers\Rapports\ExportRapportAgencesController;
 use App\Http\Controllers\Rapports\IndexMaSituationController;
 use App\Http\Controllers\Rapports\IndexRapportActiviteController;
+use App\Http\Controllers\Rapports\IndexRapportAgencesController;
 use App\Http\Controllers\ReceptionValidationAdminController;
 use App\Http\Controllers\Rh\AffectationRemunerationController;
 use App\Http\Controllers\Rh\Contrats\EnregistrerSignatureContratController;
@@ -474,6 +476,8 @@ Route::prefix('backoffice')->group(function () {
         Route::get('ma-situation/export', ExportRapportActiviteController::class)->name('ma-situation.export');
         Route::get('rapports/activite', IndexRapportActiviteController::class)->name('rapports.activite');
         Route::get('rapports/activite/export', ExportRapportActiviteController::class)->name('rapports.activite.export');
+        Route::get('rapports/agences', IndexRapportAgencesController::class)->name('rapports.agences');
+        Route::get('rapports/agences/export', ExportRapportAgencesController::class)->name('rapports.agences.export');
 
         // Messages de contact
         Route::get('contact-messages/unread-count', UnreadCountContactController::class)->name('contact-messages.unread-count');

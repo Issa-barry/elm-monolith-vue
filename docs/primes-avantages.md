@@ -202,6 +202,24 @@ repère « Avantage en nature · non versé » dans les listes. Le filtre par ca
   (`primes=a_valider`), avec `rh-affectations-remuneration.read` ; le filtre est ignoré sans ce droit.
   Les anomalies de la transmission mènent à la fiche du salarié (avec `rh-employes.read`).
 
+- **AFF-016 (13/11/2026)** — **Rémunération mensuelle totale** de la fiche salarié : salaire de
+  base du contrat en cours + primes récurrentes versées en argent, **en vigueur le jour de
+  l'ouverture de la fiche**, recalculées par le serveur à chaque affichage
+  (`RemunerationMensuelleService`, lecture seule). Retenues : affectations **validées** d'un type
+  **mensuel** à **montant fixe** (montant attribué) ou en **pourcentage du salaire de base** (taux ×
+  salaire du contrat en cours), type actif dans sa période d'application (mêmes règles que la paie,
+  désactivation comprise), salarié dans sa période d'emploi. **Jamais additionnées**, et listées dans
+  le détail avec leur raison : primes **ponctuelles**, montants **saisis chaque mois**, propositions
+  **à valider** (un changement de montant à valider laisse compter l'ancien montant), pourcentage
+  sans contrat en cours. Les **avantages en nature** sont totalisés **à part** (valorisés, hors net à
+  payer). **Sans contrat en cours** : « Aucun contrat », aucun total n'est affiché (les primes
+  restent totalisées) ; salarié sorti ou pas encore embauché : message seul. Un changement de
+  montant validé ne compte jamais deux fois (l'ancienne affectation s'arrête la veille, AFF-007).
+  Ce n'est **pas la paie du mois** : aucun prorata, aucun montant mensuel — la paie reste calculée
+  par `CalculElementsPaieService` (docs/transmission-paie.md). Transmis seulement avec
+  `rh-remunerations.read` **et** la lecture des primes (`rh-affectations-remuneration.read`, agence
+  consultable) ; sinon `remuneration` = null et le bloc n'apparaît pas.
+
 ## Permissions
 
 | Action | Permission | Par défaut |
@@ -244,6 +262,9 @@ tout.
   `app/Http/Controllers/Rh/SaisieRemunerationController.php`,
   `app/Support/Rh/AffectationRemunerationPresenter.php`,
   `resources/js/pages/Employes/partials/PrimesSalarie.vue`.
+- Rémunération mensuelle totale (AFF-016) : `app/Services/Rh/RemunerationMensuelleService.php`,
+  `resources/js/pages/Employes/partials/RemunerationSalarie.vue`,
+  `tests/Feature/RemunerationMensuelleTest.php`.
 - Énumérations : `StatutTypeRemuneration`, `CategorieTypeRemuneration`, `ModeCalculRemuneration`,
   `PeriodiciteRemuneration`, `NatureMontantRemuneration`, `StatutAffectationRemuneration`,
   `StatutSaisieRemuneration`.
