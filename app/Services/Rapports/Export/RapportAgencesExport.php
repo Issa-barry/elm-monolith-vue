@@ -36,10 +36,10 @@ class RapportAgencesExport implements WithMultipleSheets
         $lignes[] = ['', ''];
         $lignes[] = ['Ventes de la période (nombre)', $t['ventes_nombre']];
         $lignes[] = ['Montant facturé', $t['ventes_montant']];
-        $lignes[] = ['Montant encaissé', $t['encaisse_montant']];
         foreach ($this->rapport['moyens'] as $moyen) {
-            $lignes[] = ['  dont '.$moyen['libelle'], $t['par_moyen'][$moyen['cle']] ?? 0.0];
+            $lignes[] = ['Encaissé '.$moyen['libelle'], $t['par_moyen'][$moyen['cle']] ?? 0.0];
         }
+        $lignes[] = ['Total encaissé', $t['encaisse_montant']];
         $lignes[] = ["  dont pour d'autres agences (à reverser)", $t['pour_autres_agences']];
         $lignes[] = ['Dettes clients sur la période', $t['dettes_montant']];
         $lignes[] = ['Charges payées (dépenses validées)', $t['charges_payees']];
@@ -61,9 +61,9 @@ class RapportAgencesExport implements WithMultipleSheets
         $moyens = $this->rapport['moyens'];
 
         $entetes = [
-            'Agence', 'Ventes (nombre)', 'Ventes', 'Encaissé',
-            ...array_map(fn (array $m) => $m['libelle'], $moyens),
-            "Pour d'autres agences", 'Dettes clients',
+            'Agence', 'Ventes (nombre)', 'Ventes',
+            ...array_map(fn (array $m) => 'Encaissé '.$m['libelle'], $moyens),
+            'Total encaissé', "Pour d'autres agences", 'Dettes clients',
             'Charges payées', 'dont avances sur tiers', 'Charges en attente de validation',
             'Remis à la trésorerie principale (sur la période)', 'En transit (à ce jour)', 'Reste à remettre (à ce jour)', 'Disponible (à ce jour)', 'Dernière remise', 'Statut de remise',
         ];
@@ -72,9 +72,9 @@ class RapportAgencesExport implements WithMultipleSheets
             $r = $a['remise'];
 
             return [
-                $a['site_nom'], $a['ventes_nombre'], $a['ventes_montant'], $a['encaisse_montant'],
+                $a['site_nom'], $a['ventes_nombre'], $a['ventes_montant'],
                 ...array_map(fn (array $m) => $a['par_moyen'][$m['cle']]['montant'] ?? 0.0, $moyens),
-                $a['pour_autres_agences'], $a['dettes_montant'],
+                $a['encaisse_montant'], $a['pour_autres_agences'], $a['dettes_montant'],
                 $a['charges_payees'], $a['charges_avances_tiers'], $a['charges_en_attente'],
                 $r['remis'] ?? '', $r['en_transit'] ?? '', $r['reste_a_remettre'] ?? '', $r['disponible'] ?? '',
                 $r['derniere_remise'] ?? '', $r['statut_label'] ?? '—',

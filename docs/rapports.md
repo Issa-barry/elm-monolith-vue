@@ -209,11 +209,25 @@ second calcul ([ADR 0063](adr/0063-rapport-activite-par-agence.md)).
 | Colonne | Source | Règle |
 |---|---|---|
 | Ventes | `RapportActiviteService::ventes()` pour l'agence | RAP-004 (agence de la commande) |
-| Encaissé, puis une colonne par moyen réellement utilisé (Espèces, Orange Money…, Virement, Chèque) | `RapportActiviteService::encaissements()` | RAP-005 (agence qui a reçu l'argent) |
-| Pour d'autres agences (sous l'encaissé) | idem | encaissé pour des commandes d'autres agences (à reverser, ADR 0012) |
+| **Encaissements de la période** : Espèces, Orange Money (toujours), autre moyen seulement s'il a été encaissé, puis **Total encaissé** | `RapportActiviteService::encaissements()` | RAP-005 (agence qui a reçu l'argent) ; voir « Encaissements » ci-dessous |
+| Pour d'autres agences (sous le total encaissé) | idem | encaissé pour des commandes d'autres agences (à reverser, ADR 0012) |
 | Dettes clients | `RapportActiviteService::creances()` | RAP-006 (factures de la période encore dues) |
 | **Charges payées** (+ en attente, dont avances) | module Dépenses (`depenses`) | voir « Charges » ci-dessous |
 | **Remis à l'agence principale** : Remis, En transit, Reste à remettre, Statut | `RemisesAgencesService` (ADR 0016) | voir ci-dessous |
+
+**Encaissements** (14/11/2026, décision de l'utilisateur) — groupe « Encaissements de la période » :
+
+- Colonnes **Espèces** et **Orange Money** toujours affichées (même à zéro) : ce sont les moyens
+  utilisés aujourd'hui. Virement, Chèque, Kulu et les autres opérateurs n'ont **pas** de colonne…
+- … **sauf** s'ils ont réellement été encaissés sur la période dans le périmètre : la colonne apparaît
+  alors, pour que le total ne cache jamais d'argent reçu. Les moyens de paiement et les encaissements
+  eux-mêmes ne changent pas ; un nouveau moyen s'ajoute à la liste « toujours affichés » de
+  `RapportAgencesService::moyens()`.
+- **Total encaissé** = **somme des colonnes de moyens** (par agence et ligne Total), jamais un montant
+  tiré des ventes : il se rapproche colonne par colonne des caisses et des comptes Mobile Money.
+  Placé en dernier dans le groupe, sur fond légèrement distinct.
+- Mêmes colonnes, même ordre dans l'export Excel (« Encaissé Espèces », « Encaissé Orange Money »,
+  « Total encaissé », feuilles Agences et Résumé), dans la liste mobile et la carte « Total encaissé ».
 
 **Remis à l'agence principale** — exactement les chiffres de Comptabilité → Trésorerie → « Remises
 des agences » :
@@ -253,7 +267,7 @@ agences » (ex. « Partiellement remis » = reçu sur la période et reste à ce
   les intègre déjà par ses propres écritures (le reste est calculé sur ses soldes réels).
 
 **Présentation** (refonte du 14/11/2026) : en-tête compact (titre, périmètre · période, Excel et
-Filtres) ; six indicateurs `KpiCard` en variante `compact` — Ventes, Encaissé, Dettes clients,
+Filtres) ; six indicateurs `KpiCard` en variante `compact` — Ventes, Total encaissé, Dettes clients,
 Charges payées, Remis à l'agence principale (reçu sur la période), Reste à remettre (à ce jour, avec
 l'en transit) —, sommes des lignes, sur une ligne dès 92 rem de largeur (3 puis 2 colonnes en
 dessous : un montant en milliards ne déborde jamais). Tableau ≥ 640 px : montants sans unité

@@ -318,6 +318,63 @@ class RapportAgencesTest extends TestCase
         $this->assertEquals(1_150_000.0, $props['rapport']['totaux']['dettes_montant']);
     }
 
+    public function test_le_total_encaisse_est_la_somme_des_moyens_et_non_des_ventes(): void
+    {
+        // Vente de la période encaissée en partie, et ancienne vente encaissée aujourd'hui.
+        $this->encaisser($this->vente($this->cba, 1_000_000), 300_000);
+        $this->encaisser($this->vente($this->cba, 200_000), 120_000, 'mobile_money', 'orange_money');
+        $this->encaisser($this->vente($this->cba, 400_000, '2026-11-01 09:00:00'), 400_000);
+        $this->encaisser($this->vente($this->cba, 90_000, '2026-11-01 09:00:00'), 90_000, 'mobile_money', 'kulu');
+
+        $props = $this->props();
+        $cba = collect($props['rapport']['agences'])->firstWhere('site_id', $this->cba->id);
+        $totaux = $props['rapport']['totaux'];
+
+        $this->assertEquals(1_200_000.0, $cba['ventes_montant']);
+        $this->assertEquals(910_000.0, $cba['encaisse_montant']);
+        $this->assertEquals(
+            $cba['encaisse_montant'],
+            array_sum(array_column($cba['par_moyen'], 'montant')),
+        );
+        $this->assertEquals(array_sum($totaux['par_moyen']), $totaux['encaisse_montant']);
+        $this->assertEquals(
+            ['especes' => 700_000.0, 'mobile_money:orange_money' => 120_000.0, 'mobile_money:kulu' => 90_000.0],
+            $totaux['par_moyen'],
+        );
+    }
+
+    public function test_especes_et_orange_money_ont_toujours_leur_colonne(): void
+    {
+        $props = $this->props();
+
+        $this->assertSame(['especes', 'mobile_money:orange_money'], array_column($props['rapport']['moyens'], 'cle'));
+        $this->assertSame(['Espèces', 'Orange Money'], array_column($props['rapport']['moyens'], 'libelle'));
+        $this->assertEquals(['especes' => 0.0, 'mobile_money:orange_money' => 0.0], $props['rapport']['totaux']['par_moyen']);
+        $this->assertEquals(0.0, $props['rapport']['totaux']['encaisse_montant']);
+    }
+
+    public function test_une_banque_ou_un_compte_kulu_sans_encaissement_n_ajoute_aucune_colonne(): void
+    {
+        $this->creerSupportAgence($this->central->id, 'banque', '521000', null, 'UBA');
+        $this->creerCompteMobileMoneyActif($this->cba->id, $this->creerAgent($this->cba)->id, 'kulu');
+
+        $this->assertSame(['especes', 'mobile_money:orange_money'], array_column($this->props()['rapport']['moyens'], 'cle'));
+    }
+
+    public function test_un_autre_moyen_reellement_encaisse_garde_sa_colonne_pour_ne_rien_cacher(): void
+    {
+        $this->encaisser($this->vente($this->cba, 80_000), 80_000, 'mobile_money', 'soutra_money');
+        $this->encaisser($this->vente($this->cba, 50_000), 50_000, 'virement');
+
+        $props = $this->props();
+
+        $this->assertSame(
+            ['especes', 'mobile_money:orange_money', 'mobile_money:soutra_money', 'virement'],
+            array_column($props['rapport']['moyens'], 'cle'),
+        );
+        $this->assertEquals(130_000.0, $props['rapport']['totaux']['encaisse_montant']);
+    }
+
     // ── Périmètre, période, export ───────────────────────────────────────────
 
     public function test_sans_rapports_read_l_ecran_et_l_export_sont_refuses(): void
@@ -605,8 +662,9 @@ class RapportAgencesTest extends TestCase
             foreach ($rapport['agences'] as $i => $a) {
                 $l = $lignes[$i];
                 $this->assertEquals($a['ventes_montant'], $l[$col('Ventes')]);
-                $this->assertEquals($a['encaisse_montant'], $l[$col('Encaissé')]);
-                $this->assertEquals($a['par_moyen']['especes']['montant'] ?? 0.0, $l[$col('Espèces')]);
+                $this->assertEquals($a['encaisse_montant'], $l[$col('Total encaissé')]);
+                $this->assertEquals($a['par_moyen']['especes']['montant'] ?? 0.0, $l[$col('Encaissé Espèces')]);
+                $this->assertEquals($a['par_moyen']['mobile_money:orange_money']['montant'] ?? 0.0, $l[$col('Encaissé Orange Money')]);
                 $this->assertEquals($a['dettes_montant'], $l[$col('Dettes clients')]);
                 $this->assertEquals($a['remise']['remis'] ?? '', $l[$col('Remis à la trésorerie principale (sur la période)')]);
                 $this->assertEquals($a['remise']['reste_a_remettre'] ?? '', $l[$col('Reste à remettre (à ce jour)')]);
@@ -614,9 +672,18 @@ class RapportAgencesTest extends TestCase
             }
 
             // Résumé = totaux de l'écran = somme des colonnes, en nombres (jamais du texte).
-            $this->assertEquals($totaux['encaisse_montant'], $lignes->sum(fn ($l) => $l[$col('Encaissé')]));
+            $this->assertEquals($totaux['encaisse_montant'], $lignes->sum(fn ($l) => $l[$col('Total encaissé')]));
             $this->assertEquals($totaux['ventes_montant'], $valeur('Montant facturé'));
-            $this->assertEquals($totaux['encaisse_montant'], $valeur('Montant encaissé'));
+            $this->assertEquals($totaux['encaisse_montant'], $valeur('Total encaissé'));
+            $this->assertEquals(1_500_000.0, $valeur('Encaissé Espèces'));
+            $this->assertEquals(150_000.0, $valeur('Encaissé Orange Money'));
+            // Moyens puis total, dans le résumé comme dans le tableau.
+            $libelles = array_column($resume->array(), 0);
+            $this->assertLessThan(array_search('Total encaissé', $libelles, true), array_search('Encaissé Orange Money', $libelles, true));
+            $this->assertSame(
+                ['Ventes', 'Encaissé Espèces', 'Encaissé Orange Money', 'Total encaissé'],
+                array_slice($entetes, 2, 4),
+            );
             $this->assertEquals($totaux['remis'], $valeur('Remis à la trésorerie principale (reçu sur la période)'));
             $this->assertEquals($totaux['en_transit'], $valeur('En transit vers la trésorerie principale (à ce jour)'));
             $this->assertIsFloat($valeur('Reste à remettre (à ce jour)'));

@@ -208,12 +208,14 @@ const detailReste = computed(() =>
         : `À ce jour · ${n(t.value.en_transit)} en transit`,
 );
 
-// Colonnes du groupe « Activité » : Ventes, Encaissé, moyens, Dettes, Charges.
-const colonnesActivite = computed(() => 4 + props.rapport.moyens.length);
+// Groupe « Encaissements de la période » : un moyen par colonne (Espèces, Orange Money…), puis le
+// total, qui est la somme de ces colonnes (calculée côté serveur).
+const colonnesEncaissements = computed(() => props.rapport.moyens.length + 1);
 
 const TH = 'px-3 py-2.5 text-right text-xs font-medium whitespace-nowrap';
 const TD = 'px-3 py-3 text-right align-top tabular-nums whitespace-nowrap';
 const REMISE = 'bg-muted/30';
+const TOTAL_ENCAISSE = 'border-x bg-muted/40';
 </script>
 
 <template>
@@ -313,7 +315,7 @@ const REMISE = 'bg-muted/30';
                     <KpiCard
                         compact
                         data-testid="kpi-encaisse"
-                        title="Encaissé"
+                        title="Total encaissé"
                         :value="n(t.encaisse_montant)"
                         unit="GNF"
                         :detail="pluriel(t.encaisse_nombre, 'paiement')"
@@ -391,12 +393,15 @@ const REMISE = 'bg-muted/30';
                                 <th
                                     class="sticky left-0 z-10 bg-card px-4 pt-2.5"
                                 />
+                                <th />
                                 <th
-                                    :colspan="colonnesActivite"
-                                    class="px-3 pt-2.5 text-left font-medium"
+                                    :colspan="colonnesEncaissements"
+                                    class="border-l px-3 pt-2.5 text-left font-medium"
+                                    data-testid="groupe-encaissements"
                                 >
-                                    Activité de la période
+                                    Encaissements de la période
                                 </th>
+                                <th colspan="2" />
                                 <th
                                     colspan="4"
                                     :class="
@@ -417,13 +422,25 @@ const REMISE = 'bg-muted/30';
                                     Agence
                                 </th>
                                 <th :class="TH">Ventes</th>
-                                <th :class="TH">Encaissé</th>
                                 <th
-                                    v-for="m in rapport.moyens"
+                                    v-for="(m, i) in rapport.moyens"
                                     :key="m.cle"
-                                    :class="TH"
+                                    :class="cn(TH, i === 0 && 'border-l')"
+                                    data-testid="entete-moyen"
                                 >
                                     {{ m.libelle }}
+                                </th>
+                                <th
+                                    :class="
+                                        cn(
+                                            TH,
+                                            TOTAL_ENCAISSE,
+                                            'font-semibold text-foreground',
+                                        )
+                                    "
+                                    data-testid="entete-total-encaisse"
+                                >
+                                    Total encaissé
                                 </th>
                                 <th :class="TH">Dettes clients</th>
                                 <th :class="TH">Charges payées</th>
@@ -495,13 +512,28 @@ const REMISE = 'bg-muted/30';
                                     >
                                 </td>
                                 <td
+                                    v-for="(m, i) in rapport.moyens"
+                                    :key="m.cle"
                                     :class="
                                         cn(
                                             TD,
+                                            i === 0 && 'border-l',
+                                            attenue(montantMoyen(a, m.cle)),
+                                        )
+                                    "
+                                >
+                                    {{ n(montantMoyen(a, m.cle)) }}
+                                </td>
+                                <td
+                                    :class="
+                                        cn(
+                                            TD,
+                                            TOTAL_ENCAISSE,
                                             'font-semibold',
                                             attenue(a.encaisse_montant),
                                         )
                                     "
+                                    data-testid="rapport-agence-total-encaisse"
                                 >
                                     {{ n(a.encaisse_montant) }}
                                     <span
@@ -512,15 +544,6 @@ const REMISE = 'bg-muted/30';
                                         {{ n(a.pour_autres_agences) }} autres
                                         agences</span
                                     >
-                                </td>
-                                <td
-                                    v-for="m in rapport.moyens"
-                                    :key="m.cle"
-                                    :class="
-                                        cn(TD, attenue(montantMoyen(a, m.cle)))
-                                    "
-                                >
-                                    {{ n(montantMoyen(a, m.cle)) }}
                                 </td>
                                 <td :class="cn(TD, attenue(a.dettes_montant))">
                                     {{ n(a.dettes_montant) }}
@@ -673,7 +696,7 @@ const REMISE = 'bg-muted/30';
                             </tr>
                             <tr v-if="rapport.agences.length === 0">
                                 <td
-                                    :colspan="colonnesActivite + 7"
+                                    :colspan="colonnesEncaissements + 9"
                                     class="px-4 py-10 text-center text-muted-foreground"
                                 >
                                     Aucune agence ne correspond à ces filtres.
@@ -691,13 +714,18 @@ const REMISE = 'bg-muted/30';
                                     Total
                                 </td>
                                 <td :class="TD">{{ n(t.ventes_montant) }}</td>
-                                <td :class="TD">{{ n(t.encaisse_montant) }}</td>
                                 <td
-                                    v-for="m in rapport.moyens"
+                                    v-for="(m, i) in rapport.moyens"
                                     :key="m.cle"
-                                    :class="TD"
+                                    :class="cn(TD, i === 0 && 'border-l')"
                                 >
                                     {{ n(t.par_moyen?.[m.cle] ?? 0) }}
+                                </td>
+                                <td
+                                    :class="cn(TD, 'border-x')"
+                                    data-testid="rapport-agences-total-encaisse"
+                                >
+                                    {{ n(t.encaisse_montant) }}
                                 </td>
                                 <td :class="TD">{{ n(t.dettes_montant) }}</td>
                                 <td :class="TD">
@@ -762,18 +790,18 @@ const REMISE = 'bg-muted/30';
                         <dd class="text-right tabular-nums">
                             {{ n(a.ventes_montant) }}
                         </dd>
-                        <dt class="text-muted-foreground">Encaissé</dt>
-                        <dd class="text-right font-semibold tabular-nums">
-                            {{ n(a.encaisse_montant) }}
-                        </dd>
                         <template v-for="m in rapport.moyens" :key="m.cle">
-                            <dt class="pl-3 text-xs text-muted-foreground">
-                                {{ m.libelle }}
+                            <dt class="text-muted-foreground">
+                                Encaissé {{ m.libelle }}
                             </dt>
-                            <dd class="text-right text-xs tabular-nums">
+                            <dd class="text-right tabular-nums">
                                 {{ n(montantMoyen(a, m.cle)) }}
                             </dd>
                         </template>
+                        <dt class="font-medium">Total encaissé</dt>
+                        <dd class="text-right font-semibold tabular-nums">
+                            {{ n(a.encaisse_montant) }}
+                        </dd>
                         <dt class="text-muted-foreground">Dettes clients</dt>
                         <dd class="text-right tabular-nums">
                             {{ n(a.dettes_montant) }}
@@ -857,7 +885,15 @@ const REMISE = 'bg-muted/30';
                 >
                     <p class="mb-1.5 font-semibold">Total · GNF</p>
                     <dl class="grid grid-cols-2 gap-x-3 gap-y-1">
-                        <dt class="text-muted-foreground">Encaissé</dt>
+                        <template v-for="m in rapport.moyens" :key="m.cle">
+                            <dt class="text-muted-foreground">
+                                Encaissé {{ m.libelle }}
+                            </dt>
+                            <dd class="text-right tabular-nums">
+                                {{ n(t.par_moyen?.[m.cle] ?? 0) }}
+                            </dd>
+                        </template>
+                        <dt class="font-medium">Total encaissé</dt>
                         <dd class="text-right font-semibold tabular-nums">
                             {{ n(t.encaisse_montant) }}
                         </dd>

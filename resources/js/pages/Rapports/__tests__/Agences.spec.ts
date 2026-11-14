@@ -126,7 +126,10 @@ const monter = (peutVoirRemises = true) =>
                     encaisse_nombre: 2,
                     encaisse_montant: 750_000,
                     pour_autres_agences: 0,
-                    par_moyen: { especes: 600_000 },
+                    par_moyen: {
+                        especes: 600_000,
+                        'mobile_money:orange_money': 150_000,
+                    },
                     dettes_nombre: 1,
                     dettes_montant: 250_000,
                     charges_payees: 400_000,
@@ -191,6 +194,46 @@ describe('Rapports/Agences — rapport par agence', () => {
         const statuts = wrapper.findAllComponents(StatusDot);
         expect(statuts[0].props('status')).toBe('partiellement_remis');
         expect(statuts[0].props('label')).toBe('Partiellement remis');
+    });
+
+    it('groupe les encaissements par moyen puis le total encaissé, en dernier', () => {
+        const wrapper = monter();
+
+        expect(wrapper.get('[data-testid="groupe-encaissements"]').text()).toBe(
+            'Encaissements de la période',
+        );
+        expect(
+            wrapper
+                .findAll('[data-testid="entete-moyen"]')
+                .map((th) => th.text()),
+        ).toEqual(['Espèces', 'Orange Money']);
+
+        const entetes = wrapper
+            .findAll('[data-testid="rapport-agences-tableau"] thead tr')[1]
+            .findAll('th')
+            .map((th) => th.text());
+        expect(entetes.indexOf('Total encaissé')).toBe(
+            entetes.indexOf('Orange Money') + 1,
+        );
+
+        const cellules = wrapper
+            .findAll('[data-testid="rapport-agence-ligne"]')[0]
+            .findAll('td')
+            .map((td) => td.text());
+        const total = cellules.findIndex((c) => c.startsWith('750 000'));
+        expect(cellules.slice(total - 2, total + 1)).toEqual([
+            '600 000',
+            '150 000',
+            '750 000',
+        ]);
+        expect(
+            wrapper
+                .get('[data-testid="rapport-agences-total-encaisse"]')
+                .text(),
+        ).toBe('750 000');
+        expect(
+            wrapper.findAllComponents(KpiCard).map((c) => c.props('title')),
+        ).toContain('Total encaissé');
     });
 
     it('affiche les charges payées, la part en attente et les avances sur tiers', () => {

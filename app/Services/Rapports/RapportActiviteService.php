@@ -155,9 +155,10 @@ class RapportActiviteService
             ->selectRaw('ev.mode_paiement, ev.operateur_mobile_money, COUNT(*) as nombre, COALESCE(SUM(ev.montant), 0) as montant')
             ->get()
             ->map(fn ($l) => [
-                'cle' => $l->mode_paiement.($l->operateur_mobile_money ? ':'.$l->operateur_mobile_money : ''),
-                'libelle' => $this->libelleMoyen((string) $l->mode_paiement, $l->operateur_mobile_money),
+                'cle' => self::cleMoyen((string) $l->mode_paiement, $l->operateur_mobile_money),
+                'libelle' => self::libelleMoyen((string) $l->mode_paiement, $l->operateur_mobile_money),
                 'mode_paiement' => $l->mode_paiement,
+                'operateur_mobile_money' => $l->operateur_mobile_money,
                 'nombre' => (int) $l->nombre,
                 'montant' => round((float) $l->montant, 2),
             ])
@@ -558,7 +559,13 @@ class RapportActiviteService
         return $nom !== '' ? $nom : null;
     }
 
-    private function libelleMoyen(string $mode, ?string $operateur): string
+    /** Clé d'un moyen dans les totaux par moyen : `especes`, `mobile_money:orange_money`… (aussi pour le rapport par agence). */
+    public static function cleMoyen(string $mode, ?string $operateur): string
+    {
+        return $mode.($operateur !== null && $operateur !== '' ? ':'.$operateur : '');
+    }
+
+    public static function libelleMoyen(string $mode, ?string $operateur): string
     {
         if ($mode === ModePaiement::MOBILE_MONEY->value) {
             return $operateur !== null && $operateur !== ''

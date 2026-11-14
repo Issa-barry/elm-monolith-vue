@@ -62,6 +62,13 @@ encore la compterait deux fois). Contradiction signalée à l'utilisateur le 13/
    comptabilisation (`DepenseComptabilisationService::CATEGORIES_AVANCE_TIERS`, testée). Brouillons,
    rejetées, annulées et supprimées exclues. Jamais déduites du remis ni du reste à remettre.
 
+7. **Encaissements par moyen** (ajout du 14/11/2026, validé par l'utilisateur) : groupe « Encaissements
+   de la période » = **Espèces** et **Orange Money** toujours affichés, puis **Total encaissé** ; Virement,
+   Chèque et les autres opérateurs n'ont de colonne que s'ils ont été réellement encaissés sur la
+   période (le total ne cache jamais d'argent reçu). **Total encaissé = somme des colonnes de
+   moyens**, jamais un montant tiré des ventes. Mêmes colonnes dans l'export Excel. Aucun moyen de
+   paiement ni encaissement modifié.
+
 ## Conséquences
 
 - Les responsables lisent sur un seul écran l'encaissé, le reçu par la trésorerie principale, l'argent

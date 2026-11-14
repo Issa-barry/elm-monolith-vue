@@ -3,6 +3,8 @@
 namespace App\Services\Rapports;
 
 use App\Enums\CategorieDepense;
+use App\Enums\ModePaiement;
+use App\Enums\OperateurMobileMoney;
 use App\Enums\StatutDepense;
 use App\Models\Site;
 use App\Services\Comptabilite\DepenseComptabilisationService;
@@ -25,6 +27,9 @@ use Illuminate\Support\Facades\DB;
  *
  * Aucun montant n'est déduit d'un autre : « reste à remettre » n'est jamais « encaissé − remis »
  * (l'agence garde ses obligations locales, et une remise baisse déjà le reste dès son envoi).
+ *
+ * « Total encaissé » = somme des encaissements par moyen (14/11/2026) : il se rapproche colonne par
+ * colonne des caisses et des comptes Mobile Money, jamais d'un montant tiré des ventes.
  */
 class RapportAgencesService
 {
@@ -67,10 +72,12 @@ class RapportAgencesService
             ])
             ->values();
 
+        $moyens = $this->moyens($agences);
+
         return [
             'agences' => $agences->all(),
-            'moyens' => $this->moyens($agences),
-            'totaux' => $this->totaux($agences),
+            'moyens' => $moyens,
+            'totaux' => $this->totaux($agences, $moyens),
             'central' => $central ? ['id' => $central->id, 'nom' => $central->nom] : null,
         ];
     }
@@ -162,6 +169,13 @@ class RapportAgencesService
         $ventes = $this->rapports->ventes($perimetre, 0)['resume'];
         $encaissements = $this->rapports->encaissements($perimetre, 0);
         $dettes = $this->rapports->creances($perimetre, 0)['resume'];
+        $parMoyen = collect($encaissements['par_moyen'])->map(fn (array $m) => [
+            'cle' => $m['cle'],
+            'libelle' => $m['libelle'],
+            'mode_paiement' => $m['mode_paiement'],
+            'operateur_mobile_money' => $m['operateur_mobile_money'],
+            'montant' => $m['montant'],
+        ])->keyBy('cle');
 
         return [
             'site_id' => $site->id,
@@ -170,14 +184,9 @@ class RapportAgencesService
             'ventes_nombre' => $ventes['nombre'],
             'ventes_montant' => $ventes['facture'],
             'encaisse_nombre' => $encaissements['resume']['nombre'],
-            'encaisse_montant' => $encaissements['resume']['montant'],
+            'encaisse_montant' => round((float) $parMoyen->sum('montant'), 2),
             'pour_autres_agences' => $encaissements['resume']['pour_autres_agences_montant'],
-            'par_moyen' => collect($encaissements['par_moyen'])->map(fn (array $m) => [
-                'cle' => $m['cle'],
-                'libelle' => $m['libelle'],
-                'mode_paiement' => $m['mode_paiement'],
-                'montant' => $m['montant'],
-            ])->keyBy('cle')->all(),
+            'par_moyen' => $parMoyen->all(),
             'dettes_nombre' => $dettes['nombre'],
             'dettes_montant' => $dettes['reste'],
             'remise' => $this->remise($site->id === $centralId, $remise),
@@ -220,45 +229,65 @@ class RapportAgencesService
     }
 
     /**
-     * Colonnes de moyens : ceux réellement utilisés par au moins une agence, dans l'ordre du rapport
-     * d'activité (espèces, Mobile Money par opérateur, virement, chèque).
+     * Colonnes de moyens (décision du 14/11/2026) : Espèces et Orange Money toujours, les moyens
+     * utilisés aujourd'hui. Un autre moyen (Kulu, virement, chèque…) n'a de colonne que s'il a
+     * réellement été encaissé sur la période : le total encaissé reste toujours la somme des colonnes
+     * affichées, sans montant caché. Ordre : espèces, Mobile Money (Orange Money en tête), virement, chèque.
      *
      * @param  Collection<int, array<string, mixed>>  $agences
      * @return list<array{cle: string, libelle: string}>
      */
     private function moyens(Collection $agences): array
     {
-        return $agences
-            ->flatMap(fn (array $a) => array_values($a['par_moyen']))
+        $toujours = [
+            ['mode_paiement' => ModePaiement::ESPECES->value, 'operateur_mobile_money' => null],
+            ['mode_paiement' => ModePaiement::MOBILE_MONEY->value, 'operateur_mobile_money' => OperateurMobileMoney::ORANGE_MONEY->value],
+        ];
+
+        return collect($toujours)
+            ->concat($agences->flatMap(fn (array $a) => array_values($a['par_moyen'])))
+            ->map(fn (array $m) => [
+                'cle' => RapportActiviteService::cleMoyen((string) $m['mode_paiement'], $m['operateur_mobile_money']),
+                'libelle' => RapportActiviteService::libelleMoyen((string) $m['mode_paiement'], $m['operateur_mobile_money']),
+                'ordre' => RapportActiviteService::ordreMoyen($m['mode_paiement']).$this->ordreOperateur($m['operateur_mobile_money']),
+            ])
             ->unique('cle')
-            ->sortBy(fn (array $m) => RapportActiviteService::ordreMoyen($m['mode_paiement']).$m['libelle'])
+            ->sortBy(fn (array $m) => $m['ordre'].$m['libelle'])
             ->map(fn (array $m) => ['cle' => $m['cle'], 'libelle' => $m['libelle']])
             ->values()
             ->all();
     }
 
+    /** Rang de l'opérateur dans OperateurMobileMoney (Orange Money d'abord) ; sans opérateur en dernier. */
+    private function ordreOperateur(?string $operateur): string
+    {
+        $rang = array_search(OperateurMobileMoney::tryFrom((string) $operateur), OperateurMobileMoney::cases(), true);
+
+        return str_pad((string) ($rang === false ? 99 : $rang), 2, '0', STR_PAD_LEFT);
+    }
+
     /**
-     * Totaux = somme des lignes affichées (la trésorerie principale n'a ni remis ni reste).
+     * Totaux = somme des lignes affichées (la trésorerie principale n'a ni remis ni reste) ; le total
+     * encaissé est la somme des totaux par moyen.
      *
      * @param  Collection<int, array<string, mixed>>  $agences
+     * @param  list<array{cle: string, libelle: string}>  $moyens
      * @return array<string, mixed>
      */
-    private function totaux(Collection $agences): array
+    private function totaux(Collection $agences, array $moyens): array
     {
         $somme = fn (callable $valeur) => round((float) $agences->sum($valeur), 2);
         $remises = $agences->pluck('remise')->filter(fn (?array $r) => $r !== null && $r['statut'] !== 'tresorerie_principale');
+        $parMoyen = collect($moyens)
+            ->mapWithKeys(fn (array $m) => [$m['cle'] => $somme(fn (array $a) => $a['par_moyen'][$m['cle']]['montant'] ?? 0.0)]);
 
         return [
             'ventes_nombre' => (int) $agences->sum('ventes_nombre'),
             'ventes_montant' => $somme(fn (array $a) => $a['ventes_montant']),
             'encaisse_nombre' => (int) $agences->sum('encaisse_nombre'),
-            'encaisse_montant' => $somme(fn (array $a) => $a['encaisse_montant']),
+            'encaisse_montant' => round((float) $parMoyen->sum(), 2),
             'pour_autres_agences' => $somme(fn (array $a) => $a['pour_autres_agences']),
-            'par_moyen' => $agences
-                ->flatMap(fn (array $a) => array_values($a['par_moyen']))
-                ->groupBy('cle')
-                ->map(fn (Collection $m) => round((float) $m->sum('montant'), 2))
-                ->all(),
+            'par_moyen' => $parMoyen->all(),
             'dettes_nombre' => (int) $agences->sum('dettes_nombre'),
             'dettes_montant' => $somme(fn (array $a) => $a['dettes_montant']),
             'charges_payees' => $somme(fn (array $a) => $a['charges_payees']),
