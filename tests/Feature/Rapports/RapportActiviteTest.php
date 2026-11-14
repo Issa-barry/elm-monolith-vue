@@ -274,7 +274,13 @@ class RapportActiviteTest extends TestCase
             ->get(route('ma-situation', ['date_debut' => '2026-09-12', 'date_fin' => '2026-09-10']))
             ->assertSessionHasErrors('date_fin');
 
-        $this->assertSame(['aujourd_hui', 'hier', 'cette_semaine', 'ce_mois', 'personnalisee'], array_column($perso['options'], 'value'));
+        // 13/11/2026 : tous les rapports proposent aussi « Mois dernier » et « Date précise ».
+        $this->assertSame(['aujourd_hui', 'hier', 'cette_semaine', 'ce_mois', 'mois_precedent', 'date_precise', 'personnalisee'], array_column($perso['options'], 'value'));
+
+        // Date précise : une seule journée (début = fin), renvoyée comme telle au filtre.
+        $jour = $this->props($this->agentA, 'ma-situation', ['date_debut' => '2026-09-12', 'date_fin' => '2026-09-12']);
+        $this->assertSame(['date_precise', '2026-09-12', '2026-09-12'], [$jour['periode']['cle'], $jour['periode']['date_debut'], $jour['periode']['date_fin']]);
+        $this->assertSame('date_precise', $jour['filters']['periode']);
     }
 
     // ── Ventes ───────────────────────────────────────────────────────────────

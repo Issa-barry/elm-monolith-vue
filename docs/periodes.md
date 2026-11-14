@@ -32,9 +32,18 @@ Les deux modes produisent le même objet `App\Support\Periodes\Periode` (clé, d
 | Cette année | `cette_annee` | 1er janvier → 31 décembre |
 | Année dernière | `annee_precedente` | année précédente |
 | Toutes les périodes | `tout` | aucune borne |
+| Date précise | `date_precise` | une journée : `date_debut` = `date_fin` (voir ci-dessous) |
 | Période personnalisée | `personnalisee` | `date_debut` → `date_fin` (aujourd'hui si vide) |
 
 `tout` (et non `toutes`) est la clé déjà publiée dans l'API et le front Nuxt : elle ne change pas.
+
+**Date précise** (`Periode::DATE_PRECISE`, 13/11/2026, [ADR 0063](adr/0063-rapport-activite-par-agence.md)) :
+ce n'est **pas un troisième mode**. L'écran affiche un seul calendrier et envoie la même date en
+`date_debut` et `date_fin` (mode « Du / Au ») ; jamais `periode=date_precise` (refusé : « Période
+inconnue. »). Le serveur renvoie la clé `date_precise` au filtre quand les deux dates saisies sont
+identiques (`cleAffichee()`, `valeursFiltre($parametre, $cles)`, `pourFront($cles)`). Une date de début
+seule (fin ouverte) n'est jamais une date précise. Hors `STANDARD` : proposée seulement par les écrans
+qui la listent (aujourd'hui les rapports, `RapportPerimetreResolver::PERIODES`).
 
 Extension réservée au tableau de bord : `t1`–`t4` (trimestres) et `s1`, `s2` (semestres) de l'année en
 cours (`Periode::TRIMESTRES_SEMESTRES`).
@@ -102,7 +111,8 @@ return Inertia::render('Module/Index', [
   passer d'`options` en dur.
 - `DataFilters.vue` envoie `periode` pour un raccourci, `date_debut` + `date_fin` pour « Période
   personnalisée », et bloque « Appliquer » tant que les deux dates ne sont pas valides. L'erreur du
-  serveur s'affiche sous le champ.
+  serveur s'affiche sous le champ. « Date précise » remplace « Du » / « Au » par un seul champ
+  « Date » et envoie cette date en `date_debut` et `date_fin` (« Appliquer » bloqué sans date).
 - Panneau « Filtres » : les champs « Du » / « Au » sont toujours visibles sous la liste (dès que
   l'écran propose `personnalisee`). Saisir une date passe en « Période personnalisée » ; choisir un
   raccourci efface les dates ; vider les deux dates revient au défaut de l'écran. Dans la barre, les

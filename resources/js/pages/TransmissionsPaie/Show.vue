@@ -460,40 +460,78 @@ function periodeLigne(l: Ligne): string {
             </div>
             <div
                 v-else-if="t.est_figee"
-                class="flex flex-wrap items-start gap-3 rounded-lg border px-4 py-3 text-sm"
+                class="flex items-start gap-3 rounded-xl border px-4 py-4 text-sm sm:px-5"
                 :class="
                     t.integre === false
                         ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100'
                         : 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100'
                 "
             >
-                <Lock class="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
-                    <p>
-                        <strong>Version figée</strong> le {{ t.validee_le }} par
-                        {{ t.validee_par }} : les montants ci-dessous sont
-                        définitifs pour cette version.
-                        <template v-if="t.transmise_le">
-                            Disponible pour la Comptabilité depuis le
-                            {{ t.transmise_le }}.
-                        </template>
-                        <template v-if="t.prise_en_charge_le">
-                            Reprise par la Comptabilité le
-                            {{ t.prise_en_charge_le }}.
-                        </template>
-                    </p>
-                    <p class="mt-1 flex items-center gap-1.5 text-xs">
-                        <CheckCircle2 v-if="t.integre" class="h-3.5 w-3.5" />
-                        <ShieldAlert v-else class="h-3.5 w-3.5" />
-                        {{
-                            t.integre
-                                ? 'Contenu intact (empreinte vérifiée).'
-                                : 'Le contenu ne correspond plus à l’empreinte enregistrée : ne pas transmettre, prévenir un administrateur.'
-                        }}
-                        <span class="font-mono opacity-70"
-                            >{{ t.empreinte?.slice(0, 16) }}…</span
+                <Lock class="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+                <div class="min-w-0 flex-1 space-y-3">
+                    <div>
+                        <p class="font-semibold">Version figée</p>
+                        <p class="mt-0.5 leading-relaxed">
+                            Les montants de cette version sont définitifs.
+                        </p>
+                    </div>
+                    <dl
+                        class="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2 xl:grid-cols-3"
+                    >
+                        <div>
+                            <dt class="opacity-75">Validée par</dt>
+                            <dd class="mt-0.5 font-medium">
+                                {{ t.validee_par ?? '—'
+                                }}<template v-if="t.validee_le">
+                                    · {{ t.validee_le }}</template
+                                >
+                            </dd>
+                        </div>
+                        <div v-if="t.transmise_le">
+                            <dt class="opacity-75">
+                                Disponible pour la Comptabilité
+                            </dt>
+                            <dd class="mt-0.5 font-medium">
+                                {{ t.transmise_le }}
+                            </dd>
+                        </div>
+                        <div v-if="t.prise_en_charge_le">
+                            <dt class="opacity-75">
+                                Reprise par la Comptabilité
+                            </dt>
+                            <dd class="mt-0.5 font-medium">
+                                {{ t.prise_en_charge_le }}
+                            </dd>
+                        </div>
+                    </dl>
+                    <div class="border-t border-current/15 pt-2">
+                        <p
+                            class="flex items-center gap-1.5 text-xs font-medium"
                         >
-                    </p>
+                            <CheckCircle2
+                                v-if="t.integre"
+                                class="h-3.5 w-3.5 shrink-0"
+                                aria-hidden="true"
+                            />
+                            <ShieldAlert
+                                v-else
+                                class="h-3.5 w-3.5 shrink-0"
+                                aria-hidden="true"
+                            />
+                            {{
+                                t.integre
+                                    ? 'Contenu intact (empreinte vérifiée).'
+                                    : 'Le contenu ne correspond plus à l’empreinte enregistrée : ne pas transmettre, prévenir un administrateur.'
+                            }}
+                        </p>
+                        <p
+                            v-if="t.empreinte"
+                            class="mt-1 font-mono text-[11px] break-all opacity-75"
+                            :title="t.empreinte"
+                        >
+                            Empreinte : {{ t.empreinte }}
+                        </p>
+                    </div>
                 </div>
             </div>
             <div

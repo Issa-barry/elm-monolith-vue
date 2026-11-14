@@ -23,11 +23,14 @@ use Illuminate\Support\Facades\DB;
  */
 class RapportPerimetreResolver
 {
-    /** Périodes proposées par le rapport (décision du 26/09/2026). */
-    public const PERIODES = ['aujourd_hui', 'hier', 'cette_semaine', 'ce_mois', Periode::PERSONNALISEE];
+    /**
+     * Périodes proposées par tous les rapports du module (décision du 26/09/2026, étendue le
+     * 13/11/2026 : Mois dernier et Date précise — une journée = date de début et de fin identiques).
+     */
+    public const PERIODES = ['aujourd_hui', 'hier', 'cette_semaine', 'ce_mois', 'mois_precedent', Periode::DATE_PRECISE, Periode::PERSONNALISEE];
 
     /** Périodes acceptées dans l'URL (liens existants) : toutes les périodes bornées. */
-    private const PERIODES_ACCEPTEES = [...Periode::RAPIDES, Periode::PERSONNALISEE];
+    private const PERIODES_ACCEPTEES = [...Periode::RAPIDES, Periode::DATE_PRECISE, Periode::PERSONNALISEE];
 
     public const PARAMETRE_PERIODE = 'periode';
 
@@ -68,6 +71,24 @@ class RapportPerimetreResolver
             siteIds: $siteIds,
             agentId: $agentId !== '' ? $agentId : null,
             periode: $this->periode($request),
+            maSituation: false,
+        );
+    }
+
+    /**
+     * Rapport par agence (`rapports.read`) : mêmes agences et même période que le rapport
+     * d'activité ; jamais d'agent — la remise à la trésorerie principale est une donnée d'agence.
+     */
+    public function pourRapportAgences(User $user, Request $request): RapportPerimetre
+    {
+        $request->query->remove('agent_id');
+        $p = $this->pourRapport($user, $request);
+
+        return new RapportPerimetre(
+            organizationId: $p->organizationId,
+            siteIds: $p->siteIds,
+            agentId: null,
+            periode: $p->periode,
             maSituation: false,
         );
     }

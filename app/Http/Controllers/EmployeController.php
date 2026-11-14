@@ -21,6 +21,7 @@ use App\Services\Rh\DepartEmployeService;
 use App\Services\Rh\EmployeAffectationService;
 use App\Services\Rh\PdgService;
 use App\Services\Rh\RechercheEmployeParTelephone;
+use App\Services\Rh\RemunerationMensuelleService;
 use App\Services\SiteScopeService;
 use App\Support\Rh\AffectationRemunerationPresenter;
 use App\Support\Rh\LiensContactUrgence;
@@ -448,7 +449,24 @@ class EmployeController extends Controller
             ]),
             'primes' => $this->primes($employe),
             'primes_options' => $this->primesOptions($employe),
+            'remuneration' => $this->remuneration($employe),
         ]);
+    }
+
+    /**
+     * Rémunération mensuelle totale (AFF-016) : salaire de base + primes, donc seulement avec les deux
+     * droits de lecture (`rh-remunerations.read` et la lecture des primes) — sinon null, jamais envoyé.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function remuneration(Employe $employe): ?array
+    {
+        $user = auth()->user();
+        if (! $user->can('rh-remunerations.read') || ! $this->peutVoirPrimes($employe, $user)) {
+            return null;
+        }
+
+        return app(RemunerationMensuelleService::class)->calculer($employe);
     }
 
     /**

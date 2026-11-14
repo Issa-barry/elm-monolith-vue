@@ -50,6 +50,8 @@ class RegistreFiltresPeriodeTest extends TestCase
         'comptabilite.tresorerie.mouvements.index' => 'Mouvements de fonds',
         'rapports.activite' => "Rapport d'activité",
         'rapports.activite.export' => "Rapport d'activité — export",
+        'rapports.agences' => 'Rapport par agence',
+        'rapports.agences.export' => 'Rapport par agence — export',
         'ma-situation' => 'Ma situation',
         'ma-situation.export' => 'Ma situation — export',
     ];
