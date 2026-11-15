@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Depense;
 use App\Models\Organization;
 use App\Support\Depenses\DepenseListingService;
+use App\Support\Depenses\DepensePerimetre;
 use App\Support\Periodes\Periode;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -14,6 +15,7 @@ class ImprimerDepenseController extends Controller
 {
     public function __construct(
         private readonly DepenseListingService $listing,
+        private readonly DepensePerimetre $perimetre,
     ) {}
 
     public function __invoke(Request $request): Response
@@ -24,12 +26,12 @@ class ImprimerDepenseController extends Controller
         $orgId = $user->organization_id;
         $periode = Periode::depuisRequeteValidee($request);
         $filters = $request->only(['search', 'type', 'statut', 'categorie', 'vehicule', 'concerne', 'telephone_concerne', 'montant', 'proprietaire_id', 'vehicule_ids']);
-        $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
+        $siteIds = $this->perimetre->sitesFiltres($user, (array) $request->input('site_ids', []));
         $org = Organization::find($orgId);
         $printedBy = $user->name;
         $now = now();
 
-        $depenses = $this->listing->query($filters, $orgId, $siteIds, $periode)
+        $depenses = $this->listing->query($user, $filters, $siteIds, $periode)
             ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
             ->get();
 

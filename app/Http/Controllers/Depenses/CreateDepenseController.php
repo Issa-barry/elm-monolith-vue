@@ -55,8 +55,11 @@ class CreateDepenseController extends Controller
 
     private function defaultSiteId(): ?string
     {
+        // Agence obligatoire (ADR 0065) : à défaut d'agence par défaut, la première agence de
+        // rattachement, pour qu'un sélecteur verrouillé ne reste jamais vide.
         return auth()->user()->sites()
-            ->wherePivot('is_default', true)
+            ->orderByDesc('user_sites.is_default')
+            ->orderBy('sites.nom')
             ->select('sites.id')
             ->first()?->id;
     }

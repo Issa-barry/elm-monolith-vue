@@ -5,13 +5,14 @@ namespace App\Services\Agents;
 use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\User;
+use App\Support\Depenses\DepensePerimetre;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Onglet Dépenses de la fiche agent (docs/fiche-agent.md) : dépenses SAISIES par l'agent
  * (depenses.user_id, renseigné à la création par StoreDepenseController), tous statuts.
  * Les dépenses dont l'agent serait bénéficiaire (via une fiche Employé) n'en font pas partie.
- * Même périmètre que l'écran Dépenses pour `depenses.read` : toute l'organisation.
+ * Limitées au périmètre de consultation du consulteur (DepensePerimetre), comme l'écran Dépenses.
  */
 class AgentDepensesService
 {
@@ -21,9 +22,11 @@ class AgentDepensesService
     /**
      * @return array{resume: array, lignes: list<array>, total_lignes: int}
      */
-    public function pourAgent(User $agent): array
+    public function __construct(private readonly DepensePerimetre $perimetre) {}
+
+    public function pourAgent(User $agent, User $consulteur): array
     {
-        $base = fn (): Builder => Depense::query()
+        $base = fn (): Builder => $this->perimetre->appliquer(Depense::query(), $consulteur)
             ->where('organization_id', $agent->organization_id)
             ->where('user_id', $agent->id);
 

@@ -1334,7 +1334,7 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                         for="dep-site"
                                         class="mb-1.5 flex items-center gap-1 text-xs font-medium"
                                     >
-                                        Site
+                                        Agence
                                         <Lock
                                             v-if="!can_change_site"
                                             class="h-3 w-3 text-muted-foreground"
@@ -1346,8 +1346,8 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                         :disabled="!can_change_site"
                                         class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                        <option value="">
-                                            Aucun site spécifique
+                                        <option value="" disabled>
+                                            Choisir une agence
                                         </option>
                                         <option
                                             v-for="s in sites"
@@ -1357,6 +1357,12 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                             {{ s.nom }}
                                         </option>
                                     </select>
+                                    <p
+                                        v-if="form.errors.site_id"
+                                        class="mt-1 text-xs text-destructive"
+                                    >
+                                        {{ form.errors.site_id }}
+                                    </p>
                                 </div>
                             </div>
 

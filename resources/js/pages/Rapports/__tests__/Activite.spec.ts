@@ -133,11 +133,13 @@ const rapportVide = (): RapportActivite => ({
 const composantsReels = {
     KpiCard: false,
     ListPageActions: false,
+    CarteSection: false,
     EnTeteSection: false,
     ListeFactures: false,
     ListeEncaissements: false,
     ListeCharges: false,
     TableauAgents: false,
+    SyntheseRemise: false,
     StatusDot: false,
     SectionCaisse: false,
     CaisseFiche: false,
@@ -323,10 +325,10 @@ describe('Rapports/Activite', () => {
             .get('#rapport-tab-encaissements')
             .trigger('keydown', { key: 'End' });
         expect(
-            wrapper.get('#rapport-tab-charges').attributes('aria-selected'),
+            wrapper.get('#rapport-tab-synthese').attributes('aria-selected'),
         ).toBe('true');
         await wrapper
-            .get('#rapport-tab-charges')
+            .get('#rapport-tab-synthese')
             .trigger('keydown', { key: 'Home' });
         expect(
             wrapper.get('#rapport-tab-ventes').attributes('aria-selected'),
@@ -335,7 +337,7 @@ describe('Rapports/Activite', () => {
             .get('#rapport-tab-ventes')
             .trigger('keydown', { key: 'ArrowLeft' });
         expect(
-            wrapper.get('#rapport-tab-charges').attributes('aria-selected'),
+            wrapper.get('#rapport-tab-synthese').attributes('aria-selected'),
         ).toBe('true');
     });
 
@@ -362,10 +364,7 @@ describe('Rapports/Activite', () => {
         expect(wrapper.find('[data-testid="caisse-aucune"]').exists()).toBe(
             true,
         );
-        expect(wrapper.get('[data-testid="kpi-remis"]').text()).toContain(
-            'Aucune caisse dédiée',
-        );
-        expect(wrapper.get('#rapport-tab-caisse').attributes('tabindex')).toBe(
+        expect(wrapper.get('#rapport-tab-ventes').attributes('tabindex')).toBe(
             '0',
         );
     });
@@ -409,51 +408,26 @@ describe('Rapports/Activite', () => {
         ).toBe('Toutes les agences · Tous les agents');
     });
 
-    it('le détail est en onglets, Charges comprises : un seul onglet actif', () => {
+    it('les cartes sont les onglets : une seule carte active, reconnaissable sans la couleur', async () => {
         url.valeur = '/backoffice/rapports/activite?tab=creances';
         const wrapper = monter('rapport');
-        const onglets = wrapper.findAll('[role="tab"]');
+        const cartes = wrapper.findAll('[role="tab"]');
 
-        expect(onglets.map((c) => c.attributes('data-testid'))).toEqual([
+        expect(cartes.map((c) => c.attributes('data-testid'))).toEqual([
             'rapport-tab-ventes',
             'rapport-tab-encaissements',
             'rapport-tab-creances',
             'rapport-tab-mobile_money',
             'rapport-tab-caisse',
             'rapport-tab-charges',
+            'rapport-tab-synthese',
         ]);
-        const actifs = onglets.filter(
+        const actives = cartes.filter(
             (c) => c.attributes('aria-selected') === 'true',
         );
-        expect(actifs).toHaveLength(1);
-        expect(actifs[0].attributes('data-testid')).toBe(
-            'rapport-tab-creances',
-        );
+        expect(actives).toHaveLength(1);
+        expect(actives[0].text()).toContain('(détail affiché)');
         expect(wrapper.text()).not.toContain('Encaissé sur ces ventes');
-    });
-
-    it('cartes du même langage que le Rapport par agence : cinq pour le rapport, six pour Ma situation', () => {
-        url.valeur = '/backoffice/rapports/activite';
-        const titres = (mode: 'rapport' | 'ma_situation') =>
-            monter(mode)
-                .findAllComponents({ name: 'KpiCard' })
-                .map((c) => [c.props('title'), c.props('compact')]);
-
-        expect(titres('rapport')).toEqual([
-            ['Ventes', true],
-            ['Total encaissé', true],
-            ['Dettes clients', true],
-            ['Charges saisies', true],
-            ["Remis à l'agence", true],
-        ]);
-        expect(titres('ma_situation').map(([t]) => t)).toEqual([
-            'Mes ventes',
-            'Mes encaissements',
-            'Mes dettes clients',
-            'Mes charges saisies',
-            'Remis à mon agence',
-            'Reste à remettre à mon agence',
-        ]);
     });
 
     it('sur téléphone, les lignes sont une liste empilée et le tableau est réservé aux écrans larges', () => {
@@ -560,215 +534,6 @@ describe('Rapports/Activite', () => {
     });
 });
 
-describe('Rapports/Activite — remise à l’agence, agents et charges (ADR 0064)', () => {
-    // Exemple du métier : 1 000 000 encaissés − 200 000 de charges validées = 800 000 nets ;
-    // − 500 000 déjà remis = 300 000 restants, dont 100 000 en transit.
-    const remise = {
-        depuis: '2026-09-01',
-        encaisse: 1_000_000,
-        approvisionnements: 0,
-        charges_validees: 200_000,
-        net_a_remettre: 800_000,
-        deja_remis: 500_000,
-        remis: 300_000,
-        en_transit: 100_000,
-        reste_a_remettre: 300_000,
-        caisse_active: true,
-        agences: ['Matoto'],
-        derniere_remise: '2026-09-26',
-        statut: 'remise_en_cours',
-        statut_label: 'Remise en cours',
-    };
-
-    const avecActivite = (): RapportActivite => {
-        const rapport = rapportVide();
-        rapport.encaissements.resume.montant = 750_000;
-        rapport.encaissements.resume.nombre = 2;
-        rapport.encaissements.par_moyen = [
-            {
-                cle: 'especes',
-                libelle: 'Espèces',
-                mode_paiement: 'especes',
-                nombre: 1,
-                montant: 600_000,
-            },
-            {
-                cle: 'mobile_money:orange_money',
-                libelle: 'Orange Money',
-                mode_paiement: 'mobile_money',
-                nombre: 1,
-                montant: 150_000,
-            },
-        ];
-        rapport.remise = remise;
-        rapport.charges = {
-            resume: {
-                charges_saisies: 250_000,
-                charges_payees: 200_000,
-                charges_payees_nombre: 1,
-                charges_en_attente: 50_000,
-                charges_en_attente_nombre: 1,
-                charges_avances_tiers: 0,
-            },
-            lignes: [
-                {
-                    id: 'd1',
-                    date: '2026-09-26',
-                    type: 'Carburant',
-                    categorie: 'Interne',
-                    avance_tiers: false,
-                    commentaire: null,
-                    site_nom: 'Matoto',
-                    agent: 'Moussa Sidibé',
-                    montant: 200_000,
-                    statut: 'valide',
-                    statut_label: 'Validé',
-                },
-            ],
-            total_lignes: 2,
-        };
-        rapport.agents = {
-            lignes: [
-                {
-                    agent_id: 'u1',
-                    agent: 'Moussa Sidibé',
-                    agences: ['Matoto'],
-                    ventes_nombre: 1,
-                    ventes_montant: 900_000,
-                    par_moyen: {
-                        especes: {
-                            cle: 'especes',
-                            montant: 600_000,
-                            nombre: 1,
-                        },
-                        'mobile_money:orange_money': {
-                            cle: 'mobile_money:orange_money',
-                            montant: 150_000,
-                            nombre: 1,
-                        },
-                    },
-                    encaisse_nombre: 2,
-                    encaisse_montant: 750_000,
-                    pour_autres_agences: 0,
-                    dettes_nombre: 1,
-                    dettes_montant: 150_000,
-                    ...rapport.charges.resume,
-                    remise,
-                },
-            ],
-            totaux: {
-                ventes_nombre: 1,
-                ventes_montant: 900_000,
-                par_moyen: {
-                    especes: 600_000,
-                    'mobile_money:orange_money': 150_000,
-                },
-                encaisse_montant: 750_000,
-                pour_autres_agences: 0,
-                dettes_montant: 150_000,
-                charges_saisies: 250_000,
-                charges_payees: 200_000,
-                charges_en_attente: 50_000,
-                net_a_remettre: 800_000,
-                deja_remis: 500_000,
-                remis: 300_000,
-                en_transit: 100_000,
-                reste_a_remettre: 300_000,
-            },
-        };
-
-        return rapport;
-    };
-
-    beforeEach(() => vi.clearAllMocks());
-
-    it('rapport : une ligne par agent, remise à SON agence, lien vers ses opérations', () => {
-        url.valeur = '/backoffice/rapports/activite?periode=hier&tab=ventes';
-        const wrapper = monter('rapport', avecActivite());
-        const ligne = wrapper.get('[data-testid="rapport-agent-ligne"]');
-
-        expect(wrapper.text()).toContain("Remise à l'agence de rattachement");
-        expect(ligne.text()).toContain('Matoto');
-        expect(
-            ligne.get('[data-testid="rapport-agent-encaisse"]').text(),
-        ).toContain('750 000');
-        expect(
-            ligne.get('[data-testid="rapport-agent-charges"]').text(),
-        ).toContain('dont 50 000 en attente');
-        expect(
-            ligne.get('[data-testid="rapport-agent-charges-validees"]').text(),
-        ).toBe('200 000');
-        expect(ligne.get('[data-testid="rapport-agent-net"]').text()).toBe(
-            '800 000',
-        );
-        expect(
-            ligne.get('[data-testid="rapport-agent-remis"]').text(),
-        ).toContain('500 000');
-        expect(
-            ligne.get('[data-testid="rapport-agent-reste"]').text(),
-        ).toContain('300 000');
-        expect(ligne.text()).toContain('Remise en cours');
-        expect(
-            ligne
-                .get('[data-testid="rapport-agent-detail"]')
-                .attributes('href'),
-        ).toBe(
-            '/backoffice/rapports/activite?periode=hier&tab=ventes&agent_id=u1',
-        );
-        expect(wrapper.find('[data-testid="ma-remise"]').exists()).toBe(false);
-    });
-
-    it('Ma situation : encaissements par moyen dont le total est la somme, et remise à mon agence', () => {
-        url.valeur = '/backoffice/ma-situation';
-        const wrapper = monter('ma_situation', avecActivite());
-        const encaissements = wrapper.get('[data-testid="mes-encaissements"]');
-
-        expect(encaissements.text()).toContain('Espèces');
-        expect(encaissements.text()).toContain('Orange Money');
-        expect(
-            wrapper.get('[data-testid="mes-encaissements-total"]').text(),
-        ).toBe('750 000');
-
-        const maRemise = wrapper.get('[data-testid="ma-remise"]');
-        expect(maRemise.text()).toContain('Remises à Matoto');
-        expect(maRemise.text()).toContain('Remise en cours');
-        // Calcul visible : encaissé − charges validées = net ; net − déjà remis = reste.
-        expect(wrapper.get('[data-testid="ma-remise-charges"]').text()).toBe(
-            '200 000',
-        );
-        expect(wrapper.get('[data-testid="ma-remise-net"]').text()).toBe(
-            '800 000',
-        );
-        expect(wrapper.get('[data-testid="ma-remise-remis"]').text()).toBe(
-            '500 000',
-        );
-        expect(wrapper.get('[data-testid="ma-remise-reste"]').text()).toBe(
-            '300 000',
-        );
-        expect(maRemise.text()).toContain('en transit');
-        expect(maRemise.text()).not.toContain('Trésorerie principale :');
-        expect(
-            wrapper.find('[data-testid="rapport-agents-tableau"]').exists(),
-        ).toBe(false);
-    });
-
-    it('onglet Charges : charges saisies, lien vers la dépense seulement si son écran est ouvert', () => {
-        url.valeur = '/backoffice/ma-situation?tab=charges';
-        const sansLien = monter('ma_situation', avecActivite());
-
-        expect(sansLien.text()).toContain('Mes charges saisies');
-        expect(sansLien.text()).toContain('Carburant');
-        expect(sansLien.find('[data-testid="charge-detail"]').exists()).toBe(
-            false,
-        );
-
-        const avecLien = monter('ma_situation', avecActivite(), true);
-        expect(
-            avecLien.get('[data-testid="charge-detail"]').attributes('href'),
-        ).toBe('/backoffice/depenses/d1');
-    });
-});
-
 describe('Rapports/Activite — compte Mobile Money de l’agent (ADR 0027)', () => {
     const ficheMobileMoney = () => ({
         caisse: {
@@ -872,5 +637,211 @@ describe('Rapports/Activite — compte Mobile Money de l’agent (ADR 0027)', ()
                 .find('[data-testid="comptes-mobile-money"]')
                 .exists(),
         ).toBe(false);
+    });
+});
+
+describe('Rapports/Activite — cartes Charges et Détail (ADR 0064)', () => {
+    // Exemple du métier : 1 000 000 encaissés − 200 000 de charges validées = 800 000 nets ;
+    // − 500 000 déjà remis = 300 000 restants, dont 100 000 en transit.
+    const remise = {
+        depuis: '2026-09-01',
+        encaisse: 1_000_000,
+        approvisionnements: 0,
+        charges_validees: 200_000,
+        net_a_remettre: 800_000,
+        deja_remis: 500_000,
+        remis: 300_000,
+        en_transit: 100_000,
+        reste_a_remettre: 300_000,
+        caisse_active: true,
+        agences: ['Matoto'],
+        derniere_remise: '2026-09-26',
+        statut: 'remise_en_cours',
+        statut_label: 'Remise en cours',
+    };
+
+    const avecSynthese = (): RapportActivite => {
+        const rapport = rapportVide();
+        rapport.remise = remise;
+        rapport.charges = {
+            resume: {
+                charges_saisies: 250_000,
+                charges_payees: 200_000,
+                charges_payees_nombre: 1,
+                charges_en_attente: 50_000,
+                charges_en_attente_nombre: 1,
+                charges_avances_tiers: 0,
+            },
+            lignes: [
+                {
+                    id: 'd1',
+                    date: '2026-09-26',
+                    type: 'Carburant',
+                    categorie: 'Interne',
+                    avance_tiers: false,
+                    commentaire: null,
+                    site_nom: 'Matoto',
+                    agent: 'Moussa Sidibé',
+                    montant: 200_000,
+                    statut: 'valide',
+                    statut_label: 'Validé',
+                },
+            ],
+            total_lignes: 2,
+        };
+        rapport.agents = {
+            lignes: [
+                {
+                    agent_id: 'u1',
+                    agent: 'Moussa Sidibé',
+                    agences: ['Matoto'],
+                    ventes_nombre: 1,
+                    ventes_montant: 900_000,
+                    par_moyen: {
+                        especes: {
+                            cle: 'especes',
+                            montant: 1_000_000,
+                            nombre: 1,
+                        },
+                    },
+                    encaisse_nombre: 1,
+                    encaisse_montant: 1_000_000,
+                    pour_autres_agences: 0,
+                    dettes_nombre: 0,
+                    dettes_montant: 0,
+                    ...rapport.charges.resume,
+                    remise,
+                },
+            ],
+            totaux: {
+                ventes_nombre: 1,
+                ventes_montant: 900_000,
+                par_moyen: { especes: 1_000_000 },
+                encaisse_montant: 1_000_000,
+                pour_autres_agences: 0,
+                dettes_montant: 0,
+                charges_saisies: 250_000,
+                charges_payees: 200_000,
+                charges_en_attente: 50_000,
+                net_a_remettre: 800_000,
+                deja_remis: 500_000,
+                remis: 300_000,
+                en_transit: 100_000,
+                reste_a_remettre: 300_000,
+            },
+        };
+
+        return rapport;
+    };
+
+    beforeEach(() => vi.clearAllMocks());
+
+    it('carte Charges : les validées, et les saisies en attente à part', () => {
+        url.valeur = '/backoffice/ma-situation';
+        const carte = monter('ma_situation', avecSynthese()).get(
+            '[data-testid="rapport-tab-charges"]',
+        );
+
+        expect(carte.text()).toContain('Mes charges');
+        expect(carte.text()).toContain('200 000');
+        expect(carte.text()).toContain('1 validée');
+        expect(carte.text()).toContain('50 000 GNF en attente (1)');
+    });
+
+    it('onglet Charges : liste, lien vers la dépense seulement si son écran est ouvert', () => {
+        url.valeur = '/backoffice/ma-situation?tab=charges';
+        const sansLien = monter('ma_situation', avecSynthese());
+        expect(sansLien.text()).toContain('Carburant');
+        expect(sansLien.find('[data-testid="charge-detail"]').exists()).toBe(
+            false,
+        );
+
+        const avecLien = monter('ma_situation', avecSynthese(), true);
+        expect(
+            avecLien.get('[data-testid="charge-detail"]').attributes('href'),
+        ).toBe('/backoffice/depenses/d1');
+    });
+
+    it('carte Détail : affiche le tableau consolidé au clic et le replie au second clic', async () => {
+        url.valeur = '/backoffice/rapports/activite?tab=ventes';
+        const wrapper = monter('rapport', avecSynthese());
+        const carte = () => wrapper.get('[data-testid="rapport-tab-synthese"]');
+
+        expect(carte().text()).toContain('Détail des situations des agents');
+        expect(carte().text()).toContain('cliquer pour afficher');
+        expect(
+            wrapper.find('[data-testid="rapport-agents-tableau"]').exists(),
+        ).toBe(false);
+
+        await carte().trigger('click');
+        expect(
+            wrapper.find('[data-testid="rapport-agents-tableau"]').exists(),
+        ).toBe(true);
+        expect(carte().attributes('aria-selected')).toBe('true');
+        expect(carte().text()).toContain('cliquer pour replier');
+        const ligne = wrapper.get('[data-testid="rapport-agent-ligne"]');
+        expect(ligne.get('[data-testid="rapport-agent-net"]').text()).toBe(
+            '800 000',
+        );
+        expect(
+            ligne.get('[data-testid="rapport-agent-reste"]').text(),
+        ).toContain('300 000');
+        expect(ligne.text()).toContain('Remise en cours');
+        expect(
+            ligne
+                .get('[data-testid="rapport-agent-detail"]')
+                .attributes('href'),
+        ).toBe('/backoffice/rapports/activite?tab=synthese&agent_id=u1');
+
+        await carte().trigger('click');
+        expect(
+            wrapper.find('[data-testid="rapport-agents-tableau"]').exists(),
+        ).toBe(false);
+        expect(
+            wrapper
+                .get('[data-testid="rapport-tab-ventes"]')
+                .attributes('aria-selected'),
+        ).toBe('true');
+    });
+
+    it('Ma situation : le détail montre ma ligne, sans lien, et le calcul de ma remise', () => {
+        url.valeur = '/backoffice/ma-situation?tab=synthese';
+        const wrapper = monter('ma_situation', avecSynthese());
+
+        expect(wrapper.text()).toContain('Détail de ma situation');
+        expect(
+            wrapper.find('[data-testid="rapport-agent-detail"]').exists(),
+        ).toBe(false);
+        expect(wrapper.get('[data-testid="ma-remise-charges"]').text()).toBe(
+            '200 000',
+        );
+        expect(wrapper.get('[data-testid="ma-remise-net"]').text()).toBe(
+            '800 000',
+        );
+        expect(wrapper.get('[data-testid="ma-remise-remis"]').text()).toBe(
+            '500 000',
+        );
+        expect(wrapper.get('[data-testid="ma-remise-reste"]').text()).toBe(
+            '300 000',
+        );
+        expect(wrapper.get('[data-testid="ma-remise"]').text()).toContain(
+            'Ma remise à Matoto',
+        );
+    });
+
+    it('les cartes actuelles restent en place, Charges et Détail ajoutées à la suite', () => {
+        url.valeur = '/backoffice/ma-situation';
+        const ids = monter('ma_situation', avecSynthese())
+            .findAll('[role="tab"]')
+            .map((c) => c.attributes('data-testid'));
+
+        expect(ids).toEqual([
+            'rapport-tab-ventes',
+            'rapport-tab-encaissements',
+            'rapport-tab-creances',
+            'rapport-tab-mobile_money',
+            'rapport-tab-charges',
+            'rapport-tab-synthese',
+        ]);
     });
 });

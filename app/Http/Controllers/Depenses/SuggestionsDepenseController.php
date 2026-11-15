@@ -5,12 +5,13 @@ namespace App\Http\Controllers\Depenses;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Depense;
+use App\Support\Depenses\DepensePerimetre;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class SuggestionsDepenseController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, DepensePerimetre $perimetre): JsonResponse
     {
         $this->authorize('viewAny', Depense::class);
 
@@ -21,13 +22,15 @@ class SuggestionsDepenseController extends Controller
             return response()->json([]);
         }
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        // Suggestions tirées des seules dépenses du périmètre de consultation (DepensePerimetre).
+        $base = fn () => $perimetre->appliquer(Depense::where('organization_id', $user->organization_id), $user);
         $like = '%'.$q.'%';
 
         if ($field === 'vehicule') {
             $likeImmat = '%'.preg_replace('/[\s\-]/', '', $q).'%';
 
-            $vehicules = Depense::where('organization_id', $orgId)
+            $vehicules = $base()
                 ->where('beneficiaire_type', 'vehicule')
                 ->whereHas('vehiculeBeneficiaire', fn ($qb) => $qb
                     ->where('nom_vehicule', 'LIKE', $like)
@@ -64,7 +67,7 @@ class SuggestionsDepenseController extends Controller
             foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire', 'parrain' => 'parrainBeneficiaire'] as $type => $relation) {
                 $vehiculeRelation = $vehiculeRelationParType[$type] ?? null;
 
-                $items = Depense::where('organization_id', $orgId)
+                $items = $base()
                     ->where('beneficiaire_type', $type)
                     ->whereHas($relation, function ($qb) use ($like, $vehiculeRelation) {
                         $qb->where(fn ($q) => $q->whereHas('personne', fn ($p) => $p
@@ -90,7 +93,7 @@ class SuggestionsDepenseController extends Controller
                 $results = $results->merge($items);
             }
 
-            $vehicules = Depense::where('organization_id', $orgId)
+            $vehicules = $base()
                 ->where('beneficiaire_type', 'vehicule')
                 ->whereHas('vehiculeBeneficiaire', fn ($qb) => $qb->where('nom_vehicule', 'LIKE', $like))
                 ->with('vehiculeBeneficiaire:id,nom_vehicule')
@@ -110,7 +113,7 @@ class SuggestionsDepenseController extends Controller
             // prestataire — nom_complet est un accesseur PHP, pas une colonne, donc filtré en
             // mémoire plutôt qu'en LIKE SQL (volumes bornés par organisation, cf. convention déjà
             // appliquée aux écrans Commission v2).
-            $prestataires = Depense::where('organization_id', $orgId)
+            $prestataires = $base()
                 ->where('beneficiaire_type', 'prestataire')
                 ->with('prestataireBeneficiaire')
                 ->get()
@@ -126,7 +129,7 @@ class SuggestionsDepenseController extends Controller
 
             $results = $results->merge($prestataires);
 
-            $clients = Depense::where('organization_id', $orgId)
+            $clients = $base()
                 ->where('beneficiaire_type', 'client')
                 ->with('clientBeneficiaire:id,nom,prenom,nom_complet')
                 ->get()
@@ -148,7 +151,7 @@ class SuggestionsDepenseController extends Controller
             $results = collect();
 
             foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire', 'parrain' => 'parrainBeneficiaire'] as $type => $relation) {
-                $items = Depense::where('organization_id', $orgId)
+                $items = $base()
                     ->where('beneficiaire_type', $type)
                     ->whereHas($relation, fn ($qb) => $qb->whereHas('personne', fn ($p) => $p
                         ->whereRaw("REPLACE(REPLACE(telephone, ' ', ''), '-', '') LIKE ?", [$likeTel])
@@ -167,7 +170,7 @@ class SuggestionsDepenseController extends Controller
                 $results = $results->merge($items);
             }
 
-            $prestataires = Depense::where('organization_id', $orgId)
+            $prestataires = $base()
                 ->where('beneficiaire_type', 'prestataire')
                 ->with('prestataireBeneficiaire')
                 ->get()
@@ -183,7 +186,7 @@ class SuggestionsDepenseController extends Controller
 
             $results = $results->merge($prestataires);
 
-            $clients = Depense::where('organization_id', $orgId)
+            $clients = $base()
                 ->where('beneficiaire_type', 'client')
                 ->with('clientBeneficiaire:id,nom,prenom,nom_complet,telephone')
                 ->get()

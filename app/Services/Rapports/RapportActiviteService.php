@@ -76,7 +76,7 @@ class RapportActiviteService
      * - `charges` : charges saisies PAR les agents du périmètre (ChargesRapportService, axe agent) ;
      * - `remise` : remise des agents à LEUR agence (RemiseAgentService, ADR 0064) — net à remettre =
      *   encaissé + approvisionnements − charges validées, reste = net − déjà remis ;
-     * - `agents` : une ligne par agent (rapport d'activité seulement, pas « Ma situation »).
+     * - `agents` : une ligne par agent (dans « Ma situation », la ligne de l'agent connecté) — tableau « Détail ».
      *
      * @return array<string, mixed>
      */
@@ -95,7 +95,8 @@ class RapportActiviteService
             'moyens' => self::colonnesMoyens($encaissements['par_moyen']),
             'charges' => $this->charges->section($p, $limite),
             'remise' => RemiseAgentService::total($remises),
-            'agents' => $p->maSituation ? null : $this->parAgent($p, $remises),
+            // Une ligne par agent ; dans « Ma situation », la seule ligne de l'agent connecté.
+            'agents' => $this->parAgent($p, $remises),
         ];
     }
 

@@ -39,8 +39,10 @@ class UpdateDepenseRequest extends FormRequest
                     ->whereNull('deleted_at'),
             ],
             'beneficiaire_id' => $this->beneficiaireRules($categorie, $orgId),
+            // Toute dépense est rattachée à une agence (ADR 0065) : une ancienne dépense sans agence
+            // en reçoit une à sa prochaine modification.
             'site_id' => [
-                'nullable',
+                'required',
                 'ulid',
                 Rule::exists('sites', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
             ],
@@ -76,6 +78,8 @@ class UpdateDepenseRequest extends FormRequest
             'depense_type_id.exists' => 'Ce type de dépense est invalide ou inactif.',
             'beneficiaire_id.required' => 'Le bénéficiaire est obligatoire pour ce type de dépense.',
             'beneficiaire_id.exists' => 'Le bénéficiaire sélectionné est invalide.',
+            'site_id.required' => "L'agence est obligatoire.",
+            'site_id.exists' => "L'agence sélectionnée est invalide.",
             'montant.required' => 'Le montant est obligatoire.',
             'montant.min' => 'Le montant doit être supérieur à 0.',
             'date_depense.required' => 'La date est obligatoire.',

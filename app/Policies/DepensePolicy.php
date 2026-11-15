@@ -6,6 +6,7 @@ use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\User;
 use App\Services\DroitCreationDepenseService;
+use App\Support\Depenses\DepensePerimetre;
 
 class DepensePolicy
 {
@@ -17,7 +18,7 @@ class DepensePolicy
     public function view(User $user, Depense $depense): bool
     {
         return $user->can('depenses.read')
-            && $user->organization_id === $depense->organization_id;
+            && app(DepensePerimetre::class)->peutVoir($user, $depense);
     }
 
     public function create(User $user): bool
@@ -28,7 +29,7 @@ class DepensePolicy
     public function update(User $user, Depense $depense): bool
     {
         return $user->can('depenses.update')
-            && $user->organization_id === $depense->organization_id
+            && app(DepensePerimetre::class)->peutVoir($user, $depense)
             && in_array($depense->statut, [StatutDepense::BROUILLON, StatutDepense::REJETE, StatutDepense::ANNULE]);
     }
 
@@ -55,7 +56,7 @@ class DepensePolicy
     public function delete(User $user, Depense $depense): bool
     {
         return $user->can('depenses.delete')
-            && $user->organization_id === $depense->organization_id
+            && app(DepensePerimetre::class)->peutVoir($user, $depense)
             && $depense->statut === StatutDepense::BROUILLON;
     }
 }

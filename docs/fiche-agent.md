@@ -66,8 +66,9 @@ Résolus par `RapportPerimetreResolver::pourFicheAgent()` :
 
 ## Dépenses
 
-Dépenses **saisies** par l'agent (`depenses.user_id`, renseigné à la création), tous statuts, sur
-toute l'organisation (même périmètre que l'écran Dépenses). Synthèse : Validées (montant + nombre),
+Dépenses **saisies** par l'agent (`depenses.user_id`, renseigné à la création), tous statuts,
+limitées au périmètre de consultation des dépenses **du consulteur** (même périmètre que l'écran
+Dépenses, [depenses-visibilite.md](depenses-visibilite.md)). Synthèse : Validées (montant + nombre),
 En attente de validation (statut Soumis), Nombre total. Tableau Date / Type / Catégorie / Montant /
 Statut (`StatusDot`), 300 lignes les plus récentes, totaux sur toutes les dépenses ; chaque ligne
 ouvre la dépense.

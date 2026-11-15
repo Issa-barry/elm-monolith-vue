@@ -13,6 +13,7 @@ use App\Models\Vehicule;
 use App\Models\VehiculeCapacite;
 use App\Services\Contacts\ProprietaireEntreprise;
 use App\Support\Contacts\SuppressionFonction;
+use App\Support\Depenses\DepensePerimetre;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -236,7 +237,8 @@ class ProprietaireController extends Controller
             })
             ->values();
 
-        $depenses = Depense::where('beneficiaire_type', 'proprietaire')
+        $depenses = app(DepensePerimetre::class)->appliquer(Depense::query(), auth()->user())
+            ->where('beneficiaire_type', 'proprietaire')
             ->where('beneficiaire_id', $proprietaire->id)
             ->where('organization_id', $proprietaire->organization_id)
             ->with('depenseType:id,libelle')
