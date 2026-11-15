@@ -1,154 +1,18 @@
-# Standards UI — à respecter impérativement
+# Standards — à respecter impérativement
 
-Les règles 1, 2, 4 et 6 (partie front) ci-dessous sont contrôlées automatiquement par
-`node scripts/check-ui-standards.mjs`, exécuté dans le CI (`.github/workflows/lint.yml`, job
-`quality`, step "Check UI standards"). Une PR qui les viole échoue le check **avant merge**.
-Lance `npm run lint:standards` en local pour vérifier avant de pousser. La règle 3 n'est pas
-(encore) couverte par ce script — à vérifier manuellement en revue de code. La règle 6 est aussi
-contrôlée par PHPUnit (registre des écrans et test d'architecture).
+La référence unique des standards d'interface et des règles transverses est
+`docs/developpement/standards.md`, chargé ci-dessous. Une règle se modifie dans ce document, jamais
+ici.
 
-## 1. Badge de statut : point coloré, jamais de fond coloré
+@docs/developpement/standards.md
 
-Tout affichage d'un **statut** (commande, facture, dépense, transfert, période, paiement...)
-doit utiliser le composant `resources/js/components/StatusDot.vue` :
+Rappels :
 
-```vue
-<StatusDot :status="commande.statut" :label="commande.statut_label" />
-```
-
-- Le prop `status` (la valeur brute backend, ex: `"livraison_en_cours"`) résout automatiquement
-  la couleur du point via la table centralisée dans `StatusDot.vue`.
-- **Interdit** : un `<span>`/`<Badge>` avec des classes `rounded-full` + `bg-*-50` / `bg-*-100`
-  (pill à fond coloré) pour afficher un statut. Le seul élément coloré est le point (`<span class="rounded-full ...">`
-  interne au composant), jamais le fond du texte.
-- Si une **nouvelle valeur de statut** apparaît (nouveau workflow, nouvel enum), ajoute-la
-  UNIQUEMENT dans `STATUS_COLOR_MAP` au sommet de `StatusDot.vue` — ne crée pas de map de
-  couleur locale dans la page.
-- Cette règle ne s'applique qu'aux **statuts d'entité**. Les badges de catégorie/type/rôle
-  (ex: type de produit, rôle utilisateur, catégorie de dépense) peuvent garder un fond coloré —
-  ce ne sont pas des statuts.
-
-## 2. Filtres de liste : toujours `DataFilters.vue`
-
-Toute page de liste (Index) avec des filtres doit utiliser
-`resources/js/components/filters/DataFilters.vue`, pas des `<select>`/`<Dropdown>` faits main :
-
-```vue
-<DataFilters url="/produits" :values="filters" :fields="filterFields" />
-```
-
-- **Aucun champ de recherche globale** (`search`) : supprimé du composant et de toutes les pages.
-  Les pages font leur propre filtre texte via un champ `type: 'text'` avec `inline: true`.
-- **Barre rapide du tableau (Ventes seulement, 25/10/2026)** : recherche `recherche` + filtres texte
-  fréquents en tête du tableau via `components/filters/QuickFilters.vue`, avec
-  `<DataFilters trigger-only quick-bar>` dans l'en-tête (bouton « Filtres » inchangé, aucun champ en
-  double, filtrage serveur). Ne pas l'étendre à une autre liste sans demande explicite
-  (`docs/filters.md`, « Barre rapide du tableau »).
-- Ordre standard de la barre : **[Agence] → [Statut] → [Autres filtres inline] → [Bouton Filtres]**.
-  - Les champs affichés directement dans la barre ont `inline: true` dans `filterFields`.
-  - Les champs avancés (sans `inline`) vont dans le drawer (bouton **Filtres**).
-- Le filtre Agence est obligatoire dès qu'une page affiche des données multi-sites, et doit
-  envoyer `site_ids[]` au backend.
-- Ne déclare pas plusieurs `ref` nommées `filterXxx`/`filtreXxx` sans importer `DataFilters.vue` —
-  c'est exactement le pattern détecté par le check CI comme "filtre fait maison".
-
-## 3. Visibilité des actions : jamais affichée sans la permission réelle
-
-Un bouton/lien Créer, Modifier, Supprimer (ou une action métier spécifique : valider, encaisser,
-annuler...) ne doit jamais s'afficher à un utilisateur qui n'a pas la permission backend
-correspondante — même si le backend refuse déjà la requête (403 silencieux au clic). Le frontend
-doit refléter l'état d'autorisation réel, jamais laisser deviner une action qui échouera.
-
-```vue
-<Button v-if="can('categories.create')" @click="openCreate">Nouvelle catégorie</Button>
-```
-
-- Utilise `usePermissions()` / `can('resource.action')`
-  (`resources/js/composables/usePermissions.ts`) — jamais une nouvelle vérification ad hoc,
-  jamais un simple `:disabled` sur un bouton qui reste visible.
-- La clé de permission doit correspondre **exactement** à celle vérifiée côté backend
-  (`$this->authorize(...)` ou `$user->can(...)` dans le contrôleur/policy) — vérifie le fichier
-  concerné avant d'écrire le `v-if`, ne devine jamais le nom de la permission.
-- Si la page entière n'est déjà accessible qu'aux utilisateurs ayant cette permission (ex:
-  `authorize(...)` posé aussi sur l'action `index`/`viewAny`), le `can()` frontend devient
-  redondant mais reste sans risque — pas obligatoire dans ce cas précis.
-- S'applique aussi aux liens de navigation (sidebar, etc.) menant vers une action protégée.
-
-## 4. Icône de copie : `pi pi-clipboard`, et seulement pour copier
-
-Toute action qui copie une valeur dans le presse-papiers (numéro de facture, lien, clé...) utilise
-l'icône PrimeIcons `pi pi-clipboard` — et cette icône ne sert **qu'à** cela :
-
-```vue
-<button type="button" title="Cliquez pour copier le numéro de facture" @click="copier">
-    <i :class="copie ? 'pi pi-check' : 'pi pi-clipboard'" />
-</button>
-```
-
-- **Infobulle obligatoire** : le bouton porte un `title` statique qui commence par
-  « Cliquez pour copier » suivi de ce qui est copié (« … le numéro de facture », « … le lien de
-  connexion »).
-- **Interdit** : les icônes de copie Lucide (`Copy`, `CopyCheck`, `ClipboardCopy`) et `pi-copy`.
-- **Interdit** : `pi pi-clipboard` dans un fichier qui ne copie rien (pas de `navigator.clipboard`
-  ni de `useClipboard`) — choisis une autre icône.
-- La coche de confirmation après copie reste libre (`pi pi-check` recommandé).
-
-## 5. Factures et bons PDF : toujours le modèle officiel partagé
-
-Toute facture ou tout bon généré en PDF (facture d'achat, bon de commande, facture de vente, et tout
-nouveau document de ce type) utilise le modèle officiel décrit dans `docs/documents-pdf.md`
-(ADR 0033) :
-
-```blade
-<x-pdf.document :document="$document" />
-```
-
-- Les données sont préparées par un constructeur `app/Support/Documents/XxxDocument.php` qui
-  retourne un `DocumentPdf` ; le rendu passe par `DocumentPdfRenderer`.
-- **Interdit** : une nouvelle vue PDF de facture ou de bon avec son propre HTML/CSS (`<style>`,
-  tableaux d'en-tête ou de totaux recopiés). Un besoin de présentation nouveau s'ajoute au modèle
-  (paramètre de `DocumentPdf` ou slot du composant), pour tous les documents.
-- Couleurs : celles du design d'origine de la facture d'achat ; seul le nom de l'organisation prend
-  les deux tons de `CharteDocument`. Pied de page légal : celui de l'organisation (Paramètres →
-  Organisation), jamais écrit dans le modèle.
-- Une mention propre à un document reste propre à ce document (ex. « Ce document n'est pas
-  l'original du fournisseur » : facture d'achat uniquement).
-- Tout nouveau type est ajouté à `tests/Feature/Documents/ModeleDocumentPdfTest.php` (même modèle,
-  propagation du bloc partagé). Cette règle n'est pas couverte par `lint:standards`.
-
-## 6. Filtres de période : un seul moteur, côté serveur
-
-Règle stricte (ADR 0057, `docs/periodes.md`) : aucun développeur ni agent IA ne crée, modifie ou
-maintient un filtre temporel en dehors du système centralisé des périodes.
-
-```php
-$periode = Periode::depuisRequeteValidee($request);   // App\Support\Periodes\Periode
-$periode->appliquer($query, 'created_at');
-```
-
-```ts
-{ key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' }
-```
-
-- Deux modes seulement : `periode=<clé>` (aujourd_hui, hier, cette_semaine, semaine_precedente,
-  ce_mois, mois_precedent, cette_annee, annee_precedente, tout) ou `date_debut` + `date_fin`
-  (incluses, ordonnées ; `date_debut` obligatoire, sans `date_fin` = jusqu'à aujourd'hui, résolu
-  par le serveur). Jamais les deux à la fois.
-- **Interdit** : calculer des bornes dans un contrôleur, un service ou le navigateur (`startOfMonth`,
-  `subMonth`, `whereDate`, `new Date()`…) ; lire `date_debut`/`date_fin` à la main ; un champ
-  `type: 'date-range'` ; une liste de périodes codée en dur côté front.
-- Une période invalide est refusée avec un message (jamais remplacée en silence).
-- Les périodes métier (quinzaines P1/P2, mois comptable, paie) restent à leurs services dédiés : ne
-  pas les remplacer par des périodes calendaires.
-- Nouvel écran filtré par période : l'inscrire dans `tests/Feature/Periodes/RegistreFiltresPeriodeTest.php`.
-- Contrôlé en CI par ce registre, `tests/Unit/Architecture/PeriodesArchitectureTest.php` et
-  `npm run lint:standards`. Dérogation : commentaire `periode-standard-ignore: <raison>` côté front,
-  exception justifiée dans `PeriodesArchitectureTest` côté backend, et ligne dans `docs/periodes.md`
-  (« Dérogations »).
-
-## Échappatoire
-
-Si un cas est légitimement hors-périmètre (ex: un badge qui ressemble à un statut mais qui est
-en fait une catégorie), ajoute le commentaire `ui-standard-ignore-file` n'importe où dans le
-fichier `.vue` pour désactiver les checks sur ce fichier. À utiliser avec parcimonie — c'est
-une échappatoire, pas un moyen de contourner la règle par défaut.
+- Avant toute modification d'interface, appliquer la partie A ; avant toute livraison, lancer les
+  vérifications de B6 (au minimum `npm run lint:standards` après une modification d'un `.vue`).
+- `npm run lint:standards` tourne en CI sur toutes les pull requests : une violation bloque la
+  fusion. Les échappatoires (`ui-standard-ignore-file`, `periode-standard-ignore: <raison>`) et ce
+  qu'elles désactivent réellement sont décrites dans le document ; aucune ne désactive la règle
+  des Toasts.
+- Les règles de méthode des agents (autonomie, Git, tests, compte rendu) sont dans
+  `.claude/CLAUDE.md`.

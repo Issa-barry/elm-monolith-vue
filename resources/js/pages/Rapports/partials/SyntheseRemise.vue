@@ -45,20 +45,25 @@ defineProps<{ remise: RemiseAgent | null }>();
         >
             <div class="flex items-baseline justify-between gap-3 px-4 py-2">
                 <dt>Encaissé en espèces et Mobile Money</dt>
-                <dd class="tabular-nums">{{ n(remise.encaisse) }}</dd>
+                <dd class="shrink-0 whitespace-nowrap tabular-nums">
+                    {{ n(remise.encaisse) }}
+                </dd>
             </div>
             <div
                 v-if="remise.approvisionnements"
                 class="flex items-baseline justify-between gap-3 px-4 py-2"
             >
                 <dt>+ Approvisionnements reçus de l'agence</dt>
-                <dd class="tabular-nums">
+                <dd class="shrink-0 whitespace-nowrap tabular-nums">
                     {{ n(remise.approvisionnements) }}
                 </dd>
             </div>
             <div class="flex items-baseline justify-between gap-3 px-4 py-2">
                 <dt>− Charges validées</dt>
-                <dd class="tabular-nums" data-testid="ma-remise-charges">
+                <dd
+                    class="shrink-0 whitespace-nowrap tabular-nums"
+                    data-testid="ma-remise-charges"
+                >
                     {{ n(remise.charges_validees) }}
                 </dd>
             </div>
@@ -66,7 +71,10 @@ defineProps<{ remise: RemiseAgent | null }>();
                 class="flex items-baseline justify-between gap-3 px-4 py-2 font-medium"
             >
                 <dt>= Montant net à remettre</dt>
-                <dd class="tabular-nums" data-testid="ma-remise-net">
+                <dd
+                    class="shrink-0 whitespace-nowrap tabular-nums"
+                    data-testid="ma-remise-net"
+                >
                     {{ n(remise.net_a_remettre) }}
                 </dd>
             </div>
@@ -79,7 +87,10 @@ defineProps<{ remise: RemiseAgent | null }>();
                         >· dont {{ n(remise.remis) }} sur la période</span
                     >
                 </dt>
-                <dd class="tabular-nums" data-testid="ma-remise-remis">
+                <dd
+                    class="shrink-0 whitespace-nowrap tabular-nums"
+                    data-testid="ma-remise-remis"
+                >
                     {{ n(remise.deja_remis) }}
                 </dd>
             </div>
@@ -87,7 +98,10 @@ defineProps<{ remise: RemiseAgent | null }>();
                 class="flex items-baseline justify-between gap-3 px-4 py-2.5 font-semibold"
             >
                 <dt>= Reste à remettre</dt>
-                <dd class="tabular-nums" data-testid="ma-remise-reste">
+                <dd
+                    class="shrink-0 whitespace-nowrap tabular-nums"
+                    data-testid="ma-remise-reste"
+                >
                     {{ n(remise.reste_a_remettre) }}
                 </dd>
             </div>
@@ -95,7 +109,9 @@ defineProps<{ remise: RemiseAgent | null }>();
                 class="flex items-baseline justify-between gap-3 px-4 py-2 text-muted-foreground"
             >
                 <dt>dont en transit (envoyé, non confirmé)</dt>
-                <dd class="tabular-nums">{{ n(remise.en_transit) }}</dd>
+                <dd class="shrink-0 whitespace-nowrap tabular-nums">
+                    {{ n(remise.en_transit) }}
+                </dd>
             </div>
         </dl>
         <div v-else class="flex items-center gap-2 px-4 py-4 text-sm">
