@@ -10,7 +10,6 @@ use App\Models\CompteTresorerie;
 use App\Models\EncaissementVente;
 use App\Models\User;
 use App\Services\Tresorerie\FicheCaisseService;
-use App\Services\Tresorerie\RemisesAgencesService;
 use App\Support\Rapports\RapportPerimetre;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
@@ -67,6 +66,7 @@ class RapportActiviteService
     public function __construct(
         private readonly FicheCaisseService $ficheCaisse,
         private readonly ChargesRapportService $charges,
+        private readonly RemiseAgentService $remiseAgent,
     ) {}
 
     /**
@@ -74,8 +74,8 @@ class RapportActiviteService
      *
      * - `moyens` : colonnes d'encaissement communes aux trois rapports (colonnesMoyens()) ;
      * - `charges` : charges saisies PAR les agents du périmètre (ChargesRapportService, axe agent) ;
-     * - `remise` : remise des agents à LEUR agence (ADR 0064), tirée des fiches de caisse et de compte
-     *   Mobile Money — jamais un encaissement compté comme remis ;
+     * - `remise` : remise des agents à LEUR agence (RemiseAgentService, ADR 0064) — net à remettre =
+     *   encaissé + approvisionnements − charges validées, reste = net − déjà remis ;
      * - `agents` : une ligne par agent (rapport d'activité seulement, pas « Ma situation »).
      *
      * @return array<string, mixed>
@@ -83,21 +83,19 @@ class RapportActiviteService
     public function rapport(RapportPerimetre $p, ?int $limite = self::LIMITE_LIGNES): array
     {
         $encaissements = $this->encaissements($p, $limite);
-        $caisse = $this->caisse($p);
-        $comptesMobileMoney = $this->comptesMobileMoney($p);
-        $fiches = [...$caisse['fiches'], ...$comptesMobileMoney['fiches']];
+        $remises = $this->remiseAgent->parAgent($p);
 
         return [
             'ventes' => $this->ventes($p, $limite),
             'encaissements' => $encaissements,
             'creances' => $this->creances($p, $limite),
             'mobile_money' => $this->mobileMoney($p, $limite),
-            'caisse' => $caisse,
-            'comptes_mobile_money' => $comptesMobileMoney,
+            'caisse' => $this->caisse($p),
+            'comptes_mobile_money' => $this->comptesMobileMoney($p),
             'moyens' => self::colonnesMoyens($encaissements['par_moyen']),
             'charges' => $this->charges->section($p, $limite),
-            'remise' => self::remiseAgents($fiches),
-            'agents' => $p->maSituation ? null : $this->parAgent($p, $fiches),
+            'remise' => RemiseAgentService::total($remises),
+            'agents' => $p->maSituation ? null : $this->parAgent($p, $remises),
         ];
     }
 
@@ -141,46 +139,6 @@ class RapportActiviteService
         return str_pad((string) ($rang === false ? 99 : $rang), 2, '0', STR_PAD_LEFT);
     }
 
-    // ── Remise des agents à leur agence (ADR 0064) ───────────────────────────
-
-    /**
-     * Remise des agents à LEUR agence de rattachement (agence de la caisse ou du compte Mobile Money),
-     * jamais à la trésorerie principale — qui est le niveau agence (ADR 0016). Tirée des fiches
-     * (FicheCaisseService, grand livre et vrais versements / transferts) :
-     *
-     * - remis      = versements reçus par l'agence (réception confirmée) pendant la période ;
-     * - en transit = envoyés ou contestés, réception pas encore confirmée, à ce jour ;
-     * - reste      = solde à ce jour des caisses et comptes Mobile Money (il baisse dès l'envoi) ;
-     * - statut     = même règle que les agences (RemisesAgencesService::statut()).
-     *
-     * Null sans aucune caisse dédiée ni compte Mobile Money (rien ne peut être remis).
-     *
-     * @param  list<array<string, mixed>>  $fiches
-     * @return array<string, mixed>|null
-     */
-    public static function remiseAgents(array $fiches): ?array
-    {
-        if ($fiches === []) {
-            return null;
-        }
-
-        $fiches = collect($fiches);
-        $remis = round((float) $fiches->sum(fn (array $f) => $f['recus_periode']['montant'] ?? 0.0), 2);
-        $enTransit = round((float) $fiches->sum(fn (array $f) => $f['en_cours']['montant'] + $f['contestes']['montant']), 2);
-        $reste = round((float) $fiches->sum('solde_actuel'), 2);
-        $statut = RemisesAgencesService::statut($reste, $enTransit, $remis);
-
-        return [
-            'remis' => $remis,
-            'en_transit' => $enTransit,
-            'reste_a_remettre' => $reste,
-            'agences' => $fiches->pluck('caisse.site_nom')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values()->all(),
-            'derniere_remise' => $fiches->pluck('dernier_versement.date_envoi')->filter()->max(),
-            'statut' => $statut,
-            'statut_label' => RemisesAgencesService::LIBELLES[$statut],
-        ];
-    }
-
     // ── Une ligne par agent (rapport d'activité) ─────────────────────────────
 
     /**
@@ -190,10 +148,10 @@ class RapportActiviteService
      * totaux du rapport. Agent = créateur de la vente (ventes, dettes), auteur de l'encaissement,
      * auteur de la dépense (charges), titulaire de la caisse (remise).
      *
-     * @param  list<array<string, mixed>>  $fiches
+     * @param  array<string, array<string, mixed>>  $remises  RemiseAgentService::parAgent()
      * @return array{lignes: list<array<string, mixed>>, totaux: array<string, mixed>}
      */
-    public function parAgent(RapportPerimetre $p, array $fiches): array
+    public function parAgent(RapportPerimetre $p, array $remises): array
     {
         $vide = ['lignes' => [], 'totaux' => $this->totauxAgents(collect())];
         if ($p->aucuneAgence()) {
@@ -232,16 +190,16 @@ class RapportActiviteService
             ->get()->keyBy(fn ($l) => $cle($l->agent_id));
 
         $charges = collect($this->charges->parAgent($p));
-        $fichesParAgent = collect($fiches)->filter(fn (array $f) => $f['caisse']['agent_id'] !== null)->groupBy(fn (array $f) => (string) $f['caisse']['agent_id']);
+        $remises = collect($remises);
 
-        $ids = collect([...$ventes->keys(), ...$encaissements->keys(), ...$dettes->keys(), ...$charges->keys(), ...$fichesParAgent->keys()])
+        $ids = collect([...$ventes->keys(), ...$encaissements->keys(), ...$dettes->keys(), ...$charges->keys(), ...$remises->keys()])
             ->map(fn ($id) => (string) $id)
             ->unique()
             ->values();
 
         $utilisateurs = User::query()->whereIn('id', $ids->filter()->all())->with(['personne', 'sites'])->get()->keyBy('id');
 
-        $lignes = $ids->map(function (string $id) use ($ventes, $encaissements, $pourAutres, $dettes, $charges, $fichesParAgent, $utilisateurs) {
+        $lignes = $ids->map(function (string $id) use ($ventes, $encaissements, $pourAutres, $dettes, $charges, $remises, $utilisateurs) {
             $parMoyen = collect($encaissements->get($id, []))
                 ->map(fn ($l) => [
                     'cle' => self::cleMoyen((string) $l->mode_paiement, $l->operateur_mobile_money),
@@ -252,8 +210,7 @@ class RapportActiviteService
                 ])
                 ->groupBy('cle')
                 ->map(fn (Collection $m) => [...$m->first(), 'montant' => round((float) $m->sum('montant'), 2), 'nombre' => (int) $m->sum('nombre')]);
-            $fichesAgent = $fichesParAgent->get($id, collect())->all();
-            $remise = self::remiseAgents($fichesAgent);
+            $remise = $remises->get($id);
             $utilisateur = $utilisateurs->get($id);
             $agences = $remise['agences'] ?? [];
             if ($agences === [] && $utilisateur !== null) {
@@ -300,7 +257,10 @@ class RapportActiviteService
             'pour_autres_agences' => $somme('pour_autres_agences'),
             'dettes_montant' => $somme('dettes_montant'),
             'charges_saisies' => $somme('charges_saisies'),
+            'charges_payees' => $somme('charges_payees'),
             'charges_en_attente' => $somme('charges_en_attente'),
+            'net_a_remettre' => round((float) $remises->sum('net_a_remettre'), 2),
+            'deja_remis' => round((float) $remises->sum('deja_remis'), 2),
             'remis' => round((float) $remises->sum('remis'), 2),
             'en_transit' => round((float) $remises->sum('en_transit'), 2),
             'reste_a_remettre' => round((float) $remises->sum('reste_a_remettre'), 2),

@@ -171,14 +171,11 @@ const agenceRemise = computed(() => {
     return agences.join(', ');
 });
 
+// Saisies = activité de l'agent ; seules les validées sont déduites de sa remise (ADR 0064).
 const detailCharges = computed(() =>
     charges.value.charges_en_attente > 0
-        ? `dont ${n(charges.value.charges_en_attente)} en attente de validation`
-        : pluriel(
-              charges.value.charges_payees_nombre,
-              'dépense validée',
-              'dépenses validées',
-          ),
+        ? `${n(charges.value.charges_payees)} validées · ${n(charges.value.charges_en_attente)} en attente`
+        : `${n(charges.value.charges_payees)} validées`,
 );
 
 interface Indicateur {
@@ -232,7 +229,7 @@ const indicateurs = computed((): Indicateur[] => {
             titre: 'Reste à remettre à mon agence',
             valeur: remise.value?.reste_a_remettre ?? 0,
             detail: remise.value
-                ? `À ce jour · ${n(remise.value.en_transit)} en transit`
+                ? `Fin de période · dont ${n(remise.value.en_transit)} en transit`
                 : 'Aucune caisse dédiée',
         });
     }
@@ -469,7 +466,7 @@ const chiffresMobileMoney = computed(() =>
 
 const chiffresCharges = computed(() => [
     {
-        libelle: 'Validées (payées)',
+        libelle: 'Validées (déduites de la remise)',
         valeur: formatGNF(charges.value.charges_payees),
     },
     {
@@ -513,9 +510,11 @@ const chiffresCharges = computed(() => [
                                     ? 'vous avez remis à votre agence'
                                     : 'chaque agent a remis à son agence'
                             }}. Un agent remet à son agence de rattachement,
-                            jamais à la trésorerie principale. « Remis » suit la
-                            période ; « En transit » et « Reste à remettre »
-                            sont des montants à ce jour.
+                            jamais à la trésorerie principale. Net à remettre =
+                            encaissé (espèces et Mobile Money) +
+                            approvisionnements reçus − charges validées ; reste
+                            = net − déjà remis, en cumul jusqu'à la fin de la
+                            période.
                         </InfoTooltip>
                     </h1>
                     <p
@@ -763,35 +762,93 @@ const chiffresCharges = computed(() => [
                             :label="remise.statut_label"
                         />
                     </div>
-                    <dl v-if="remise" :class="cn(REMISE, 'divide-y text-sm')">
+                    <!-- Calcul visible ligne à ligne (ADR 0064) : net − déjà remis = reste -->
+                    <dl
+                        v-if="remise"
+                        :class="cn(REMISE, 'divide-y text-sm')"
+                        data-testid="ma-remise-calcul"
+                    >
                         <div
-                            class="flex items-baseline justify-between gap-3 px-4 py-2.5"
+                            class="flex items-baseline justify-between gap-3 px-4 py-2"
                         >
-                            <dt>Remis sur la période</dt>
+                            <dt>
+                                Encaissé en espèces et Mobile Money
+                                <span class="text-xs text-muted-foreground"
+                                    >· depuis le
+                                    {{ dateFr(remise.depuis) }}</span
+                                >
+                            </dt>
+                            <dd class="tabular-nums">
+                                {{ n(remise.encaisse) }}
+                            </dd>
+                        </div>
+                        <div
+                            v-if="remise.approvisionnements"
+                            class="flex items-baseline justify-between gap-3 px-4 py-2"
+                        >
+                            <dt>+ Approvisionnements reçus de l'agence</dt>
+                            <dd class="tabular-nums">
+                                {{ n(remise.approvisionnements) }}
+                            </dd>
+                        </div>
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2"
+                        >
+                            <dt>− Charges validées</dt>
+                            <dd
+                                class="tabular-nums"
+                                data-testid="ma-remise-charges"
+                            >
+                                {{ n(remise.charges_validees) }}
+                            </dd>
+                        </div>
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2 font-medium"
+                        >
+                            <dt>= Montant net à remettre</dt>
+                            <dd
+                                class="tabular-nums"
+                                data-testid="ma-remise-net"
+                            >
+                                {{ n(remise.net_a_remettre) }}
+                            </dd>
+                        </div>
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2"
+                        >
+                            <dt>
+                                − Déjà remis à l'agence
+                                <span
+                                    v-if="remise.remis"
+                                    class="text-xs text-muted-foreground"
+                                    >· dont {{ n(remise.remis) }} sur la
+                                    période</span
+                                >
+                            </dt>
                             <dd
                                 class="tabular-nums"
                                 data-testid="ma-remise-remis"
                             >
-                                {{ n(remise.remis) }}
-                            </dd>
-                        </div>
-                        <div
-                            class="flex items-baseline justify-between gap-3 px-4 py-2.5"
-                        >
-                            <dt>En transit à ce jour</dt>
-                            <dd class="tabular-nums">
-                                {{ n(remise.en_transit) }}
+                                {{ n(remise.deja_remis) }}
                             </dd>
                         </div>
                         <div
                             class="flex items-baseline justify-between gap-3 px-4 py-2.5 font-semibold"
                         >
-                            <dt>Reste à remettre à ce jour</dt>
+                            <dt>= Reste à remettre</dt>
                             <dd
                                 class="tabular-nums"
                                 data-testid="ma-remise-reste"
                             >
                                 {{ n(remise.reste_a_remettre) }}
+                            </dd>
+                        </div>
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2 text-muted-foreground"
+                        >
+                            <dt>dont en transit (envoyé, non confirmé)</dt>
+                            <dd class="tabular-nums">
+                                {{ n(remise.en_transit) }}
                             </dd>
                         </div>
                     </dl>
@@ -813,9 +870,10 @@ const chiffresCharges = computed(() => [
                                 : remise
                                   ? 'Aucun versement enregistré. '
                                   : ''
-                        }}Vous remettez vos espèces et votre Orange Money à
-                        votre agence, jamais directement à la trésorerie
-                        principale.
+                        }}Cumul jusqu'à la fin de la période. Seules les charges
+                        validées sont déduites ; une remise n'est comptée qu'une
+                        fois reçue par votre agence. Vous remettez à votre
+                        agence, jamais directement à la trésorerie principale.
                     </p>
                 </section>
             </div>

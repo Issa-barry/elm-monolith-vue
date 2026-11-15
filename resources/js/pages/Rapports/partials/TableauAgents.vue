@@ -5,12 +5,13 @@ import type { LigneAgent, MoyenColonne, TotauxAgents } from '@/types/rapports';
 import { Link } from '@inertiajs/vue3';
 import { ArrowUpRight } from 'lucide-vue-next';
 import { computed } from 'vue';
-import { dateFr, pluriel } from './format';
+import { pluriel } from './format';
 import { attenue, n, REMISE, TD, TH, TOTAL_ENCAISSE } from './tableau';
 
 // Rapport d'activité : une ligne par agent, même présentation que le tableau des agences (Rapport par
 // agence). Les agents remettent à LEUR agence de rattachement (ADR 0064), jamais à la trésorerie
-// principale : « Remis » suit la période, « En transit » et « Reste à remettre » sont à ce jour.
+// principale. Activité = période choisie ; remise = cumul jusqu'à la fin de la période :
+// net à remettre (encaissé + approvisionnements − charges validées) − déjà remis = reste.
 const props = defineProps<{
     lignes: LigneAgent[];
     totaux: TotauxAgents;
@@ -66,10 +67,10 @@ const agences = (l: LigneAgent) =>
                             >
                                 Encaissements de la période
                             </th>
-                            <th scope="colgroup" colspan="2" />
+                            <th scope="colgroup" colspan="3" />
                             <th
                                 scope="colgroup"
-                                colspan="4"
+                                colspan="5"
                                 :class="
                                     cn(
                                         'border-l px-3 pt-2.5 text-left font-semibold text-foreground',
@@ -77,7 +78,10 @@ const agences = (l: LigneAgent) =>
                                     )
                                 "
                             >
-                                Remis à l'agence de rattachement
+                                Remise à l'agence de rattachement
+                                <span class="font-normal text-muted-foreground"
+                                    >· cumul à la fin de la période</span
+                                >
                             </th>
                             <th scope="col" />
                         </tr>
@@ -117,26 +121,25 @@ const agences = (l: LigneAgent) =>
                             </th>
                             <th scope="col" :class="TH">Dettes clients</th>
                             <th scope="col" :class="TH">Charges saisies</th>
-                            <th scope="col" :class="cn(TH, REMISE, 'border-l')">
-                                Remis
-                                <span class="block font-normal opacity-80"
-                                    >sur la période</span
-                                >
+                            <th scope="col" :class="TH">Charges validées</th>
+                            <th
+                                scope="col"
+                                :class="cn(TH, REMISE, 'border-l')"
+                                data-testid="entete-net"
+                            >
+                                Net à remettre
+                            </th>
+                            <th scope="col" :class="cn(TH, REMISE)">
+                                Déjà remis
                             </th>
                             <th scope="col" :class="cn(TH, REMISE)">
                                 En transit
-                                <span class="block font-normal opacity-80"
-                                    >à ce jour</span
-                                >
                             </th>
                             <th
                                 scope="col"
                                 :class="cn(TH, REMISE, 'text-foreground')"
                             >
                                 Reste à remettre
-                                <span class="block font-normal opacity-80"
-                                    >à ce jour</span
-                                >
                             </th>
                             <th
                                 scope="col"
@@ -241,6 +244,12 @@ const agences = (l: LigneAgent) =>
                                     attente</span
                                 >
                             </td>
+                            <td
+                                :class="cn(TD, attenue(l.charges_payees))"
+                                data-testid="rapport-agent-charges-validees"
+                            >
+                                {{ n(l.charges_payees) }}
+                            </td>
                             <template v-if="l.remise">
                                 <td
                                     :class="
@@ -248,19 +257,29 @@ const agences = (l: LigneAgent) =>
                                             TD,
                                             REMISE,
                                             'border-l',
-                                            attenue(l.remise.remis),
+                                            attenue(l.remise.net_a_remettre),
+                                        )
+                                    "
+                                    data-testid="rapport-agent-net"
+                                >
+                                    {{ n(l.remise.net_a_remettre) }}
+                                </td>
+                                <td
+                                    :class="
+                                        cn(
+                                            TD,
+                                            REMISE,
+                                            attenue(l.remise.deja_remis),
                                         )
                                     "
                                     data-testid="rapport-agent-remis"
                                 >
-                                    {{ n(l.remise.remis) }}
+                                    {{ n(l.remise.deja_remis) }}
                                     <span
-                                        v-if="l.remise.derniere_remise"
+                                        v-if="l.remise.remis"
                                         class="block text-xs text-muted-foreground"
-                                        >dernier envoi le
-                                        {{
-                                            dateFr(l.remise.derniere_remise)
-                                        }}</span
+                                        >dont {{ n(l.remise.remis) }} sur la
+                                        période</span
                                     >
                                 </td>
                                 <td
@@ -303,7 +322,7 @@ const agences = (l: LigneAgent) =>
                             </template>
                             <td
                                 v-else
-                                colspan="4"
+                                colspan="5"
                                 :class="
                                     cn(
                                         REMISE,
@@ -331,7 +350,7 @@ const agences = (l: LigneAgent) =>
                         </tr>
                         <tr v-if="lignes.length === 0">
                             <td
-                                :colspan="moyens.length + 11"
+                                :colspan="moyens.length + 13"
                                 class="px-4 py-10 text-center text-muted-foreground"
                             >
                                 Aucune activité d'agent sur la période.
@@ -360,9 +379,11 @@ const agences = (l: LigneAgent) =>
                             </td>
                             <td :class="TD">{{ n(totaux.dettes_montant) }}</td>
                             <td :class="TD">{{ n(totaux.charges_saisies) }}</td>
+                            <td :class="TD">{{ n(totaux.charges_payees) }}</td>
                             <td :class="cn(TD, 'border-l')">
-                                {{ n(totaux.remis) }}
+                                {{ n(totaux.net_a_remettre) }}
                             </td>
+                            <td :class="TD">{{ n(totaux.deja_remis) }}</td>
                             <td :class="TD">{{ n(totaux.en_transit) }}</td>
                             <td :class="TD">
                                 {{ n(totaux.reste_a_remettre) }}
@@ -373,11 +394,12 @@ const agences = (l: LigneAgent) =>
                 </table>
             </div>
             <p class="border-t px-4 py-2.5 text-xs text-muted-foreground">
-                Chaque agent remet à son agence de rattachement (versements de
-                caisse, transferts Mobile Money). « Remis » : réceptions
-                confirmées par l'agence pendant la période. « En transit » et «
-                Reste à remettre » : situation à ce jour. Charges saisies =
-                dépenses saisies par l'agent, validées ou en attente.
+                Chaque agent remet à son agence de rattachement. Net à remettre
+                = encaissé en espèces et Mobile Money + approvisionnements reçus
+                − charges validées, en cumul jusqu'à la fin de la période ;
+                reste = net − déjà remis (réceptions confirmées par l'agence).
+                Une remise en transit fait encore partie du reste. Seules les
+                charges validées sont déduites.
             </p>
         </section>
 
@@ -429,6 +451,10 @@ const agences = (l: LigneAgent) =>
                     <dd class="text-right tabular-nums">
                         {{ n(l.charges_saisies) }}
                     </dd>
+                    <dt class="text-muted-foreground">Charges validées</dt>
+                    <dd class="text-right tabular-nums">
+                        {{ n(l.charges_payees) }}
+                    </dd>
                 </dl>
                 <dl
                     v-if="l.remise"
@@ -439,15 +465,19 @@ const agences = (l: LigneAgent) =>
                         )
                     "
                 >
-                    <dt class="text-muted-foreground">Remis sur la période</dt>
+                    <dt class="text-muted-foreground">Net à remettre</dt>
                     <dd class="text-right tabular-nums">
-                        {{ n(l.remise.remis) }}
+                        {{ n(l.remise.net_a_remettre) }}
                     </dd>
-                    <dt class="text-muted-foreground">En transit à ce jour</dt>
+                    <dt class="text-muted-foreground">Déjà remis</dt>
+                    <dd class="text-right tabular-nums">
+                        {{ n(l.remise.deja_remis) }}
+                    </dd>
+                    <dt class="text-muted-foreground">En transit</dt>
                     <dd class="text-right tabular-nums">
                         {{ n(l.remise.en_transit) }}
                     </dd>
-                    <dt class="font-medium">Reste à remettre à ce jour</dt>
+                    <dt class="font-medium">Reste à remettre</dt>
                     <dd class="text-right font-semibold tabular-nums">
                         {{ n(l.remise.reste_a_remettre) }}
                     </dd>

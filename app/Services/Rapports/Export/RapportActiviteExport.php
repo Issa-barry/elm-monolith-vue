@@ -70,8 +70,8 @@ class RapportActiviteExport implements WithMultipleSheets
         $entetes = [
             'Agent', 'Agence de rattachement', 'Ventes (nombre)', 'Ventes',
             ...array_map(fn (array $m) => 'Encaissé '.$m['libelle'], $moyens),
-            'Total encaissé', 'Dettes clients', 'Charges saisies', 'dont en attente',
-            "Remis à l'agence (sur la période)", 'En transit (à ce jour)', 'Reste à remettre (à ce jour)', 'Statut de remise',
+            'Total encaissé', 'Dettes clients', 'Charges saisies', 'Charges validées', 'dont en attente',
+            'Net à remettre (cumul)', 'Déjà remis (cumul)', 'Remis sur la période', 'En transit', 'Reste à remettre', 'Statut de remise',
         ];
 
         $lignes = array_map(function (array $a) use ($moyens) {
@@ -80,8 +80,9 @@ class RapportActiviteExport implements WithMultipleSheets
             return [
                 $a['agent'], implode(', ', $a['agences']), $a['ventes_nombre'], $a['ventes_montant'],
                 ...array_map(fn (array $m) => $a['par_moyen'][$m['cle']]['montant'] ?? 0.0, $moyens),
-                $a['encaisse_montant'], $a['dettes_montant'], $a['charges_saisies'], $a['charges_en_attente'],
-                $r['remis'] ?? '', $r['en_transit'] ?? '', $r['reste_a_remettre'] ?? '', $r['statut_label'] ?? 'Aucune caisse dédiée',
+                $a['encaisse_montant'], $a['dettes_montant'], $a['charges_saisies'], $a['charges_payees'], $a['charges_en_attente'],
+                $r['net_a_remettre'] ?? '', $r['deja_remis'] ?? '', $r['remis'] ?? '', $r['en_transit'] ?? '', $r['reste_a_remettre'] ?? '',
+                $r['statut_label'] ?? 'Aucune caisse dédiée',
             ];
         }, $this->rapport['agents']['lignes']);
 
@@ -128,9 +129,16 @@ class RapportActiviteExport implements WithMultipleSheets
         $r = $this->rapport['remise'] ?? null;
         $lignes[] = ["Remise à l'agence de rattachement", $r === null ? 'Aucune caisse dédiée' : implode(', ', $r['agences'])];
         if ($r !== null) {
-            $lignes[] = ['  Remis sur la période (réception confirmée)', $r['remis']];
-            $lignes[] = ['  En transit (à ce jour)', $r['en_transit']];
-            $lignes[] = ['  Reste à remettre (à ce jour)', $r['reste_a_remettre']];
+            // Situation cumulée jusqu'à la fin de la période (ADR 0064) : net − déjà remis = reste.
+            $lignes[] = ['  Cumul depuis le', $r['depuis']];
+            $lignes[] = ['  Encaissé espèces + Mobile Money (cumul)', $r['encaisse']];
+            $lignes[] = ['  + Approvisionnements reçus (cumul)', $r['approvisionnements']];
+            $lignes[] = ['  − Charges validées (cumul)', $r['charges_validees']];
+            $lignes[] = ['  = Montant net à remettre', $r['net_a_remettre']];
+            $lignes[] = ['  − Déjà remis (réception confirmée)', $r['deja_remis']];
+            $lignes[] = ['  = Reste à remettre', $r['reste_a_remettre']];
+            $lignes[] = ['  dont en transit (envoyé, non confirmé)', $r['en_transit']];
+            $lignes[] = ['  Remis sur la période', $r['remis']];
             $lignes[] = ['  Statut', $r['statut_label']];
         }
         $lignes[] = ['Mobile Money — références absentes', $m['reference_absente']];

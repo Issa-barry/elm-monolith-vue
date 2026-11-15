@@ -23,17 +23,36 @@ Agence ── remises (transfert entre agences, règlement)     ──▶  trés
 ## Décision
 
 1. **Un agent remet à SON agence**, jamais à la trésorerie principale. Son agence de rattachement est
-   celle de sa caisse dédiée (et de son compte Mobile Money dédié). La remise est lue dans les vraies
-   opérations existantes — versements de caisse (`interne_caisses`) et transferts Mobile Money
-   (`transfert_mobile_money`) —, via `FicheCaisseService` (grand livre), jamais un encaissement :
-   - **remis** = versements dont l'agence a **confirmé la réception** pendant la période
-     (`recus_periode`, même définition que le « remis » d'une agence, ADR 0016) ;
-   - **en transit** = envoyés ou contestés, réception pas encore confirmée, à ce jour ;
-   - **reste à remettre** = solde à ce jour de la caisse et du compte Mobile Money (il baisse dès
-     l'envoi : jamais « encaissé − remis ») ;
-   - **statut** = la même règle que les agences, désormais unique : `RemisesAgencesService::statut()`
-     (Non remis, Remise en cours, Partiellement remis, Totalement remis, Rien à remettre) ;
-   - sans caisse ni compte Mobile Money : « Aucune caisse dédiée », jamais un zéro.
+   celle de sa caisse dédiée (et de son compte Mobile Money dédié). Calcul `RemiseAgentService`
+   (**amendé le 15/11/2026**, règle des charges validées, décisions de l'utilisateur) :
+
+   ```
+   montant net à remettre = encaissé (espèces + Mobile Money)
+                          + approvisionnements reçus de l'agence
+                          − charges VALIDÉES saisies par l'agent
+   reste à remettre       = montant net à remettre − déjà remis (réception confirmée par l'agence)
+   ```
+
+   - **Cumul jusqu'à la fin de la période choisie**, depuis la validation de la première caisse
+     dédiée ou du premier compte Mobile Money de l'agent (`valide_le`) : avant, ses encaissements
+     n'étaient pas suivis par des versements. Encaissé lundi, remis mardi → reste lundi = montant,
+     reste mardi = 0 ; un report n'est jamais perdu, jamais négatif d'un jour sur l'autre.
+   - **Encaissé** : espèces et Mobile Money dont il est l'auteur (les fonds qu'il détient) ; virement
+     et chèque vont directement à la banque de l'agence et n'entrent pas dans le net.
+   - **Charges validées seulement** : en attente, rejetées, annulées et supprimées ne sont jamais
+     déduites. **Pas de double déduction** (audit du 15/11/2026) : la validation d'une dépense crédite
+     la caisse de l'agence (571000, mapping `depense_interne_validee` / `tresorerie`), jamais le
+     sous-compte de la caisse de l'agent — son solde n'en tient pas compte, d'où la déduction ici.
+   - **Déjà remis** : versements de caisse (`interne_caisses`) et transferts Mobile Money
+     (`transfert_mobile_money`) reçus par l'agence avant la fin de la période. **En transit** :
+     envoyés ou contestés, non reçus à cette date — ils restent compris dans le reste (affichés à
+     part). **Remis sur la période** : réceptions confirmées pendant la période.
+   - **Statut** = la même règle que les agences, désormais unique : `RemisesAgencesService::statut()`
+     (Non remis, Remise en cours, Partiellement remis, Totalement remis, Rien à remettre).
+   - Sans caisse ni compte Mobile Money validé : « Aucune caisse dédiée », jamais un zéro.
+   - **Jamais appliqué au rapport par agence** : la remise d'une agence à la trésorerie principale
+     reste la règle ADR 0016 (calcul de `FinancementAgenceService`).
+   - Remplace la première version du 14/11/2026 (reste = solde de caisse à ce jour, transit exclu).
 2. **Charges saisies par l'agent** = dépenses dont il est l'auteur (`depenses.user_id`), validées
    (payées) **ou** en attente de validation, dans les agences du périmètre ; jamais les charges de son
    agence (`site_id`, rapport par agence). Un seul calcul : `ChargesRapportService` (axes agence et

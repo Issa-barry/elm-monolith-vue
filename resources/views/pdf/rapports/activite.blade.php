@@ -96,7 +96,12 @@ table.data tr:nth-child(even) td { background: #f0f0f0; }
     </tr>
 </table>
 <p class="note">Chaque bloc est calculé indépendamment : ventes = factures créées dans la période ; encaissements = paiements reçus dans la période, quelle que soit la date de la vente ; dettes clients = factures de la période encore dues. Un agent remet à son agence de rattachement
-    @if ($re) ({{ implode(', ', $re['agences']) }} — {{ $re['statut_label'] }}, en transit {{ $gnf($re['en_transit']) }} GNF) @endif ; « remis » = réceptions confirmées par l'agence pendant la période.</p>
+    @if ($re) ({{ implode(', ', $re['agences']) }} — {{ $re['statut_label'] }}) @endif ; « remis » = réceptions confirmées par l'agence pendant la période.</p>
+@if ($re)
+<p class="note"><strong>Remise à l'agence (cumul du {{ \Carbon\Carbon::parse($re['depuis'])->format('d/m/Y') }} à la fin de la période)</strong> :
+    encaissé espèces + Mobile Money {{ $gnf($re['encaisse']) }} + approvisionnements reçus {{ $gnf($re['approvisionnements']) }} − charges validées {{ $gnf($re['charges_validees']) }}
+    = net à remettre {{ $gnf($re['net_a_remettre']) }} ; − déjà remis {{ $gnf($re['deja_remis']) }} = <strong>reste à remettre {{ $gnf($re['reste_a_remettre']) }} GNF</strong>, dont {{ $gnf($re['en_transit']) }} en transit.</p>
+@endif
 
 @if ($rapport['agents'] !== null)
 <h2>Détail par agent</h2>

@@ -561,10 +561,19 @@ describe('Rapports/Activite', () => {
 });
 
 describe('Rapports/Activite — remise à l’agence, agents et charges (ADR 0064)', () => {
+    // Exemple du métier : 1 000 000 encaissés − 200 000 de charges validées = 800 000 nets ;
+    // − 500 000 déjà remis = 300 000 restants, dont 100 000 en transit.
     const remise = {
+        depuis: '2026-09-01',
+        encaisse: 1_000_000,
+        approvisionnements: 0,
+        charges_validees: 200_000,
+        net_a_remettre: 800_000,
+        deja_remis: 500_000,
         remis: 300_000,
         en_transit: 100_000,
-        reste_a_remettre: 450_000,
+        reste_a_remettre: 300_000,
+        caisse_active: true,
         agences: ['Matoto'],
         derniere_remise: '2026-09-26',
         statut: 'remise_en_cours',
@@ -658,10 +667,13 @@ describe('Rapports/Activite — remise à l’agence, agents et charges (ADR 006
                 pour_autres_agences: 0,
                 dettes_montant: 150_000,
                 charges_saisies: 250_000,
+                charges_payees: 200_000,
                 charges_en_attente: 50_000,
+                net_a_remettre: 800_000,
+                deja_remis: 500_000,
                 remis: 300_000,
                 en_transit: 100_000,
-                reste_a_remettre: 450_000,
+                reste_a_remettre: 300_000,
             },
         };
 
@@ -675,7 +687,7 @@ describe('Rapports/Activite — remise à l’agence, agents et charges (ADR 006
         const wrapper = monter('rapport', avecActivite());
         const ligne = wrapper.get('[data-testid="rapport-agent-ligne"]');
 
-        expect(wrapper.text()).toContain("Remis à l'agence de rattachement");
+        expect(wrapper.text()).toContain("Remise à l'agence de rattachement");
         expect(ligne.text()).toContain('Matoto');
         expect(
             ligne.get('[data-testid="rapport-agent-encaisse"]').text(),
@@ -684,8 +696,17 @@ describe('Rapports/Activite — remise à l’agence, agents et charges (ADR 006
             ligne.get('[data-testid="rapport-agent-charges"]').text(),
         ).toContain('dont 50 000 en attente');
         expect(
+            ligne.get('[data-testid="rapport-agent-charges-validees"]').text(),
+        ).toBe('200 000');
+        expect(ligne.get('[data-testid="rapport-agent-net"]').text()).toBe(
+            '800 000',
+        );
+        expect(
+            ligne.get('[data-testid="rapport-agent-remis"]').text(),
+        ).toContain('500 000');
+        expect(
             ligne.get('[data-testid="rapport-agent-reste"]').text(),
-        ).toContain('450 000');
+        ).toContain('300 000');
         expect(ligne.text()).toContain('Remise en cours');
         expect(
             ligne
@@ -711,12 +732,20 @@ describe('Rapports/Activite — remise à l’agence, agents et charges (ADR 006
         const maRemise = wrapper.get('[data-testid="ma-remise"]');
         expect(maRemise.text()).toContain('Remises à Matoto');
         expect(maRemise.text()).toContain('Remise en cours');
+        // Calcul visible : encaissé − charges validées = net ; net − déjà remis = reste.
+        expect(wrapper.get('[data-testid="ma-remise-charges"]').text()).toBe(
+            '200 000',
+        );
+        expect(wrapper.get('[data-testid="ma-remise-net"]').text()).toBe(
+            '800 000',
+        );
         expect(wrapper.get('[data-testid="ma-remise-remis"]').text()).toBe(
-            '300 000',
+            '500 000',
         );
         expect(wrapper.get('[data-testid="ma-remise-reste"]').text()).toBe(
-            '450 000',
+            '300 000',
         );
+        expect(maRemise.text()).toContain('en transit');
         expect(maRemise.text()).not.toContain('Trésorerie principale :');
         expect(
             wrapper.find('[data-testid="rapport-agents-tableau"]').exists(),

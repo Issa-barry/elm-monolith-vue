@@ -220,10 +220,24 @@ export interface LigneCharge {
     statut_label: string;
 }
 
+/**
+ * Remise d'un agent à son agence (RemiseAgentService, ADR 0064) — cumul jusqu'à la fin de la période :
+ * net = encaissé (espèces + Mobile Money) + approvisionnements reçus − charges validées ;
+ * reste = net − déjà remis (le transit reste compris dans le reste).
+ */
 export interface RemiseAgent {
+    /** Début du cumul : validation de la première caisse dédiée / du premier compte Mobile Money. */
+    depuis: string;
+    encaisse: number;
+    approvisionnements: number;
+    charges_validees: number;
+    net_a_remettre: number;
+    deja_remis: number;
+    /** Réceptions confirmées pendant la période. */
     remis: number;
     en_transit: number;
     reste_a_remettre: number;
+    caisse_active: boolean;
     /** Agence(s) de rattachement : agence de la caisse / du compte Mobile Money. */
     agences: string[];
     derniere_remise: string | null;
@@ -254,7 +268,10 @@ export interface TotauxAgents {
     pour_autres_agences: number;
     dettes_montant: number;
     charges_saisies: number;
+    charges_payees: number;
     charges_en_attente: number;
+    net_a_remettre: number;
+    deja_remis: number;
     remis: number;
     en_transit: number;
     reste_a_remettre: number;
