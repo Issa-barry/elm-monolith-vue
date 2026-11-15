@@ -1,32 +1,41 @@
 <script setup lang="ts">
-import DetailHeader from '@/components/DetailHeader.vue';
 import InfoTooltip from '@/components/InfoTooltip.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatPhoneDisplay } from '@/lib/utils';
+import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     Briefcase,
     Crown,
     History,
+    KeyRound,
     Loader2,
     LogOut,
+    Mail,
     Pencil,
+    Phone,
     Plus,
     RotateCcw,
     ShieldCheck,
     UserRound,
-    Warehouse,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import { computed, ref } from 'vue';
+import {
+    CARTE_FICHE,
+    ENTETE_CARTE_FICHE,
+    TITRE_CARTE_FICHE,
+} from './partials/carteFiche';
 import PrimesSalarie, {
     type Affectation,
     type PrimesOptions,
 } from './partials/PrimesSalarie.vue';
+import RemunerationSalarie, {
+    type Remuneration,
+} from './partials/RemunerationSalarie.vue';
 
 interface ContratRow {
     id: string;
@@ -88,7 +97,12 @@ interface EmployeData {
         paiement_numero_compte: string | null;
         paiement_titulaire: string | null;
     } | null;
-    contrat_actif: { type_contrat: string; type_contrat_label: string } | null;
+    contrat_actif: {
+        type_contrat: string;
+        type_contrat_label: string;
+        date_debut: string | null;
+        date_fin: string | null;
+    } | null;
     contrats: ContratRow[];
     affectations: AffectationRow[];
     compte: CompteInfo | null;
@@ -107,6 +121,8 @@ const props = defineProps<{
     // null sans la permission rh-affectations-remuneration.read (jamais envoyé)
     primes: Affectation[] | null;
     primes_options: PrimesOptions | null;
+    // null sans rh-remunerations.read ET la lecture des primes (jamais envoyé)
+    remuneration?: Remuneration | null;
 }>();
 
 const { can } = usePermissions();
@@ -117,22 +133,32 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.employe.nom_complet, href: '#' },
 ];
 
-const STATUT_DOT: Record<string, string> = {
-    actif: 'bg-emerald-500',
-    suspendu: 'bg-amber-400',
-    sorti: 'bg-zinc-400 dark:bg-zinc-500',
-};
-
-const COMPTE_STATUT_DOT: Record<string, string> = {
-    actif: 'bg-emerald-500',
-    inactif: 'bg-zinc-400 dark:bg-zinc-500',
-    pending_validation: 'bg-amber-400',
-};
-
+// Type de contrat = catégorie (pas un statut) : fond coloré autorisé.
 const TYPE_CONTRAT_CLASS: Record<string, string> = {
     cdi: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
     cdd: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
+
+const initiales = computed(() =>
+    props.employe.nom_complet
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((mot) => mot[0]?.toUpperCase() ?? '')
+        .join(''),
+);
+
+const peutCreerContrat = computed(
+    () =>
+        can('rh-contrats.create') &&
+        !props.employe.contrat_actif &&
+        props.employe.statut !== 'sorti' &&
+        props.employe.dans_perimetre_ecriture,
+);
+
+const peutModifierContrat = computed(
+    () => can('rh-contrats.update') && props.employe.dans_perimetre_ecriture,
+);
 
 // Départ du salarié (docs/rh-depart-salarie.md)
 const aujourdhui = new Date().toLocaleDateString('en-CA');
@@ -192,239 +218,446 @@ function dateFr(iso: string | null): string {
         ><title>{{ employe.nom_complet }}</title></Head
     >
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="w-full space-y-6 p-4 sm:p-6">
-            <DetailHeader
-                eyebrow="Employé"
-                :title="employe.nom_complet"
-                :icon="UserRound"
-                :status-label="employe.statut_label"
-                :status-dot-class="STATUT_DOT[employe.statut] ?? 'bg-zinc-400'"
+        <div class="@container w-full space-y-6 p-4 sm:p-6">
+            <!-- ─── En-tête : identité, poste, actions ─── -->
+            <section
+                class="rounded-2xl border border-border/60 bg-muted/25 px-5 py-6 sm:px-8 sm:py-7"
+                data-testid="employe-entete"
             >
-                <template #subtitle>
-                    <div
-                        class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
-                    >
-                        <span
-                            v-if="employe.matricule"
-                            class="rounded bg-muted px-2 py-0.5 font-mono text-xs"
-                            >{{ employe.matricule }}</span
+                <div
+                    class="flex flex-col gap-5 @[56rem]:flex-row @[56rem]:items-start @[56rem]:justify-between"
+                >
+                    <div class="flex min-w-0 items-start gap-4">
+                        <div
+                            class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary text-xl font-semibold text-primary-foreground"
+                            aria-hidden="true"
                         >
-                        <span aria-hidden="true">·</span>
-                        <span>{{ employe.type_employe_label }}</span>
-                        <template v-if="employe.est_pdg">
-                            <span aria-hidden="true">·</span>
-                            <span
-                                class="inline-flex items-center gap-1 font-medium text-foreground"
-                                data-testid="badge-pdg"
-                                ><Crown class="h-3.5 w-3.5" />PDG de
-                                l’organisation (signataire des contrats)</span
+                            {{ initiales }}
+                        </div>
+                        <div class="min-w-0">
+                            <p
+                                class="text-xs font-medium tracking-widest text-muted-foreground uppercase"
                             >
-                        </template>
+                                Employé
+                            </p>
+                            <div
+                                class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1"
+                            >
+                                <h1
+                                    class="text-[1.75rem] leading-tight font-semibold tracking-tight break-words"
+                                >
+                                    {{ employe.nom_complet }}
+                                </h1>
+                                <StatusDot
+                                    :status="employe.statut"
+                                    :label="employe.statut_label"
+                                    class="text-sm text-muted-foreground"
+                                />
+                            </div>
+                            <p
+                                class="mt-1 text-sm font-medium text-foreground/80"
+                            >
+                                {{
+                                    employe.fonction_libelle ?? 'Sans fonction'
+                                }}
+                                <span class="text-muted-foreground">
+                                    · {{ employe.site ?? 'Sans agence' }}</span
+                                >
+                            </p>
+                            <div
+                                class="mt-3 flex flex-wrap items-center gap-2 text-xs"
+                            >
+                                <span
+                                    v-if="employe.matricule"
+                                    class="rounded-md border bg-background px-2 py-0.5 font-mono"
+                                    title="Matricule"
+                                    >{{ employe.matricule }}</span
+                                >
+                                <span
+                                    class="rounded-md border bg-background px-2 py-0.5 text-muted-foreground"
+                                    >{{ employe.type_employe_label }}</span
+                                >
+                                <span
+                                    v-if="employe.est_pdg"
+                                    class="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-0.5 font-medium"
+                                    data-testid="badge-pdg"
+                                    ><Crown class="h-3.5 w-3.5" />PDG de
+                                    l’organisation (signataire des
+                                    contrats)</span
+                                >
+                            </div>
+                        </div>
                     </div>
-                </template>
-                <template #actions>
-                    <Button
-                        v-if="employe.peut_designer_pdg && !employe.est_pdg"
-                        variant="outline"
-                        size="sm"
-                        data-testid="designer-pdg"
-                        @click="pdgOuvert = true"
+
+                    <div
+                        class="grid grid-cols-2 gap-2 @[40rem]:flex @[40rem]:flex-wrap @[56rem]:justify-end"
                     >
-                        <Crown class="mr-1.5 h-4 w-4" />
-                        Désigner comme PDG
-                    </Button>
-                    <Link
-                        v-if="
-                            can('rh-contrats.create') &&
-                            !employe.contrat_actif &&
-                            employe.statut !== 'sorti' &&
-                            employe.dans_perimetre_ecriture
-                        "
-                        :href="`/backoffice/contrats/create?employe_id=${employe.id}`"
-                    >
-                        <Button variant="outline" size="sm">
-                            <Plus class="mr-1.5 h-4 w-4" />
-                            Nouveau contrat
+                        <Button
+                            v-if="employe.peut_designer_pdg && !employe.est_pdg"
+                            variant="outline"
+                            size="sm"
+                            class="h-9 bg-background"
+                            data-testid="designer-pdg"
+                            @click="pdgOuvert = true"
+                        >
+                            <Crown class="mr-1.5 h-4 w-4" />
+                            Désigner comme PDG
                         </Button>
-                    </Link>
-                    <Button
-                        v-if="
-                            employe.peut_gerer_depart &&
-                            employe.statut !== 'sorti'
-                        "
-                        variant="outline"
-                        size="sm"
-                        data-testid="enregistrer-depart"
-                        @click="departOuvert = true"
-                    >
-                        <LogOut class="mr-1.5 h-4 w-4" />
-                        Enregistrer le départ
-                    </Button>
-                    <Button
-                        v-if="
-                            employe.peut_gerer_depart &&
-                            employe.statut === 'sorti'
-                        "
-                        variant="outline"
-                        size="sm"
-                        data-testid="annuler-depart"
-                        @click="annulationOuverte = true"
-                    >
-                        <RotateCcw class="mr-1.5 h-4 w-4" />
-                        Annuler le départ
-                    </Button>
-                    <Link
-                        v-if="
-                            can('rh-employes.update') &&
-                            employe.dans_perimetre_ecriture
-                        "
-                        :href="`/backoffice/employes/${employe.id}/edit`"
-                    >
-                        <Button size="sm">
-                            <Pencil class="mr-1.5 h-4 w-4" />
-                            Modifier
+                        <Button
+                            v-if="
+                                employe.peut_gerer_depart &&
+                                employe.statut !== 'sorti'
+                            "
+                            variant="outline"
+                            size="sm"
+                            class="h-9 bg-background"
+                            data-testid="enregistrer-depart"
+                            @click="departOuvert = true"
+                        >
+                            <LogOut class="mr-1.5 h-4 w-4" />
+                            Enregistrer le départ
                         </Button>
-                    </Link>
-                </template>
-            </DetailHeader>
-
-            <div class="grid gap-6 lg:grid-cols-2">
-                <!-- ── Colonne gauche : identité, fonction/site, compte, commission ── -->
-                <div class="space-y-6">
-                    <!-- Informations -->
-                    <div class="overflow-hidden rounded-xl border bg-card">
-                        <div class="border-b px-5 py-4">
-                            <h3
-                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                            >
-                                Informations
-                            </h3>
-                        </div>
-                        <dl class="grid grid-cols-2 gap-4 p-5 text-sm">
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Email
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ employe.email ?? '—' }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Téléphone
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{
-                                        employe.telephone
-                                            ? formatPhoneDisplay(
-                                                  employe.telephone,
-                                              )
-                                            : '—'
-                                    }}
-                                </dd>
-                            </div>
-                        </dl>
+                        <Button
+                            v-if="
+                                employe.peut_gerer_depart &&
+                                employe.statut === 'sorti'
+                            "
+                            variant="outline"
+                            size="sm"
+                            class="h-9 bg-background"
+                            data-testid="annuler-depart"
+                            @click="annulationOuverte = true"
+                        >
+                            <RotateCcw class="mr-1.5 h-4 w-4" />
+                            Annuler le départ
+                        </Button>
+                        <Link
+                            v-if="
+                                can('rh-employes.update') &&
+                                employe.dans_perimetre_ecriture
+                            "
+                            :href="`/backoffice/employes/${employe.id}/edit`"
+                        >
+                            <Button size="sm" class="h-9 w-full">
+                                <Pencil class="mr-1.5 h-4 w-4" />
+                                Modifier
+                            </Button>
+                        </Link>
                     </div>
+                </div>
 
-                    <!-- Fonction RH & Site actuel -->
-                    <div class="overflow-hidden rounded-xl border bg-card">
-                        <div class="border-b px-5 py-4">
-                            <h3
-                                class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                <!-- Repères du poste : lus d'un coup d'œil, sans ouvrir de bloc -->
+                <dl
+                    class="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border/60 pt-5 text-sm @[48rem]:grid-cols-4"
+                >
+                    <div class="min-w-0">
+                        <dt class="text-xs text-muted-foreground">
+                            Contrat en cours
+                        </dt>
+                        <dd class="mt-0.5 font-medium">
+                            <template v-if="employe.contrat_actif">
+                                {{ employe.contrat_actif.type_contrat_label }}
+                                <span class="font-normal text-muted-foreground"
+                                    >depuis le
+                                    {{ employe.contrat_actif.date_debut }}</span
+                                >
+                            </template>
+                            <span v-else class="text-muted-foreground"
+                                >Aucun</span
                             >
-                                <Warehouse class="h-4 w-4" />
-                                Fonction & site actuel
-                            </h3>
-                        </div>
-                        <dl class="grid grid-cols-2 gap-4 p-5 text-sm">
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Fonction RH
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ employe.fonction_libelle ?? '—' }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Site
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ employe.site ?? '—' }}
-                                </dd>
-                            </div>
-                        </dl>
+                        </dd>
                     </div>
+                    <div class="min-w-0">
+                        <dt class="text-xs text-muted-foreground">
+                            Date d'embauche
+                        </dt>
+                        <dd class="mt-0.5 font-medium">
+                            {{ employe.date_embauche ?? '—' }}
+                        </dd>
+                    </div>
+                    <div class="min-w-0">
+                        <dt class="text-xs text-muted-foreground">Service</dt>
+                        <dd class="mt-0.5 font-medium break-words">
+                            {{ employe.service_libelle ?? '—' }}
+                        </dd>
+                    </div>
+                    <div class="min-w-0">
+                        <dt class="text-xs text-muted-foreground">
+                            Coordonnées
+                        </dt>
+                        <dd class="mt-0.5 space-y-0.5 font-medium">
+                            <p class="flex items-center gap-1.5">
+                                <Phone
+                                    class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                />
+                                {{
+                                    employe.telephone
+                                        ? formatPhoneDisplay(employe.telephone)
+                                        : '—'
+                                }}
+                            </p>
+                            <p class="flex min-w-0 items-center gap-1.5">
+                                <Mail
+                                    class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                />
+                                <span
+                                    class="truncate"
+                                    :title="employe.email ?? ''"
+                                    >{{ employe.email ?? '—' }}</span
+                                >
+                            </p>
+                        </dd>
+                    </div>
+                </dl>
+            </section>
 
-                    <!-- Dossier -->
-                    <div class="overflow-hidden rounded-xl border bg-card">
-                        <div class="border-b px-5 py-4">
-                            <h3
-                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+            <div
+                class="grid items-start gap-6 @[64rem]:grid-cols-[minmax(0,1fr)_22rem] @[80rem]:grid-cols-[minmax(0,1fr)_26rem]"
+            >
+                <!-- ─── Colonne principale : rémunération, contrats, primes, affectations ─── -->
+                <div class="min-w-0 space-y-6">
+                    <RemunerationSalarie
+                        v-if="remuneration"
+                        :remuneration="remuneration"
+                        class="@container"
+                    />
+
+                    <section
+                        :class="CARTE_FICHE"
+                        data-testid="employe-contrats"
+                    >
+                        <div :class="ENTETE_CARTE_FICHE">
+                            <h2 :class="TITRE_CARTE_FICHE">
+                                <Briefcase
+                                    class="h-4 w-4 text-muted-foreground"
+                                />
+                                Contrats
+                                <span
+                                    v-if="employe.contrats.length > 0"
+                                    class="text-sm font-normal text-muted-foreground"
+                                    >({{ employe.contrats.length }})</span
+                                >
+                            </h2>
+                            <Link
+                                v-if="peutCreerContrat"
+                                :href="`/backoffice/contrats/create?employe_id=${employe.id}`"
                             >
-                                Dossier
-                            </h3>
+                                <Button size="sm" data-testid="nouveau-contrat">
+                                    <Plus class="mr-1.5 h-4 w-4" />
+                                    Nouveau contrat
+                                </Button>
+                            </Link>
                         </div>
-                        <dl class="grid grid-cols-2 gap-4 p-5 text-sm">
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Service
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ employe.service_libelle ?? '—' }}
+                        <p
+                            v-if="employe.statut === 'sorti'"
+                            class="border-b bg-muted/40 px-5 py-3 text-xs text-muted-foreground sm:px-6"
+                            data-testid="reembauche-non-definie"
+                        >
+                            Salarié sorti : aucun nouveau contrat ne peut lui
+                            être créé tant qu'une procédure de réembauche n'est
+                            pas définie. « Annuler le départ » reste possible si
+                            le départ a été enregistré par erreur.
+                        </p>
+                        <div
+                            v-if="employe.contrats.length === 0"
+                            class="p-8 text-center text-sm text-muted-foreground"
+                        >
+                            Aucun contrat enregistré.
+                        </div>
+                        <ul v-else class="divide-y">
+                            <li
+                                v-for="c in employe.contrats"
+                                :key="c.id"
+                                class="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 sm:px-6"
+                            >
+                                <div class="min-w-0 flex-1 space-y-1">
+                                    <div
+                                        class="flex flex-wrap items-center gap-2"
+                                    >
+                                        <span
+                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                                            :class="
+                                                TYPE_CONTRAT_CLASS[
+                                                    c.type_contrat
+                                                ] ?? 'bg-muted'
+                                            "
+                                        >
+                                            {{ c.type_contrat_label }}
+                                        </span>
+                                        <StatusDot
+                                            :status="c.statut_contrat"
+                                            :label="c.statut_contrat_label"
+                                        />
+                                    </div>
+                                    <p class="text-sm text-muted-foreground">
+                                        Du
+                                        <span class="text-foreground">{{
+                                            c.date_debut
+                                        }}</span>
+                                        <template v-if="c.date_fin">
+                                            au
+                                            <span class="text-foreground">{{
+                                                c.date_fin
+                                            }}</span></template
+                                        >
+                                        <template v-else>
+                                            · durée indéterminée</template
+                                        >
+                                    </p>
+                                </div>
+                                <!-- Salaire : transmis seulement avec rh-remunerations.read -->
+                                <div v-if="c.salaire_base" class="text-right">
+                                    <p class="text-xs text-muted-foreground">
+                                        Salaire de base
+                                    </p>
+                                    <p
+                                        class="font-semibold whitespace-nowrap tabular-nums"
+                                    >
+                                        {{ formatGNF(Number(c.salaire_base)) }}
+                                    </p>
+                                </div>
+                                <Link
+                                    v-if="peutModifierContrat"
+                                    :href="`/backoffice/contrats/${c.id}/edit`"
+                                    :aria-label="`Modifier le contrat ${c.type_contrat_label}`"
+                                    title="Modifier le contrat"
+                                >
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        class="h-8 w-8"
+                                    >
+                                        <Pencil class="h-3.5 w-3.5" />
+                                    </Button>
+                                </Link>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <!-- Primes et avantages : transmis seulement avec rh-affectations-remuneration.read -->
+                    <PrimesSalarie
+                        v-if="primes !== null && primes_options !== null"
+                        :key="employe.id"
+                        :employe-id="employe.id"
+                        :primes="primes"
+                        :options="primes_options"
+                    />
+
+                    <section
+                        v-if="employe.affectations.length > 0"
+                        :class="CARTE_FICHE"
+                        data-testid="employe-affectations"
+                    >
+                        <div :class="ENTETE_CARTE_FICHE">
+                            <h2 :class="TITRE_CARTE_FICHE">
+                                <History
+                                    class="h-4 w-4 text-muted-foreground"
+                                />
+                                Historique d'affectation
+                            </h2>
+                        </div>
+                        <ol class="space-y-0 px-5 py-4 sm:px-6">
+                            <li
+                                v-for="(a, i) in employe.affectations"
+                                :key="a.id"
+                                class="relative flex gap-4 pb-5 last:pb-0"
+                            >
+                                <span
+                                    v-if="i < employe.affectations.length - 1"
+                                    class="absolute top-4 left-[5px] h-full w-px bg-border"
+                                    aria-hidden="true"
+                                />
+                                <span
+                                    class="relative mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full border-2"
+                                    :class="
+                                        a.active
+                                            ? 'border-primary bg-primary'
+                                            : 'border-border bg-background'
+                                    "
+                                    aria-hidden="true"
+                                />
+                                <div
+                                    class="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-1 text-sm"
+                                >
+                                    <div class="min-w-0">
+                                        <p class="font-medium">
+                                            {{ a.site ?? '—' }}
+                                            <span
+                                                v-if="a.fonction_libelle"
+                                                class="font-normal text-muted-foreground"
+                                                >—
+                                                {{ a.fonction_libelle }}</span
+                                            >
+                                        </p>
+                                        <p
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Du {{ a.debut_at }}
+                                            <template v-if="a.fin_at">
+                                                au {{ a.fin_at }}</template
+                                            >
+                                        </p>
+                                    </div>
+                                    <StatusDot
+                                        v-if="a.active"
+                                        status="en_cours"
+                                        label="En cours"
+                                        size="sm"
+                                    />
+                                </div>
+                            </li>
+                        </ol>
+                    </section>
+                </div>
+
+                <!-- ─── Colonne latérale : dossier personnel, données sensibles, compte ─── -->
+                <aside class="min-w-0 space-y-6">
+                    <section :class="CARTE_FICHE" data-testid="employe-dossier">
+                        <div :class="ENTETE_CARTE_FICHE">
+                            <h2 :class="TITRE_CARTE_FICHE">
+                                <UserRound
+                                    class="h-4 w-4 text-muted-foreground"
+                                />
+                                Informations personnelles
+                            </h2>
+                        </div>
+                        <dl class="divide-y px-5 text-sm sm:px-6">
+                            <div
+                                class="flex items-start justify-between gap-4 py-3"
+                            >
+                                <dt class="text-muted-foreground">Civilité</dt>
+                                <dd class="text-right font-medium">
+                                    {{ employe.civilite_label ?? '—' }}
                                 </dd>
                             </div>
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Date d'embauche
+                            <div
+                                class="flex items-start justify-between gap-4 py-3"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Nationalité
                                 </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ employe.date_embauche ?? '—' }}
+                                <dd class="text-right font-medium">
+                                    {{ employe.nationalite ?? '—' }}
                                 </dd>
                             </div>
-                            <div v-if="employe.date_sortie">
-                                <dt class="text-xs text-muted-foreground">
-                                    Date de sortie
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ dateFr(employe.date_sortie) }}
-                                </dd>
-                            </div>
-                            <div v-if="employe.motif_sortie">
-                                <dt class="text-xs text-muted-foreground">
-                                    Motif de sortie
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ employe.motif_sortie }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Naissance
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
+                            <div
+                                class="flex items-start justify-between gap-4 py-3"
+                            >
+                                <dt class="text-muted-foreground">Naissance</dt>
+                                <dd class="text-right font-medium">
                                     {{ dateFr(employe.date_naissance) }}
                                     <span
                                         v-if="employe.lieu_naissance"
-                                        class="font-normal text-muted-foreground"
+                                        class="block text-xs font-normal text-muted-foreground"
                                         >à {{ employe.lieu_naissance }}</span
                                     >
                                 </dd>
                             </div>
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Civilité · nationalité
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ employe.civilite_label ?? '—' }}
-                                    · {{ employe.nationalite ?? '—' }}
-                                </dd>
-                            </div>
-                            <div class="col-span-2">
-                                <dt class="text-xs text-muted-foreground">
+                            <div class="py-3">
+                                <dt class="text-muted-foreground">
                                     Contact d'urgence
                                 </dt>
-                                <dd class="mt-0.5 font-medium">
+                                <dd class="mt-1 font-medium">
                                     <template
                                         v-if="employe.contact_urgence_nom"
                                     >
@@ -440,38 +673,61 @@ function dateFr(iso: string | null): string {
                                             v-if="
                                                 employe.contact_urgence_telephone
                                             "
+                                            class="mt-0.5 flex items-center gap-1.5 font-normal text-muted-foreground"
                                         >
-                                            ·
+                                            <Phone class="h-3.5 w-3.5" />
                                             {{
-                                                employe.contact_urgence_telephone
+                                                formatPhoneDisplay(
+                                                    employe.contact_urgence_telephone,
+                                                )
                                             }}</span
                                         >
                                     </template>
                                     <template v-else>—</template>
                                 </dd>
                             </div>
+                            <div
+                                v-if="employe.date_sortie"
+                                class="flex items-start justify-between gap-4 py-3"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Date de sortie
+                                </dt>
+                                <dd class="text-right font-medium">
+                                    {{ dateFr(employe.date_sortie) }}
+                                </dd>
+                            </div>
+                            <div v-if="employe.motif_sortie" class="py-3">
+                                <dt class="text-muted-foreground">
+                                    Motif de sortie
+                                </dt>
+                                <dd class="mt-1 font-medium">
+                                    {{ employe.motif_sortie }}
+                                </dd>
+                            </div>
                         </dl>
-                    </div>
+                    </section>
 
                     <!-- Données sensibles : envoyées par le serveur seulement avec la permission -->
-                    <div
+                    <section
                         v-if="employe.donnees_sensibles"
-                        class="overflow-hidden rounded-xl border bg-card"
+                        :class="CARTE_FICHE"
                         data-testid="employe-donnees-sensibles"
                     >
-                        <div class="border-b px-5 py-4">
-                            <h3
-                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                            >
+                        <div :class="ENTETE_CARTE_FICHE">
+                            <h2 :class="TITRE_CARTE_FICHE">
+                                <KeyRound
+                                    class="h-4 w-4 text-muted-foreground"
+                                />
                                 Données sensibles
-                            </h3>
+                            </h2>
                         </div>
-                        <dl class="grid grid-cols-2 gap-4 p-5 text-sm">
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    N° CNSS
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
+                        <dl class="divide-y px-5 text-sm sm:px-6">
+                            <div
+                                class="flex items-start justify-between gap-4 py-3"
+                            >
+                                <dt class="text-muted-foreground">N° CNSS</dt>
+                                <dd class="text-right font-medium">
                                     {{
                                         employe.donnees_sensibles.numero_cnss ??
                                         '—'
@@ -484,11 +740,12 @@ function dateFr(iso: string | null): string {
                                     employe.donnees_sensibles
                                         .paiement_mode_label
                                 "
+                                class="py-3"
                             >
-                                <dt class="text-xs text-muted-foreground">
+                                <dt class="text-muted-foreground">
                                     Paiement du salaire (ancienne saisie)
                                 </dt>
-                                <dd class="mt-0.5 font-medium">
+                                <dd class="mt-1 font-medium break-words">
                                     {{
                                         employe.donnees_sensibles
                                             .paiement_mode_label
@@ -517,12 +774,12 @@ function dateFr(iso: string | null): string {
                                         .paiement_mode_label &&
                                     employe.donnees_sensibles.paiement_titulaire
                                 "
-                                class="col-span-2"
+                                class="flex items-start justify-between gap-4 py-3"
                             >
-                                <dt class="text-xs text-muted-foreground">
+                                <dt class="text-muted-foreground">
                                     Titulaire du compte
                                 </dt>
-                                <dd class="mt-0.5 font-medium">
+                                <dd class="text-right font-medium">
                                     {{
                                         employe.donnees_sensibles
                                             .paiement_titulaire
@@ -530,207 +787,57 @@ function dateFr(iso: string | null): string {
                                 </dd>
                             </div>
                         </dl>
-                    </div>
+                    </section>
 
                     <!-- Compte utilisateur & profil d'accès -->
-                    <div class="overflow-hidden rounded-xl border bg-card">
-                        <div class="border-b px-5 py-4">
-                            <h3
-                                class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                            >
-                                <ShieldCheck class="h-4 w-4" />
+                    <section :class="CARTE_FICHE" data-testid="employe-compte">
+                        <div :class="ENTETE_CARTE_FICHE">
+                            <h2 :class="TITRE_CARTE_FICHE">
+                                <ShieldCheck
+                                    class="h-4 w-4 text-muted-foreground"
+                                />
                                 Compte & profil d'accès
-                            </h3>
+                            </h2>
                         </div>
-                        <div
+                        <p
                             v-if="!employe.compte"
-                            class="p-5 text-sm text-muted-foreground"
+                            class="px-5 py-4 text-sm text-muted-foreground sm:px-6"
                         >
                             Aucun compte applicatif rattaché à cet employé.
-                        </div>
-                        <dl v-else class="grid grid-cols-2 gap-4 p-5 text-sm">
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Email de connexion
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ employe.compte.email }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Profil d'accès
-                                </dt>
-                                <dd class="mt-0.5 font-medium">
-                                    {{ employe.compte.role_label ?? '—' }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="text-xs text-muted-foreground">
-                                    Statut du compte
-                                </dt>
-                                <dd class="mt-0.5">
+                        </p>
+                        <dl v-else class="divide-y px-5 text-sm sm:px-6">
+                            <div
+                                class="flex items-start justify-between gap-4 py-3"
+                            >
+                                <dt class="text-muted-foreground">Statut</dt>
+                                <dd>
                                     <StatusDot
+                                        :status="employe.compte.statut"
                                         :label="employe.compte.statut_label"
-                                        :dot-class="
-                                            COMPTE_STATUT_DOT[
-                                                employe.compte.statut
-                                            ] ?? 'bg-zinc-400'
-                                        "
                                     />
                                 </dd>
                             </div>
+                            <div
+                                class="flex items-start justify-between gap-4 py-3"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Profil d'accès
+                                </dt>
+                                <dd class="text-right font-medium">
+                                    {{ employe.compte.role_label ?? '—' }}
+                                </dd>
+                            </div>
+                            <div class="py-3">
+                                <dt class="text-muted-foreground">
+                                    Email de connexion
+                                </dt>
+                                <dd class="mt-1 font-medium break-all">
+                                    {{ employe.compte.email }}
+                                </dd>
+                            </div>
                         </dl>
-                    </div>
-                </div>
-
-                <!-- ── Colonne droite : contrats + historique d'affectation ── -->
-                <div class="space-y-6">
-                    <div class="overflow-hidden rounded-xl border bg-card">
-                        <div
-                            class="flex items-center justify-between gap-4 border-b px-5 py-4"
-                        >
-                            <h3
-                                class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                            >
-                                <Briefcase class="h-4 w-4" />
-                                Contrats
-                            </h3>
-                        </div>
-                        <p
-                            v-if="employe.statut === 'sorti'"
-                            class="border-b bg-muted/40 px-5 py-3 text-xs text-muted-foreground"
-                            data-testid="reembauche-non-definie"
-                        >
-                            Salarié sorti : aucun nouveau contrat ne peut lui
-                            être créé tant qu'une procédure de réembauche n'est
-                            pas définie. « Annuler le départ » reste possible si
-                            le départ a été enregistré par erreur.
-                        </p>
-                        <div
-                            v-if="employe.contrats.length === 0"
-                            class="p-8 text-center text-sm text-muted-foreground"
-                        >
-                            Aucun contrat enregistré.
-                        </div>
-                        <div v-else class="divide-y">
-                            <div
-                                v-for="c in employe.contrats"
-                                :key="c.id"
-                                class="flex items-center justify-between gap-3 p-4"
-                            >
-                                <div class="space-y-1">
-                                    <div class="flex items-center gap-2">
-                                        <span
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                            :class="
-                                                TYPE_CONTRAT_CLASS[
-                                                    c.type_contrat
-                                                ]
-                                            "
-                                        >
-                                            {{ c.type_contrat_label }}
-                                        </span>
-                                        <StatusDot
-                                            :status="c.statut_contrat"
-                                            :label="c.statut_contrat_label"
-                                        />
-                                    </div>
-                                    <p class="text-xs text-muted-foreground">
-                                        Du {{ c.date_debut }}
-                                        <template v-if="c.date_fin">
-                                            au {{ c.date_fin }}</template
-                                        >
-                                        <template v-else>
-                                            (indéterminé)</template
-                                        >
-                                    </p>
-                                    <!-- Salaire : transmis seulement avec rh-remunerations.read -->
-                                    <p
-                                        v-if="c.salaire_base"
-                                        class="text-xs text-muted-foreground"
-                                    >
-                                        Salaire de base :
-                                        {{
-                                            Number(
-                                                c.salaire_base,
-                                            ).toLocaleString('fr-FR')
-                                        }}
-                                        GNF
-                                    </p>
-                                </div>
-                                <Link
-                                    v-if="
-                                        can('rh-contrats.update') &&
-                                        employe.dans_perimetre_ecriture
-                                    "
-                                    :href="`/backoffice/contrats/${c.id}/edit`"
-                                >
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        class="h-8 w-8"
-                                    >
-                                        <Pencil class="h-3.5 w-3.5" />
-                                    </Button>
-                                </Link>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Primes et avantages : transmis seulement avec rh-affectations-remuneration.read -->
-                    <PrimesSalarie
-                        v-if="primes !== null && primes_options !== null"
-                        :key="employe.id"
-                        :employe-id="employe.id"
-                        :primes="primes"
-                        :options="primes_options"
-                    />
-
-                    <div
-                        v-if="employe.affectations.length > 0"
-                        class="overflow-hidden rounded-xl border bg-card"
-                    >
-                        <div class="border-b px-5 py-4">
-                            <h3
-                                class="flex items-center gap-2 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                            >
-                                <History class="h-4 w-4" />
-                                Historique d'affectation
-                            </h3>
-                        </div>
-                        <div class="divide-y">
-                            <div
-                                v-for="a in employe.affectations"
-                                :key="a.id"
-                                class="flex items-center justify-between gap-3 p-4 text-sm"
-                            >
-                                <div>
-                                    <p class="font-medium">
-                                        {{ a.site ?? '—' }}
-                                        <span
-                                            v-if="a.fonction_libelle"
-                                            class="font-normal text-muted-foreground"
-                                            >— {{ a.fonction_libelle }}</span
-                                        >
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        Du {{ a.debut_at }}
-                                        <template v-if="a.fin_at">
-                                            au {{ a.fin_at }}</template
-                                        >
-                                        <template v-else> (en cours)</template>
-                                    </p>
-                                </div>
-                                <span
-                                    v-if="a.active"
-                                    class="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-medium text-white"
-                                    >Actif</span
-                                >
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    </section>
+                </aside>
             </div>
         </div>
 
@@ -739,7 +846,7 @@ function dateFr(iso: string | null): string {
             modal
             :closable="!depart.processing"
             header="Enregistrer le départ"
-            :style="{ width: '30rem' }"
+            :style="{ width: 'min(30rem, 95vw)' }"
             @update:visible="
                 (v: boolean) => {
                     if (!v && !depart.processing) departOuvert = false;
@@ -836,7 +943,7 @@ function dateFr(iso: string | null): string {
             modal
             :closable="!annulation.processing"
             header="Annuler le départ"
-            :style="{ width: '28rem' }"
+            :style="{ width: 'min(28rem, 95vw)' }"
             @update:visible="
                 (v: boolean) => {
                     if (!v && !annulation.processing) annulationOuverte = false;
@@ -884,7 +991,7 @@ function dateFr(iso: string | null): string {
             modal
             :closable="!designationPdg.processing"
             header="Désigner comme PDG"
-            :style="{ width: '28rem' }"
+            :style="{ width: 'min(28rem, 95vw)' }"
             @update:visible="
                 (v: boolean) => {
                     if (!v && !designationPdg.processing) pdgOuvert = false;

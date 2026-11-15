@@ -210,9 +210,12 @@ reçu les fonds, comme aujourd'hui (`MouvementFondsService::recevoir()`, policy
 | Données incomplètes | position non fiable (lot 1) |
 | Remise en cours | au moins une remise en transit |
 | Partiellement remis | reçu sur la période > 0 et à remettre > 0 |
-| Remis | reçu sur la période > 0 et à remettre = 0 |
-| À remettre | à remettre > 0, rien reçu ni en transit |
+| Totalement remis (« Remis » avant le 13/11/2026) | reçu sur la période > 0 et à remettre = 0 |
+| Non remis (« À remettre » avant le 13/11/2026) | à remettre > 0, rien reçu ni en transit |
 | Rien à remettre | tout à 0 |
+
+Libellés renommés le 13/11/2026 ([ADR 0063](0063-rapport-activite-par-agence.md)), mêmes clés et même calcul :
+ils sont communs à cette vue et au rapport par agence (Rapports).
 
 Pas de « En retard » tant que le métier n'a pas fixé d'échéance de remise. Filtre par statut (pour
 voir d'un coup les agences qui n'ont encore rien remis) et filtre Agence (`site_ids[]`).

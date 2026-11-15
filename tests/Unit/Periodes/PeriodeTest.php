@@ -234,6 +234,56 @@ class PeriodeTest extends TestCase
         }
     }
 
+    /** Date précise : une journée = mêmes dates de début et de fin, jamais un troisième mode. */
+    public function test_date_precise_est_une_journee_aux_dates_identiques(): void
+    {
+        $cles = ['aujourd_hui', Periode::DATE_PRECISE, Periode::PERSONNALISEE];
+        $jour = Periode::depuisRequeteValidee($this->requete(['date_debut' => '2026-11-13', 'date_fin' => '2026-11-13']), 'aujourd_hui', $cles);
+
+        $this->assertSame(Periode::PERSONNALISEE, $jour->cle);
+        $this->assertSame('2026-11-13 00:00:00', $jour->debut->toDateTimeString());
+        $this->assertSame('2026-11-13 23:59:59', $jour->fin->toDateTimeString());
+        $this->assertSame(Periode::DATE_PRECISE, $jour->cleAffichee($cles));
+        $this->assertSame(['periode' => 'date_precise', 'date_debut' => '2026-11-13', 'date_fin' => '2026-11-13'], $jour->valeursFiltre('periode', $cles));
+        $this->assertSame('13/11/2026', $jour->libelle());
+
+        // Sans le choix dans l'écran, ou pour une vraie plage : la clé reste « personnalisee ».
+        $this->assertSame(Periode::PERSONNALISEE, $jour->cleAffichee(Periode::STANDARD));
+        $plage = Periode::depuisRequeteValidee($this->requete(['date_debut' => '2026-11-01', 'date_fin' => '2026-11-13']), 'aujourd_hui', $cles);
+        $this->assertSame(Periode::PERSONNALISEE, $plage->cleAffichee($cles));
+    }
+
+    /** Une date de début seule (fin ouverte = aujourd'hui) n'est pas une date précise, même le jour même. */
+    public function test_fin_ouverte_n_est_jamais_une_date_precise(): void
+    {
+        $cles = [Periode::DATE_PRECISE, Periode::PERSONNALISEE];
+        $periode = Periode::depuisRequete($this->requete(['date_debut' => '2026-09-16']), $this->maintenant(), cles: $cles);
+
+        $this->assertSame(Periode::PERSONNALISEE, $periode->cleAffichee($cles));
+    }
+
+    public function test_date_precise_n_est_pas_une_cle_envoyable_seule(): void
+    {
+        try {
+            Periode::depuisRequeteValidee($this->requete(['periode' => 'date_precise']), 'aujourd_hui', [Periode::DATE_PRECISE, Periode::PERSONNALISEE]);
+            $this->fail('La requête aurait dû être refusée.');
+        } catch (ValidationException $e) {
+            $this->assertSame(['Période inconnue.'], $e->errors()['periode']);
+        }
+
+        $avecDates = Periode::depuisRequeteValidee($this->requete(['periode' => 'date_precise', 'date_debut' => '2026-09-10', 'date_fin' => '2026-09-10']), 'aujourd_hui', [Periode::DATE_PRECISE, Periode::PERSONNALISEE]);
+        $this->assertSame(Periode::PERSONNALISEE, $avecDates->cle);
+    }
+
+    public function test_date_precise_proposee_seulement_par_les_ecrans_qui_la_listent(): void
+    {
+        $this->assertNotContains(Periode::DATE_PRECISE, array_column(Periode::options(), 'value'));
+        $this->assertSame(
+            [['value' => 'hier', 'label' => 'Hier'], ['value' => 'date_precise', 'label' => 'Date précise'], ['value' => 'personnalisee', 'label' => 'Période personnalisée']],
+            Periode::options(['hier', Periode::DATE_PRECISE, Periode::PERSONNALISEE]),
+        );
+    }
+
     public function test_les_trimestres_ne_sont_acceptes_que_si_l_ecran_les_propose(): void
     {
         $this->expectException(ValidationException::class);

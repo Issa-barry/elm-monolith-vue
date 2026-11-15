@@ -30,6 +30,8 @@ export type FilterFieldType =
 
 /** Valeur du champ `period` qui affiche les deux dates (bornes libres). */
 const PERIODE_PERSONNALISEE = 'personnalisee';
+/** Valeur du champ `period` à une seule date : envoie `startKey` = `endKey` (une journée, Periode::DATE_PRECISE). */
+const PERIODE_DATE_PRECISE = 'date_precise';
 
 export interface FilterOption {
     value: string | number;
@@ -282,8 +284,10 @@ function fieldOptions(field: FilterField): FilterOption[] {
 // est résolu par le serveur (ADR 0057), jamais par l'horloge du navigateur.
 
 function erreurLocalePeriode(field: FilterField): string | null {
-    if (localValues.value[field.key] !== PERIODE_PERSONNALISEE) return null;
     const [sk, ek] = periodKeys(field);
+    if (localValues.value[field.key] === PERIODE_DATE_PRECISE)
+        return localValues.value[sk] ? null : 'Renseignez la date.';
+    if (localValues.value[field.key] !== PERIODE_PERSONNALISEE) return null;
     const debut = (localValues.value[sk] as string) || '';
     const fin = (localValues.value[ek] as string) || '';
     if (!debut) return 'Renseignez la date de début.';
@@ -313,8 +317,20 @@ function choisirPeriode(field: FilterField, choix: unknown) {
     localValues.value[field.key] = choix ?? '';
     if (choix === PERIODE_PERSONNALISEE) return;
     const [sk, ek] = periodKeys(field);
+    // Date précise : la date de début déjà saisie devient la journée choisie.
+    if (choix === PERIODE_DATE_PRECISE) {
+        localValues.value[ek] = localValues.value[sk] ?? '';
+        return;
+    }
     localValues.value[sk] = '';
     localValues.value[ek] = '';
+}
+
+// Date précise : une journée = date de début et date de fin identiques (jamais une fin ouverte).
+function saisirDatePrecise(field: FilterField, date: unknown) {
+    const [sk, ek] = periodKeys(field);
+    localValues.value[sk] = (date as string) ?? '';
+    localValues.value[ek] = (date as string) ?? '';
 }
 
 // Saisir une date bascule sur « Période personnalisée » ; vider les deux revient au défaut.
@@ -402,7 +418,13 @@ function buildParams(): Record<string, string | string[]> {
         if (field.type === 'period') {
             const [sk, ek] = periodKeys(field);
             const choix = localValues.value[field.key] as string;
-            if (choix === PERIODE_PERSONNALISEE) {
+            if (choix === PERIODE_DATE_PRECISE) {
+                const jour = localValues.value[sk] as string;
+                if (jour) {
+                    params[sk] = jour;
+                    params[ek] = jour;
+                }
+            } else if (choix === PERIODE_PERSONNALISEE) {
                 if (localValues.value[sk])
                     params[sk] = localValues.value[sk] as string;
                 if (localValues.value[ek])
@@ -700,6 +722,27 @@ const hasActiveFilters = computed(
                         />
                     </div>
                 </template>
+                <div
+                    v-else-if="localValues[field.key] === PERIODE_DATE_PRECISE"
+                    class="flex flex-col gap-1"
+                >
+                    <span class="text-xs font-medium text-muted-foreground"
+                        >Date</span
+                    >
+                    <input
+                        :value="localValues[periodKeys(field)[0]]"
+                        type="date"
+                        @input="
+                            saisirDatePrecise(
+                                field,
+                                ($event.target as HTMLInputElement).value,
+                            )
+                        "
+                        aria-label="Date"
+                        :data-testid="`filter-inline-${field.key}-date`"
+                        class="h-9 w-[150px] rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    />
+                </div>
                 <p
                     v-if="erreurPeriode(field)"
                     role="alert"
@@ -941,9 +984,37 @@ const hasActiveFilters = computed(
                                         choisirPeriode(field, $event)
                                     "
                                 />
+                                <!-- Date précise : une seule date (début = fin) -->
+                                <div
+                                    v-if="
+                                        localValues[field.key] ===
+                                        PERIODE_DATE_PRECISE
+                                    "
+                                    class="space-y-1"
+                                >
+                                    <span class="text-xs text-muted-foreground"
+                                        >Date</span
+                                    >
+                                    <Input
+                                        :model-value="
+                                            String(
+                                                localValues[
+                                                    periodKeys(field)[0]
+                                                ] ?? '',
+                                            )
+                                        "
+                                        type="date"
+                                        aria-label="Date"
+                                        :data-testid="`filter-field-${field.key}-date`"
+                                        class="h-9"
+                                        @update:model-value="
+                                            saisirDatePrecise(field, $event)
+                                        "
+                                    />
+                                </div>
                                 <!-- Dates toujours visibles : en saisir une passe en « Période personnalisée » -->
                                 <div
-                                    v-if="accepteDates(field)"
+                                    v-else-if="accepteDates(field)"
                                     class="grid grid-cols-2 gap-2"
                                 >
                                     <div class="space-y-1">

@@ -783,6 +783,116 @@ describe('DataFilters — période dans le panneau Filtres', () => {
     });
 });
 
+describe('DataFilters — date précise (une journée)', () => {
+    const options = [
+        { value: 'aujourd_hui', label: "Aujourd'hui" },
+        { value: 'date_precise', label: 'Date précise' },
+        { value: 'personnalisee', label: 'Période personnalisée' },
+    ];
+    const champ = (inline: boolean): FilterField[] => [
+        {
+            key: 'periode',
+            label: 'Période',
+            type: 'period',
+            inline,
+            defaultValue: 'aujourd_hui',
+            options,
+        },
+    ];
+
+    beforeEach(() => routerGet.mockClear());
+
+    it('affiche une seule date dans la barre et envoie le même jour en début et en fin', async () => {
+        const wrapper = shallowMount(DataFilters, {
+            props: {
+                url: '/rapport',
+                values: { periode: 'aujourd_hui' },
+                fields: champ(true),
+                resultCount: 0,
+            },
+            global: { stubs: { FilterBar: barreComplete } },
+        });
+
+        wrapper
+            .findComponent(Select)
+            .vm.$emit('update:modelValue', 'date_precise');
+        await nextTick();
+        expect(
+            wrapper
+                .find('[data-testid="filter-inline-periode-debut"]')
+                .exists(),
+        ).toBe(false);
+        await wrapper
+            .get('[data-testid="filter-inline-periode-date"]')
+            .setValue('2026-11-13');
+        await wrapper.get(appliquer).trigger('click');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/rapport',
+            { date_debut: '2026-11-13', date_fin: '2026-11-13' },
+            expect.anything(),
+        );
+    });
+
+    it('dans le panneau, remplace Du / Au par une seule date et bloque Appliquer sans date', async () => {
+        const wrapper = shallowMount(DataFilters, {
+            props: {
+                url: '/rapport',
+                values: { periode: 'aujourd_hui' },
+                fields: champ(false),
+                resultCount: 0,
+                triggerOnly: true,
+            },
+            global: { renderStubDefaultSlot: true },
+        });
+
+        wrapper
+            .findComponent(Select)
+            .vm.$emit('update:modelValue', 'date_precise');
+        await nextTick();
+        expect(wrapper.findAllComponents({ name: 'Input' })).toHaveLength(1);
+        expect(wrapper.text()).toContain('Renseignez la date.');
+        expect(wrapper.getComponent(FilterDrawer).props('applyDisabled')).toBe(
+            true,
+        );
+
+        wrapper
+            .getComponent({ name: 'Input' })
+            .vm.$emit('update:modelValue', '2026-11-12');
+        await nextTick();
+        wrapper.getComponent(FilterDrawer).vm.$emit('apply');
+
+        expect(routerGet).toHaveBeenCalledWith(
+            '/rapport',
+            { date_debut: '2026-11-12', date_fin: '2026-11-12' },
+            expect.anything(),
+        );
+    });
+
+    it('réaffiche la date précise renvoyée par le serveur', () => {
+        const wrapper = shallowMount(DataFilters, {
+            props: {
+                url: '/rapport',
+                values: {
+                    periode: 'date_precise',
+                    date_debut: '2026-11-12',
+                    date_fin: '2026-11-12',
+                },
+                fields: champ(true),
+                resultCount: 0,
+            },
+            global: { stubs: { FilterBar: barreComplete } },
+        });
+
+        expect(
+            (
+                wrapper.get('[data-testid="filter-inline-periode-date"]')
+                    .element as HTMLInputElement
+            ).value,
+        ).toBe('2026-11-12');
+    });
+});
+
 describe('DataFilters — options dépendantes (optionsFrom)', () => {
     beforeEach(() => routerGet.mockClear());
 

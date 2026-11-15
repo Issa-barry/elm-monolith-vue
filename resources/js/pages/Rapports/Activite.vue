@@ -246,19 +246,24 @@ const dernierVersement = computed(() => {
 
 // ── Filtres et exports ────────────────────────────────────────────────────────
 
+// Rapport d'activité : tous les filtres dans le panneau, [Agence] → [Agent] → [Période].
+// « Ma situation » n'a ni Agence ni Agent : sa période reste le sélecteur de l'en-tête.
 const filterFields = computed<FilterField[]>(() => [
-    ...(maSituation.value
-        ? []
-        : [
-              {
-                  key: 'agent_id',
-                  label: 'Agent',
-                  type: 'select' as const,
-                  searchable: true,
-                  placeholder: 'Tous les agents',
-                  options: props.agents,
-              },
-          ]),
+    {
+        key: 'agent_id',
+        label: 'Agent',
+        type: 'select',
+        searchable: true,
+        placeholder: 'Tous les agents',
+        options: props.agents,
+    },
+    {
+        key: 'periode',
+        label: 'Période',
+        type: 'period',
+        options: props.periode.options,
+        defaultValue: 'aujourd_hui',
+    },
 ]);
 
 const periodeChoisie = ref(props.filters.periode);
@@ -284,18 +289,15 @@ function parametresPeriode(
             ...(fin ? { date_fin: fin } : {}),
         };
     }
+    // Date précise : une journée = même date de début et de fin (Periode::DATE_PRECISE).
+    if (choix === 'date_precise') {
+        return debut ? { date_debut: debut, date_fin: debut } : {};
+    }
     return choix === 'aujourd_hui' ? {} : { periode: choix };
 }
 
-// Le drawer conserve la période appliquée, jamais une plage encore en cours de saisie.
-const parametresFiltres = computed(() => ({
-    tab: onglet.value,
-    ...parametresPeriode(
-        props.filters.periode,
-        props.filters.date_debut,
-        props.filters.date_fin,
-    ),
-}));
+// La période est un champ du panneau : seuls les paramètres hors filtres (onglet) sont conservés.
+const parametresFiltres = computed(() => ({ tab: onglet.value }));
 
 function appliquerPeriode() {
     if (periodeEnCours.value) return;
@@ -304,7 +306,8 @@ function appliquerPeriode() {
         (!dateDebut.value || !dateFin.value || dateDebut.value > dateFin.value)
     )
         return;
-    const params: Record<string, string | string[]> = {
+    if (periodeChoisie.value === 'date_precise' && !dateDebut.value) return;
+    const params: Record<string, string> = {
         tab: onglet.value,
         ...parametresPeriode(
             periodeChoisie.value,
@@ -312,11 +315,6 @@ function appliquerPeriode() {
             dateFin.value,
         ),
     };
-    if (!maSituation.value) {
-        if (props.filters.site_ids.length)
-            params.site_ids = props.filters.site_ids;
-        if (props.filters.agent_id) params.agent_id = props.filters.agent_id;
-    }
     router.get(props.url, params, {
         preserveScroll: true,
         replace: true,
@@ -332,7 +330,8 @@ function appliquerPeriode() {
 
 function changerPeriode(choix: string) {
     periodeChoisie.value = choix;
-    if (choix !== 'personnalisee') appliquerPeriode();
+    if (choix !== 'personnalisee' && choix !== 'date_precise')
+        appliquerPeriode();
 }
 
 // Exports : mêmes paramètres que l'écran (le serveur réapplique le périmètre), sans l'onglet.
@@ -470,6 +469,7 @@ const chiffresMobileMoney = computed(() =>
                     </template>
                     <template #filters>
                         <form
+                            v-if="maSituation"
                             class="flex max-w-full flex-wrap items-center gap-2"
                             data-testid="rapport-periode"
                             @submit.prevent="appliquerPeriode"
@@ -520,16 +520,35 @@ const chiffresMobileMoney = computed(() =>
                                     Appliquer
                                 </button>
                             </template>
+                            <template
+                                v-else-if="periodeChoisie === 'date_precise'"
+                            >
+                                <input
+                                    v-model="dateDebut"
+                                    type="date"
+                                    aria-label="Date"
+                                    data-testid="rapport-periode-date"
+                                    :disabled="periodeEnCours"
+                                    required
+                                    class="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+                                />
+                                <button
+                                    type="submit"
+                                    :disabled="periodeEnCours || !dateDebut"
+                                    class="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                                >
+                                    Appliquer
+                                </button>
+                            </template>
                         </form>
                         <DataFilters
-                            v-if="!maSituation"
+                            v-else
                             trigger-only
                             :url="url"
                             :base-params="parametresFiltres"
                             :values="filters"
                             :fields="filterFields"
                             :sites="sites"
-                            :hide-agence-selector="maSituation"
                             :result-count="0"
                             hide-result-count
                         />
