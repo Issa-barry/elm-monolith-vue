@@ -3,11 +3,13 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import InfoTooltip from '@/components/InfoTooltip.vue';
+import KpiCard from '@/components/KpiCard.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useUrlTab } from '@/composables/useUrlTab';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { formatGNF } from '@/lib/utils';
+import { cn, formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import type { RapportActivite } from '@/types/rapports';
 import { Head, router, usePage } from '@inertiajs/vue3';
@@ -25,17 +27,20 @@ import { computed, ref, watch } from 'vue';
 import ApprovisionnementsAConfirmer, {
     type ApprovisionnementAConfirmer,
 } from './partials/ApprovisionnementsAConfirmer.vue';
-import CarteSection from './partials/CarteSection.vue';
 import EnTeteSection from './partials/EnTeteSection.vue';
 import { dateFr, pluriel } from './partials/format';
+import ListeCharges from './partials/ListeCharges.vue';
 import ListeEncaissements from './partials/ListeEncaissements.vue';
 import ListeFactures from './partials/ListeFactures.vue';
 import SectionCaisse from './partials/SectionCaisse.vue';
+import { n, REMISE, TOTAL_ENCAISSE } from './partials/tableau';
+import TableauAgents from './partials/TableauAgents.vue';
 
 // Même page pour « Ma situation » (agent imposé par le serveur) et le rapport d'activité (agences
-// et agents selon les droits) — cf. RapportActivitePresenter. Les cartes du haut SONT les onglets :
-// une carte résume un bloc et ouvre son détail. Chaque bloc est calculé indépendamment : jamais de
-// « reste » déduit par différence entre deux blocs.
+// et agents selon les droits) — cf. RapportActivitePresenter. Même langage graphique que le Rapport
+// par agence (cartes compactes, tableau, groupe « Remis ») ; seul le niveau change : un agent remet
+// à SON agence (ADR 0064), une agence remet à la trésorerie principale (ADR 0016). Chaque bloc est
+// calculé indépendamment : jamais de « reste » déduit par différence entre deux blocs.
 const props = defineProps<{
     mode: 'ma_situation' | 'rapport';
     url: string;
@@ -59,6 +64,8 @@ const props = defineProps<{
     agent: { id: string; nom: string } | null;
     limite_lignes: number;
     rapport: RapportActivite;
+    /** Lien vers une charge : module Dépenses actif et `depenses.read` (vérifié côté serveur). */
+    peut_voir_depenses?: boolean;
     /** « Ma situation » seulement : espèces remises à l'agent, en attente de SA confirmation (ADR 0018). */
     approvisionnements_en_attente?: ApprovisionnementAConfirmer[];
 }>();
@@ -80,11 +87,12 @@ const ONGLETS = [
     'creances',
     'mobile_money',
     'caisse',
+    'charges',
 ] as const;
 type Onglet = (typeof ONGLETS)[number];
 const { onglet, choisir } = useUrlTab<Onglet>(ONGLETS, 'ventes');
 
-function naviguerCartes(event: KeyboardEvent) {
+function naviguerOnglets(event: KeyboardEvent) {
     if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
     const liste = event.currentTarget as HTMLElement;
     const boutons = Array.from(
@@ -143,7 +151,7 @@ const perimetre = computed(() => {
     return `${agences} · ${agent}`;
 });
 
-// ── Cartes-onglets ────────────────────────────────────────────────────────────
+// ── Indicateurs (cartes compactes, sans clic) ─────────────────────────────────
 
 const anomaliesMobileMoney = computed(
     () =>
@@ -151,97 +159,151 @@ const anomaliesMobileMoney = computed(
         props.rapport.mobile_money.resume.reference_dupliquee,
 );
 
-interface Carte {
-    cle: Onglet;
-    libelle: string;
-    valeur: string;
+const remise = computed(() => props.rapport.remise);
+const charges = computed(() => props.rapport.charges.resume);
+
+/** Agence(s) de rattachement de la remise : agence de la caisse / du compte Mobile Money. */
+const agenceRemise = computed(() => {
+    const agences = remise.value?.agences ?? [];
+    if (agences.length === 0)
+        return maSituation.value ? 'mon agence' : "l'agence";
+
+    return agences.join(', ');
+});
+
+// Saisies = activité de l'agent ; seules les validées sont déduites de sa remise (ADR 0064).
+const detailCharges = computed(() =>
+    charges.value.charges_en_attente > 0
+        ? `${n(charges.value.charges_payees)} validées · ${n(charges.value.charges_en_attente)} en attente`
+        : `${n(charges.value.charges_payees)} validées`,
+);
+
+interface Indicateur {
+    cle: string;
+    titre: string;
+    valeur: number;
     detail: string;
-    avertissement: string | null;
+    alerte?: boolean;
 }
 
-const cartes = computed((): Carte[] => {
+const indicateurs = computed((): Indicateur[] => {
     const r = props.rapport;
-    const liste: Carte[] = [
+    const ma = maSituation.value;
+    const liste: Indicateur[] = [
         {
             cle: 'ventes',
-            libelle: maSituation.value ? 'Mes ventes' : 'Ventes',
-            valeur: formatGNF(r.ventes.resume.facture),
+            titre: ma ? 'Mes ventes' : 'Ventes',
+            valeur: r.ventes.resume.facture,
             detail: pluriel(r.ventes.resume.nombre, 'vente'),
-            avertissement: null,
         },
         {
-            cle: 'encaissements',
-            libelle: maSituation.value ? 'Mes encaissements' : 'Encaissé',
-            valeur: formatGNF(r.encaissements.resume.montant),
+            cle: 'encaisse',
+            titre: ma ? 'Mes encaissements' : 'Total encaissé',
+            valeur: r.encaissements.resume.montant,
             detail: pluriel(r.encaissements.resume.nombre, 'paiement'),
-            avertissement: null,
         },
         {
-            cle: 'creances',
-            libelle: 'Dettes clients',
-            valeur: formatGNF(r.creances.resume.reste),
+            cle: 'dettes',
+            titre: ma ? 'Mes dettes clients' : 'Dettes clients',
+            valeur: r.creances.resume.reste,
             detail: pluriel(r.creances.resume.nombre, 'facture'),
-            avertissement: null,
         },
         {
-            cle: 'mobile_money',
-            libelle: 'Mobile Money',
-            valeur: formatGNF(r.mobile_money.resume.montant),
-            detail: pluriel(r.mobile_money.resume.nombre, 'paiement'),
-            avertissement:
-                anomaliesMobileMoney.value > 0
-                    ? `${anomaliesMobileMoney.value} à vérifier`
-                    : null,
+            cle: 'charges',
+            titre: ma ? 'Mes charges saisies' : 'Charges saisies',
+            valeur: charges.value.charges_saisies,
+            detail: detailCharges.value,
+        },
+        {
+            cle: 'remis',
+            titre: ma ? 'Remis à mon agence' : "Remis à l'agence",
+            valeur: remise.value?.remis ?? 0,
+            detail: remise.value
+                ? 'Reçu sur la période'
+                : 'Aucune caisse dédiée',
         },
     ];
-    if (!maSituation.value) {
+    if (ma) {
         liste.push({
-            cle: 'caisse',
-            libelle: 'Caisses dédiées',
-            valeur: r.caisse.aucune_caisse
-                ? '—'
-                : formatGNF(r.caisse.resume.solde_actuel),
-            detail: r.caisse.aucune_caisse
-                ? 'Aucune caisse dédiée'
-                : 'À remettre — solde théorique',
-            avertissement: null,
+            cle: 'reste',
+            titre: 'Reste à remettre à mon agence',
+            valeur: remise.value?.reste_a_remettre ?? 0,
+            detail: remise.value
+                ? `Fin de période · dont ${n(remise.value.en_transit)} en transit`
+                : 'Aucune caisse dédiée',
         });
     }
 
     return liste;
 });
 
-// « Ma situation » : l'agent remet toujours son argent à la caisse de l'agence de sa caisse dédiée
-// (versement de caisse, même agence) — jamais à l'agence d'une commande encaissée pour une autre
-// agence : ce reversement-là est porté par l'agence (Trésorerie → Inter-agences, ADR 0012).
-const remettreA = computed(() => {
-    const agences = [
-        ...new Set(
-            props.rapport.caisse.fiches
-                .filter((f) => Math.abs(f.solde_actuel) >= 0.005)
-                .map((f) => f.caisse.site_nom)
-                .filter((nom): nom is string => !!nom),
-        ),
-    ];
-    if (agences.length === 0) return null;
+// ── Ma situation : détail des encaissements par moyen ─────────────────────────
 
-    return agences.length === 1
-        ? `À remettre à la caisse de ${agences[0]}`
-        : `À remettre aux caisses de ${agences.join(', ')}`;
-});
+const encaissementsParMoyen = computed(() =>
+    props.rapport.moyens.map((m) => {
+        const ligne = props.rapport.encaissements.par_moyen.find(
+            (p) => p.cle === m.cle,
+        );
 
-const detailMaCaisse = computed(() =>
-    [remettreA.value, dernierVersement.value].filter(Boolean).join(' · '),
+        return {
+            cle: m.cle,
+            libelle: m.libelle,
+            nombre: ligne?.nombre ?? 0,
+            montant: ligne?.montant ?? 0,
+        };
+    }),
 );
 
-const dernierVersement = computed(() => {
-    const versements = props.rapport.caisse.fiches
-        .map((f) => f.dernier_versement)
-        .filter((v) => v !== null)
-        .sort((a, b) => b.date_envoi.localeCompare(a.date_envoi));
-    if (versements.length === 0) return 'Aucun versement enregistré';
+// ── Rapport d'activité : détail des opérations d'un agent ─────────────────────
 
-    return `Dernier versement : ${dateFr(versements[0].date_envoi)} · ${formatGNF(versements[0].montant)}`;
+function hrefAgent(agentId: string): string {
+    const params = new URLSearchParams(
+        new URL(page.url, 'http://localhost').search,
+    );
+    params.set('agent_id', agentId);
+
+    return `${props.url}?${params.toString()}`;
+}
+
+// ── Onglets du détail ─────────────────────────────────────────────────────────
+
+const onglets = computed(() => {
+    const r = props.rapport;
+    const ma = maSituation.value;
+
+    return [
+        {
+            cle: 'ventes' as Onglet,
+            libelle: ma ? 'Mes ventes' : 'Ventes',
+            nombre: r.ventes.resume.nombre,
+        },
+        {
+            cle: 'encaissements' as Onglet,
+            libelle: ma ? 'Mes encaissements' : 'Encaissements',
+            nombre: r.encaissements.resume.nombre,
+        },
+        {
+            cle: 'creances' as Onglet,
+            libelle: 'Dettes clients',
+            nombre: r.creances.resume.nombre,
+        },
+        {
+            cle: 'mobile_money' as Onglet,
+            libelle: 'Mobile Money',
+            nombre: r.mobile_money.resume.nombre,
+            alerte: anomaliesMobileMoney.value > 0,
+        },
+        {
+            cle: 'caisse' as Onglet,
+            libelle: ma ? 'Ma caisse' : 'Caisses dédiées',
+            nombre: null,
+        },
+        {
+            cle: 'charges' as Onglet,
+            libelle: ma ? 'Mes charges' : 'Charges',
+            nombre: r.charges.total_lignes,
+        },
+    ];
 });
 
 // ── Filtres et exports ────────────────────────────────────────────────────────
@@ -367,7 +429,7 @@ const chiffresVentes = computed(() => {
 
 const chiffresEncaissements = computed(() => {
     const r = props.rapport.encaissements.resume;
-    const moyens = props.rapport.encaissements.par_moyen.map((m) => ({
+    const moyens = encaissementsParMoyen.value.map((m) => ({
         libelle: m.libelle,
         valeur: formatGNF(m.montant),
     }));
@@ -401,52 +463,77 @@ const chiffresMobileMoney = computed(() =>
         valeur: formatGNF(o.montant),
     })),
 );
+
+const chiffresCharges = computed(() => [
+    {
+        libelle: 'Validées (déduites de la remise)',
+        valeur: formatGNF(charges.value.charges_payees),
+    },
+    {
+        libelle: 'En attente de validation',
+        valeur: formatGNF(charges.value.charges_en_attente),
+    },
+    {
+        libelle: 'dont avances récupérables',
+        valeur: formatGNF(charges.value.charges_avances_tiers),
+    },
+]);
 </script>
 
 <template>
     <Head :title="titre" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="w-full min-w-0 space-y-6 p-4 sm:p-6">
-            <!-- En-tête : où je suis, quel périmètre, quelle période -->
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="min-w-0 space-y-2">
+        <div class="w-full min-w-0 space-y-5 p-4 sm:p-6">
+            <!-- En-tête compact : titre, périmètre et période sur une ligne, actions à droite -->
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="min-w-0 space-y-1">
                     <h1 class="flex items-center gap-2 text-xl font-semibold">
                         <UserRound
                             v-if="maSituation"
                             class="h-5 w-5 text-muted-foreground"
+                            aria-hidden="true"
                         />
                         <ChartColumn
                             v-else
                             class="h-5 w-5 text-muted-foreground"
+                            aria-hidden="true"
                         />
                         {{ titre }}
                         <InfoTooltip
                             :label="`Informations sur ${titre.toLowerCase()}`"
                         >
-                            Consultez les ventes, les encaissements, les dettes
-                            clients et les caisses du périmètre sélectionné.
-                            Cliquez sur une carte pour afficher son détail. Les
-                            ventes, les encaissements et les dettes clients
-                            suivent la période choisie ; le solde actuel des
-                            caisses porte sur toutes les dates.
+                            Ventes, encaissements par moyen, dettes clients et
+                            charges saisies sur la période choisie, et ce que
+                            {{
+                                maSituation
+                                    ? 'vous avez remis à votre agence'
+                                    : 'chaque agent a remis à son agence'
+                            }}. Un agent remet à son agence de rattachement,
+                            jamais à la trésorerie principale. Net à remettre =
+                            encaissé (espèces et Mobile Money) +
+                            approvisionnements reçus − charges validées ; reste
+                            = net − déjà remis, en cumul jusqu'à la fin de la
+                            période.
                         </InfoTooltip>
                     </h1>
                     <p
-                        class="text-sm font-medium"
-                        data-testid="rapport-perimetre"
+                        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
                     >
-                        {{ perimetre }}
+                        <span
+                            class="font-medium text-foreground"
+                            data-testid="rapport-perimetre"
+                            >{{ perimetre }}</span
+                        >
+                        <span aria-hidden="true">·</span>
+                        <span class="inline-flex items-center gap-1.5">
+                            <CalendarDays
+                                class="h-4 w-4 shrink-0"
+                                aria-hidden="true"
+                            />
+                            {{ periode.libelle }}
+                        </span>
                     </p>
-                    <div
-                        class="flex items-center gap-1.5 text-sm text-muted-foreground"
-                    >
-                        <CalendarDays
-                            class="h-4 w-4 shrink-0"
-                            aria-hidden="true"
-                        />
-                        <span>{{ periode.libelle }}</span>
-                    </div>
                 </div>
                 <ListPageActions>
                     <template #export>
@@ -561,235 +648,489 @@ const chiffresMobileMoney = computed(() =>
                 :approvisionnements="approvisionnements_en_attente"
             />
 
-            <!-- Cartes-onglets : chaque carte résume un bloc et en ouvre le détail -->
-            <div
-                role="tablist"
-                aria-label="Sections du rapport"
-                class="@container space-y-7"
-                @keydown="naviguerCartes"
-            >
-                <template v-if="maSituation">
-                    <CarteSection
-                        v-if="!rapport.caisse.aucune_caisse"
-                        testid="rapport-tab-caisse"
-                        libelle="Ma caisse · À remettre — solde théorique"
-                        :valeur="formatGNF(rapport.caisse.resume.solde_actuel)"
-                        :detail="detailMaCaisse"
-                        :active="onglet === 'caisse'"
-                        large
-                        class="w-full"
-                        @choisir="choisir('caisse')"
+            <!-- Indicateurs : cartes compactes (même grille que le Rapport par agence) -->
+            <div class="@container">
+                <div
+                    :class="
+                        cn(
+                            'grid grid-cols-1 gap-4 @[30rem]:grid-cols-2 @[52rem]:grid-cols-3',
+                            maSituation
+                                ? '@[92rem]:grid-cols-6'
+                                : '@[92rem]:grid-cols-5',
+                        )
+                    "
+                >
+                    <KpiCard
+                        v-for="k in indicateurs"
+                        :key="k.cle"
+                        compact
+                        :data-testid="`kpi-${k.cle}`"
+                        :title="k.titre"
+                        :value="n(k.valeur)"
+                        unit="GNF"
+                        :detail="k.detail"
                     />
+                </div>
+            </div>
+
+            <!-- Rapport d'activité : une ligne par agent -->
+            <TableauAgents
+                v-if="!maSituation && rapport.agents"
+                :lignes="rapport.agents.lignes"
+                :totaux="rapport.agents.totaux"
+                :moyens="rapport.moyens"
+                :href-agent="hrefAgent"
+            />
+
+            <!-- Ma situation : mes encaissements par moyen et ma remise à mon agence -->
+            <div v-else-if="maSituation" class="grid gap-4 lg:grid-cols-2">
+                <section
+                    class="overflow-hidden rounded-xl border bg-card"
+                    aria-labelledby="titre-mes-encaissements"
+                    data-testid="mes-encaissements"
+                >
+                    <div
+                        class="flex items-center justify-between gap-2 border-b px-4 py-3"
+                    >
+                        <h2
+                            id="titre-mes-encaissements"
+                            class="text-sm font-semibold"
+                        >
+                            Mes encaissements
+                        </h2>
+                        <p class="text-xs text-muted-foreground">
+                            Sur la période · GNF
+                        </p>
+                    </div>
+                    <dl class="divide-y text-sm">
+                        <div
+                            v-for="m in encaissementsParMoyen"
+                            :key="m.cle"
+                            class="flex items-baseline justify-between gap-3 px-4 py-2.5"
+                        >
+                            <dt>
+                                {{ m.libelle }}
+                                <span class="text-xs text-muted-foreground"
+                                    >· {{ pluriel(m.nombre, 'paiement') }}</span
+                                >
+                            </dt>
+                            <dd
+                                :class="
+                                    cn(
+                                        'tabular-nums',
+                                        !m.montant &&
+                                            'text-muted-foreground/70',
+                                    )
+                                "
+                            >
+                                {{ n(m.montant) }}
+                            </dd>
+                        </div>
+                        <div
+                            :class="
+                                cn(
+                                    TOTAL_ENCAISSE,
+                                    'flex items-baseline justify-between gap-3 border-x-0 px-4 py-2.5 font-semibold',
+                                )
+                            "
+                        >
+                            <dt>Total encaissé</dt>
+                            <dd
+                                class="tabular-nums"
+                                data-testid="mes-encaissements-total"
+                            >
+                                {{ n(rapport.encaissements.resume.montant) }}
+                            </dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section
+                    class="overflow-hidden rounded-xl border bg-card"
+                    aria-labelledby="titre-ma-remise"
+                    data-testid="ma-remise"
+                >
+                    <div
+                        class="flex items-center justify-between gap-2 border-b px-4 py-3"
+                    >
+                        <h2 id="titre-ma-remise" class="text-sm font-semibold">
+                            Remises à {{ agenceRemise }}
+                        </h2>
+                        <StatusDot
+                            v-if="remise"
+                            :status="remise.statut"
+                            :label="remise.statut_label"
+                        />
+                    </div>
+                    <!-- Calcul visible ligne à ligne (ADR 0064) : net − déjà remis = reste -->
+                    <dl
+                        v-if="remise"
+                        :class="cn(REMISE, 'divide-y text-sm')"
+                        data-testid="ma-remise-calcul"
+                    >
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2"
+                        >
+                            <dt>
+                                Encaissé en espèces et Mobile Money
+                                <span class="text-xs text-muted-foreground"
+                                    >· depuis le
+                                    {{ dateFr(remise.depuis) }}</span
+                                >
+                            </dt>
+                            <dd class="tabular-nums">
+                                {{ n(remise.encaisse) }}
+                            </dd>
+                        </div>
+                        <div
+                            v-if="remise.approvisionnements"
+                            class="flex items-baseline justify-between gap-3 px-4 py-2"
+                        >
+                            <dt>+ Approvisionnements reçus de l'agence</dt>
+                            <dd class="tabular-nums">
+                                {{ n(remise.approvisionnements) }}
+                            </dd>
+                        </div>
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2"
+                        >
+                            <dt>− Charges validées</dt>
+                            <dd
+                                class="tabular-nums"
+                                data-testid="ma-remise-charges"
+                            >
+                                {{ n(remise.charges_validees) }}
+                            </dd>
+                        </div>
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2 font-medium"
+                        >
+                            <dt>= Montant net à remettre</dt>
+                            <dd
+                                class="tabular-nums"
+                                data-testid="ma-remise-net"
+                            >
+                                {{ n(remise.net_a_remettre) }}
+                            </dd>
+                        </div>
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2"
+                        >
+                            <dt>
+                                − Déjà remis à l'agence
+                                <span
+                                    v-if="remise.remis"
+                                    class="text-xs text-muted-foreground"
+                                    >· dont {{ n(remise.remis) }} sur la
+                                    période</span
+                                >
+                            </dt>
+                            <dd
+                                class="tabular-nums"
+                                data-testid="ma-remise-remis"
+                            >
+                                {{ n(remise.deja_remis) }}
+                            </dd>
+                        </div>
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2.5 font-semibold"
+                        >
+                            <dt>= Reste à remettre</dt>
+                            <dd
+                                class="tabular-nums"
+                                data-testid="ma-remise-reste"
+                            >
+                                {{ n(remise.reste_a_remettre) }}
+                            </dd>
+                        </div>
+                        <div
+                            class="flex items-baseline justify-between gap-3 px-4 py-2 text-muted-foreground"
+                        >
+                            <dt>dont en transit (envoyé, non confirmé)</dt>
+                            <dd class="tabular-nums">
+                                {{ n(remise.en_transit) }}
+                            </dd>
+                        </div>
+                    </dl>
                     <div
                         v-else
-                        class="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-2.5 text-sm dark:border-blue-900 dark:bg-blue-950/30"
+                        class="flex items-center gap-2 px-4 py-4 text-sm"
                     >
                         <Info class="h-4 w-4 shrink-0 text-blue-500" />
                         <span data-testid="kpi-caisse"
                             >Aucune caisse dédiée</span
                         >
                     </div>
-                </template>
-
-                <div
-                    class="grid grid-cols-1 gap-7 @[40rem]:grid-cols-2"
-                    :class="
-                        maSituation
-                            ? '@[70rem]:grid-cols-4'
-                            : '@[70rem]:grid-cols-3 @[90rem]:grid-cols-5'
-                    "
-                >
-                    <CarteSection
-                        v-for="c in cartes"
-                        :key="c.cle"
-                        :testid="`rapport-tab-${c.cle}`"
-                        :libelle="c.libelle"
-                        :valeur="c.valeur"
-                        :detail="c.detail"
-                        :avertissement="c.avertissement"
-                        :active="onglet === c.cle"
-                        :focusable="
-                            maSituation &&
-                            rapport.caisse.aucune_caisse &&
-                            onglet === 'caisse' &&
-                            c.cle === 'ventes'
-                        "
-                        @choisir="choisir(c.cle)"
-                    />
-                </div>
+                    <p
+                        class="border-t px-4 py-2.5 text-xs text-muted-foreground"
+                    >
+                        {{
+                            remise?.derniere_remise
+                                ? `Dernier versement envoyé le ${dateFr(remise.derniere_remise)}. `
+                                : remise
+                                  ? 'Aucun versement enregistré. '
+                                  : ''
+                        }}Cumul jusqu'à la fin de la période. Seules les charges
+                        validées sont déduites ; une remise n'est comptée qu'une
+                        fois reçue par votre agence. Vous remettez à votre
+                        agence, jamais directement à la trésorerie principale.
+                    </p>
+                </section>
             </div>
 
-            <!-- ── Ventes ─────────────────────────────────────────────────── -->
-            <section
-                v-if="onglet === 'ventes'"
-                id="rapport-panel-ventes"
-                role="tabpanel"
-                aria-labelledby="rapport-tab-ventes"
-                tabindex="0"
-                class="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
-            >
-                <EnTeteSection
-                    :titre="maSituation ? 'Mes ventes' : 'Ventes de la période'"
-                    aide="Factures créées sur la période. Encaissé et reste : état actuel de ces factures, paiements reçus après la période compris."
-                    :chiffres="chiffresVentes"
-                />
-                <ListeFactures
-                    :lignes="rapport.ventes.lignes"
-                    :afficher-agent="!maSituation"
-                    vide="Aucune vente sur la période."
-                />
-                <p
-                    v-if="tronque(rapport.ventes)"
-                    class="text-xs text-muted-foreground"
+            <!-- Détail : un onglet par bloc du rapport -->
+            <div class="space-y-3">
+                <div
+                    role="tablist"
+                    aria-label="Détail du rapport"
+                    class="flex gap-1 overflow-x-auto border-b"
+                    @keydown="naviguerOnglets"
                 >
-                    {{ rapport.ventes.lignes.length }} lignes affichées sur
-                    {{ rapport.ventes.total_lignes }} — exportez pour la liste
-                    complète (les totaux portent sur toutes les lignes).
-                </p>
-            </section>
+                    <button
+                        v-for="o in onglets"
+                        :id="`rapport-tab-${o.cle}`"
+                        :key="o.cle"
+                        type="button"
+                        role="tab"
+                        :data-testid="`rapport-tab-${o.cle}`"
+                        :aria-selected="onglet === o.cle"
+                        :aria-controls="`rapport-panel-${o.cle}`"
+                        :tabindex="onglet === o.cle ? 0 : -1"
+                        :class="
+                            cn(
+                                '-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-ring',
+                                onglet === o.cle
+                                    ? 'border-primary text-foreground'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                            )
+                        "
+                        @click="choisir(o.cle)"
+                    >
+                        {{ o.libelle }}
+                        <span
+                            v-if="o.nombre !== null"
+                            class="rounded bg-muted px-1.5 text-xs text-muted-foreground tabular-nums"
+                            >{{ o.nombre }}</span
+                        >
+                        <AlertTriangle
+                            v-if="o.alerte"
+                            class="h-3.5 w-3.5 text-amber-500"
+                            aria-label="Références à vérifier"
+                        />
+                    </button>
+                </div>
 
-            <!-- ── Encaissements ──────────────────────────────────────────── -->
-            <section
-                v-if="onglet === 'encaissements'"
-                id="rapport-panel-encaissements"
-                role="tabpanel"
-                aria-labelledby="rapport-tab-encaissements"
-                tabindex="0"
-                class="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
-            >
-                <EnTeteSection
-                    :titre="
-                        maSituation
-                            ? 'Mes encaissements'
-                            : 'Encaissements de la période'
-                    "
-                    aide="Paiements reçus sur la période, quelle que soit la date de la vente. « Saisi le » est l'heure d'enregistrement (en orange : saisi un autre jour)."
-                    :chiffres="chiffresEncaissements"
-                />
-                <ListeEncaissements
-                    :lignes="rapport.encaissements.lignes"
-                    :afficher-agent="!maSituation"
-                    :afficher-reversement="!maSituation"
-                    :total="rapport.encaissements.resume.montant"
-                    vide="Aucun encaissement sur la période."
-                />
-                <p
-                    v-if="tronque(rapport.encaissements)"
-                    class="text-xs text-muted-foreground"
+                <!-- ── Ventes ─────────────────────────────────────────────── -->
+                <section
+                    v-if="onglet === 'ventes'"
+                    id="rapport-panel-ventes"
+                    role="tabpanel"
+                    aria-labelledby="rapport-tab-ventes"
+                    tabindex="0"
+                    class="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
                 >
-                    {{ rapport.encaissements.lignes.length }} lignes affichées
-                    sur {{ rapport.encaissements.total_lignes }} — exportez pour
-                    la liste complète.
-                </p>
-            </section>
+                    <EnTeteSection
+                        :titre="
+                            maSituation ? 'Mes ventes' : 'Ventes de la période'
+                        "
+                        aide="Factures créées sur la période. Encaissé et reste : état actuel de ces factures, paiements reçus après la période compris."
+                        :chiffres="chiffresVentes"
+                    />
+                    <ListeFactures
+                        :lignes="rapport.ventes.lignes"
+                        :afficher-agent="!maSituation"
+                        vide="Aucune vente sur la période."
+                    />
+                    <p
+                        v-if="tronque(rapport.ventes)"
+                        class="text-xs text-muted-foreground"
+                    >
+                        {{ rapport.ventes.lignes.length }} lignes affichées sur
+                        {{ rapport.ventes.total_lignes }} — exportez pour la
+                        liste complète (les totaux portent sur toutes les
+                        lignes).
+                    </p>
+                </section>
 
-            <!-- ── Dettes clients ─────────────────────────────────────────── -->
-            <section
-                v-if="onglet === 'creances'"
-                id="rapport-panel-creances"
-                role="tabpanel"
-                aria-labelledby="rapport-tab-creances"
-                tabindex="0"
-                class="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
-            >
-                <EnTeteSection
-                    titre="Dettes clients"
-                    :contexte="periode.libelle"
-                    aide="Factures créées sur la période que les clients doivent encore. Reste : état actuel de ces factures, paiements reçus après la période compris."
-                    :chiffres="chiffresDettes"
-                />
-                <ListeFactures
-                    :lignes="rapport.creances.lignes"
-                    :afficher-agent="!maSituation"
-                    afficher-anciennete
-                    vide="Aucune dette client sur la période."
-                />
-                <p
-                    v-if="tronque(rapport.creances)"
-                    class="text-xs text-muted-foreground"
+                <!-- ── Encaissements ──────────────────────────────────────── -->
+                <section
+                    v-if="onglet === 'encaissements'"
+                    id="rapport-panel-encaissements"
+                    role="tabpanel"
+                    aria-labelledby="rapport-tab-encaissements"
+                    tabindex="0"
+                    class="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
                 >
-                    {{ rapport.creances.lignes.length }} lignes affichées (les
-                    plus anciennes) sur {{ rapport.creances.total_lignes }} —
-                    exportez pour la liste complète.
-                </p>
-            </section>
+                    <EnTeteSection
+                        :titre="
+                            maSituation
+                                ? 'Mes encaissements'
+                                : 'Encaissements de la période'
+                        "
+                        aide="Paiements reçus sur la période, quelle que soit la date de la vente. « Saisi le » est l'heure d'enregistrement (en orange : saisi un autre jour)."
+                        :chiffres="chiffresEncaissements"
+                    />
+                    <ListeEncaissements
+                        :lignes="rapport.encaissements.lignes"
+                        :afficher-agent="!maSituation"
+                        :afficher-reversement="!maSituation"
+                        :total="rapport.encaissements.resume.montant"
+                        vide="Aucun encaissement sur la période."
+                    />
+                    <p
+                        v-if="tronque(rapport.encaissements)"
+                        class="text-xs text-muted-foreground"
+                    >
+                        {{ rapport.encaissements.lignes.length }} lignes
+                        affichées sur {{ rapport.encaissements.total_lignes }} —
+                        exportez pour la liste complète.
+                    </p>
+                </section>
 
-            <!-- ── Mobile Money ───────────────────────────────────────────── -->
-            <section
-                v-if="onglet === 'mobile_money'"
-                id="rapport-panel-mobile_money"
-                role="tabpanel"
-                aria-labelledby="rapport-tab-mobile_money"
-                tabindex="0"
-                class="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
-            >
-                <EnTeteSection
-                    titre="Mobile Money"
-                    aide="Rapprochez chaque référence du relevé de l'opérateur."
-                    :chiffres="chiffresMobileMoney"
-                />
-                <Alert
-                    v-if="anomaliesMobileMoney > 0"
-                    data-testid="mobile-money-anomalies"
+                <!-- ── Dettes clients ─────────────────────────────────────── -->
+                <section
+                    v-if="onglet === 'creances'"
+                    id="rapport-panel-creances"
+                    role="tabpanel"
+                    aria-labelledby="rapport-tab-creances"
+                    tabindex="0"
+                    class="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
                 >
-                    <AlertTriangle class="text-amber-500" />
-                    <AlertTitle>
-                        {{ anomaliesMobileMoney }} référence(s) à vérifier
-                    </AlertTitle>
-                    <AlertDescription>
-                        {{ rapport.mobile_money.resume.reference_absente }}
-                        absente(s),
-                        {{ rapport.mobile_money.resume.reference_dupliquee }}
-                        déjà utilisée(s) pour le même opérateur dans
-                        l'organisation.
-                    </AlertDescription>
-                </Alert>
-                <ListeEncaissements
-                    :lignes="rapport.mobile_money.lignes"
-                    :afficher-agent="!maSituation"
-                    :afficher-reversement="!maSituation"
-                    controle
-                    vide="Aucun encaissement Mobile Money sur la période."
-                />
-                <!-- Comptes Mobile Money des agents (ADR 0027) : ce que l'agent détient encore, ce qu'il a
-                     déjà transféré à l'agence, les frais. Même fiche que la caisse en espèces. -->
+                    <EnTeteSection
+                        titre="Dettes clients"
+                        :contexte="periode.libelle"
+                        aide="Factures créées sur la période que les clients doivent encore. Reste : état actuel de ces factures, paiements reçus après la période compris."
+                        :chiffres="chiffresDettes"
+                    />
+                    <ListeFactures
+                        :lignes="rapport.creances.lignes"
+                        :afficher-agent="!maSituation"
+                        afficher-anciennete
+                        vide="Aucune dette client sur la période."
+                    />
+                    <p
+                        v-if="tronque(rapport.creances)"
+                        class="text-xs text-muted-foreground"
+                    >
+                        {{ rapport.creances.lignes.length }} lignes affichées
+                        (les plus anciennes) sur
+                        {{ rapport.creances.total_lignes }} — exportez pour la
+                        liste complète.
+                    </p>
+                </section>
+
+                <!-- ── Mobile Money ───────────────────────────────────────── -->
+                <section
+                    v-if="onglet === 'mobile_money'"
+                    id="rapport-panel-mobile_money"
+                    role="tabpanel"
+                    aria-labelledby="rapport-tab-mobile_money"
+                    tabindex="0"
+                    class="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+                >
+                    <EnTeteSection
+                        titre="Mobile Money"
+                        aide="Rapprochez chaque référence du relevé de l'opérateur."
+                        :chiffres="chiffresMobileMoney"
+                    />
+                    <Alert
+                        v-if="anomaliesMobileMoney > 0"
+                        data-testid="mobile-money-anomalies"
+                    >
+                        <AlertTriangle class="text-amber-500" />
+                        <AlertTitle>
+                            {{ anomaliesMobileMoney }} référence(s) à vérifier
+                        </AlertTitle>
+                        <AlertDescription>
+                            {{ rapport.mobile_money.resume.reference_absente }}
+                            absente(s),
+                            {{
+                                rapport.mobile_money.resume.reference_dupliquee
+                            }}
+                            déjà utilisée(s) pour le même opérateur dans
+                            l'organisation.
+                        </AlertDescription>
+                    </Alert>
+                    <ListeEncaissements
+                        :lignes="rapport.mobile_money.lignes"
+                        :afficher-agent="!maSituation"
+                        :afficher-reversement="!maSituation"
+                        controle
+                        vide="Aucun encaissement Mobile Money sur la période."
+                    />
+                    <!-- Comptes Mobile Money des agents (ADR 0027) : ce que l'agent détient encore, ce
+                         qu'il a déjà transféré à l'agence, les frais. Même fiche que la caisse en espèces. -->
+                    <SectionCaisse
+                        v-if="
+                            rapport.comptes_mobile_money &&
+                            (maSituation ||
+                                !rapport.comptes_mobile_money.aucune_caisse)
+                        "
+                        nature="mobile_money"
+                        class="border-t pt-4"
+                        data-testid="comptes-mobile-money"
+                        :caisse="rapport.comptes_mobile_money"
+                        :ma-situation="maSituation"
+                        :debut="periode.date_debut"
+                        :fin="periode.date_fin"
+                    />
+                    <p
+                        v-if="tronque(rapport.mobile_money)"
+                        class="text-xs text-muted-foreground"
+                    >
+                        {{ rapport.mobile_money.lignes.length }} lignes
+                        affichées sur {{ rapport.mobile_money.total_lignes }} —
+                        exportez pour la liste complète.
+                    </p>
+                </section>
+
+                <!-- ── Caisse ─────────────────────────────────────────────── -->
                 <SectionCaisse
-                    v-if="
-                        rapport.comptes_mobile_money &&
-                        (maSituation ||
-                            !rapport.comptes_mobile_money.aucune_caisse)
-                    "
-                    nature="mobile_money"
-                    class="border-t pt-4"
-                    data-testid="comptes-mobile-money"
-                    :caisse="rapport.comptes_mobile_money"
+                    v-if="onglet === 'caisse'"
+                    id="rapport-panel-caisse"
+                    role="tabpanel"
+                    aria-labelledby="rapport-tab-caisse"
+                    tabindex="0"
+                    class="rounded-xl border bg-card p-4 sm:p-5"
+                    :caisse="rapport.caisse"
                     :ma-situation="maSituation"
                     :debut="periode.date_debut"
                     :fin="periode.date_fin"
                 />
-                <p
-                    v-if="tronque(rapport.mobile_money)"
-                    class="text-xs text-muted-foreground"
-                >
-                    {{ rapport.mobile_money.lignes.length }} lignes affichées
-                    sur {{ rapport.mobile_money.total_lignes }} — exportez pour
-                    la liste complète.
-                </p>
-            </section>
 
-            <!-- ── Caisse ─────────────────────────────────────────────────── -->
-            <SectionCaisse
-                v-if="onglet === 'caisse'"
-                id="rapport-panel-caisse"
-                role="tabpanel"
-                aria-labelledby="rapport-tab-caisse"
-                tabindex="0"
-                class="rounded-xl border bg-card p-4 sm:p-5"
-                :caisse="rapport.caisse"
-                :ma-situation="maSituation"
-                :debut="periode.date_debut"
-                :fin="periode.date_fin"
-            />
+                <!-- ── Charges ────────────────────────────────────────────── -->
+                <section
+                    v-if="onglet === 'charges'"
+                    id="rapport-panel-charges"
+                    role="tabpanel"
+                    aria-labelledby="rapport-tab-charges"
+                    tabindex="0"
+                    class="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+                >
+                    <EnTeteSection
+                        :titre="
+                            maSituation
+                                ? 'Mes charges saisies'
+                                : 'Charges saisies par les agents'
+                        "
+                        aide="Dépenses saisies sur la période (date de la dépense), validées ou en attente de validation. Validée = payée : la validation fait sortir l'argent de la trésorerie. Les brouillons, rejetées et annulées ne comptent pas."
+                        :chiffres="chiffresCharges"
+                    />
+                    <ListeCharges
+                        :lignes="rapport.charges.lignes"
+                        :afficher-agent="!maSituation"
+                        :peut-voir="peut_voir_depenses ?? false"
+                    />
+                    <p
+                        v-if="tronque(rapport.charges)"
+                        class="text-xs text-muted-foreground"
+                    >
+                        {{ rapport.charges.lignes.length }} lignes affichées sur
+                        {{ rapport.charges.total_lignes }} — exportez pour la
+                        liste complète.
+                    </p>
+                </section>
+            </div>
         </div>
     </AppLayout>
 </template>

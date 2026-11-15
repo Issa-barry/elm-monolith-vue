@@ -109,6 +109,8 @@ export interface FicheCaisse {
     solde_actuel: number;
     en_cours: { nombre: number; montant: number };
     contestes: { nombre: number; montant: number };
+    /** Versements dont l'agence a confirmé la réception pendant la période (remis, ADR 0064). */
+    recus_periode?: { nombre: number; montant: number };
     versements_periode: VersementCaisse[];
     dernier_versement: (VersementCaisse & { anciennete_jours: number }) | null;
     ecritures: EcritureCaisse[] | null;
@@ -176,6 +178,103 @@ export interface RapportActivite {
     caisse: SyntheseSupportsAgents;
     /** Comptes Mobile Money des agents (ADR 0027) : même synthèse que les caisses. */
     comptes_mobile_money?: SyntheseSupportsAgents;
+    /** Colonnes d'encaissement communes aux rapports : Espèces, Orange Money, puis tout moyen utilisé. */
+    moyens: MoyenColonne[];
+    /** Charges saisies par les agents du périmètre (ChargesRapportService). */
+    charges: {
+        resume: TotauxCharges;
+        lignes: LigneCharge[];
+        total_lignes: number;
+    };
+    /** Remise des agents à leur agence (ADR 0064) ; null sans caisse ni compte Mobile Money. */
+    remise: RemiseAgent | null;
+    /** Une ligne par agent (rapport d'activité seulement ; null dans « Ma situation »). */
+    agents: { lignes: LigneAgent[]; totaux: TotauxAgents } | null;
+}
+
+export interface MoyenColonne {
+    cle: string;
+    libelle: string;
+}
+
+export interface TotauxCharges {
+    charges_saisies: number;
+    charges_payees: number;
+    charges_payees_nombre: number;
+    charges_en_attente: number;
+    charges_en_attente_nombre: number;
+    charges_avances_tiers: number;
+}
+
+export interface LigneCharge {
+    id: string;
+    date: string;
+    type: string | null;
+    categorie: string | null;
+    avance_tiers: boolean;
+    commentaire: string | null;
+    site_nom: string | null;
+    agent: string | null;
+    montant: number;
+    statut: string;
+    statut_label: string;
+}
+
+/**
+ * Remise d'un agent à son agence (RemiseAgentService, ADR 0064) — cumul jusqu'à la fin de la période :
+ * net = encaissé (espèces + Mobile Money) + approvisionnements reçus − charges validées ;
+ * reste = net − déjà remis (le transit reste compris dans le reste).
+ */
+export interface RemiseAgent {
+    /** Début du cumul : validation de la première caisse dédiée / du premier compte Mobile Money. */
+    depuis: string;
+    encaisse: number;
+    approvisionnements: number;
+    charges_validees: number;
+    net_a_remettre: number;
+    deja_remis: number;
+    /** Réceptions confirmées pendant la période. */
+    remis: number;
+    en_transit: number;
+    reste_a_remettre: number;
+    caisse_active: boolean;
+    /** Agence(s) de rattachement : agence de la caisse / du compte Mobile Money. */
+    agences: string[];
+    derniere_remise: string | null;
+    statut: string;
+    statut_label: string;
+}
+
+export interface LigneAgent extends TotauxCharges {
+    agent_id: string | null;
+    agent: string;
+    agences: string[];
+    ventes_nombre: number;
+    ventes_montant: number;
+    par_moyen: Record<string, { cle: string; montant: number; nombre: number }>;
+    encaisse_nombre: number;
+    encaisse_montant: number;
+    pour_autres_agences: number;
+    dettes_nombre: number;
+    dettes_montant: number;
+    remise: RemiseAgent | null;
+}
+
+export interface TotauxAgents {
+    ventes_nombre: number;
+    ventes_montant: number;
+    par_moyen: Record<string, number>;
+    encaisse_montant: number;
+    pour_autres_agences: number;
+    dettes_montant: number;
+    charges_saisies: number;
+    charges_payees: number;
+    charges_en_attente: number;
+    net_a_remettre: number;
+    deja_remis: number;
+    remis: number;
+    en_transit: number;
+    reste_a_remettre: number;
 }
 
 /** RapportActiviteService::caisse() / comptesMobileMoney() — supports dédiés aux agents. */

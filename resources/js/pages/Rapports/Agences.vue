@@ -219,7 +219,7 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
 </script>
 
 <template>
-    <Head title="Rapport par agence" />
+    <Head><title>Rapport par agence</title></Head>
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="w-full min-w-0 space-y-5 p-4 sm:p-6">
@@ -381,7 +381,6 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                 <div
                     role="region"
                     aria-label="Activité par agence — tableau à défilement horizontal"
-                    tabindex="0"
                     class="w-full max-w-full overflow-x-auto"
                 >
                     <table
@@ -391,18 +390,21 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                         <thead>
                             <tr class="text-xs text-muted-foreground">
                                 <th
+                                    scope="col"
                                     class="sticky left-0 z-10 bg-card px-4 pt-2.5"
                                 />
-                                <th />
+                                <th scope="col" />
                                 <th
+                                    scope="colgroup"
                                     :colspan="colonnesEncaissements"
                                     class="border-l px-3 pt-2.5 text-left font-medium"
                                     data-testid="groupe-encaissements"
                                 >
                                     Encaissements de la période
                                 </th>
-                                <th colspan="2" />
+                                <th scope="colgroup" colspan="2" />
                                 <th
+                                    scope="colgroup"
                                     colspan="4"
                                     :class="
                                         cn(
@@ -413,16 +415,18 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                                 >
                                     Remis à {{ nomCentral }}
                                 </th>
-                                <th />
+                                <th scope="col" />
                             </tr>
                             <tr class="border-b text-muted-foreground">
                                 <th
+                                    scope="col"
                                     class="sticky left-0 z-10 bg-card px-4 py-2.5 text-left text-xs font-medium"
                                 >
                                     Agence
                                 </th>
-                                <th :class="TH">Ventes</th>
+                                <th scope="col" :class="TH">Ventes</th>
                                 <th
+                                    scope="col"
                                     v-for="(m, i) in rapport.moyens"
                                     :key="m.cle"
                                     :class="cn(TH, i === 0 && 'border-l')"
@@ -431,6 +435,7 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                                     {{ m.libelle }}
                                 </th>
                                 <th
+                                    scope="col"
                                     :class="
                                         cn(
                                             TH,
@@ -442,9 +447,10 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                                 >
                                     Total encaissé
                                 </th>
-                                <th :class="TH">Dettes clients</th>
-                                <th :class="TH">Charges payées</th>
+                                <th scope="col" :class="TH">Dettes clients</th>
+                                <th scope="col" :class="TH">Charges payées</th>
                                 <th
+                                    scope="col"
                                     :class="cn(TH, REMISE, 'border-l')"
                                     data-testid="entete-remis"
                                 >
@@ -454,6 +460,7 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                                     >
                                 </th>
                                 <th
+                                    scope="col"
                                     :class="cn(TH, REMISE)"
                                     data-testid="entete-en-transit"
                                 >
@@ -463,6 +470,7 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                                     >
                                 </th>
                                 <th
+                                    scope="col"
                                     :class="cn(TH, REMISE, 'text-foreground')"
                                     data-testid="entete-reste"
                                 >
@@ -472,6 +480,7 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                                     >
                                 </th>
                                 <th
+                                    scope="col"
                                     :class="
                                         cn(
                                             REMISE,
@@ -481,7 +490,7 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                                 >
                                     Statut
                                 </th>
-                                <th class="px-3 py-2.5">
+                                <th scope="col" class="px-3 py-2.5">
                                     <span class="sr-only">Actions</span>
                                 </th>
                             </tr>

@@ -80,7 +80,7 @@ class CommissionValidationMasseTest extends TestCase
                     'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
                     'cible_id' => (string) Str::ulid(),
                     'montant_total' => 1000,
-                    'earned_at' => now(),
+                    'earned_at' => today(),
                     'statut' => 'creee',
                 ]);
                 $parts[] = CommissionEnveloppePart::create([
@@ -481,7 +481,7 @@ class CommissionValidationMasseTest extends TestCase
             'montant_net' => 1000,
             'montant_verse' => 0,
             'statut' => 'creee',
-            'earned_at' => now(),
+            'earned_at' => today(),
             'periode' => PeriodeComptableService::codeForLivreur(now()),
         ]);
     }

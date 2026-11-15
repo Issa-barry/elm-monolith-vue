@@ -2,11 +2,15 @@
 
 namespace Tests\Feature\Rapports;
 
+use App\Enums\CategorieDepense;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutDepense;
 use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\CompteComptable;
 use App\Models\CompteTresorerie;
+use App\Models\Depense;
+use App\Models\DepenseType;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
@@ -234,7 +238,7 @@ class RapportActiviteTest extends TestCase
 
             // Colonnes : Facture, Date, Client, Véhicule, Agent…
             return count($ventes) === 1 && $ventes[0][4] === 'Moussa Sidibé'
-                && $titres === ['Résumé', 'Ventes', 'Encaissements', 'Dettes clients', 'Mobile Money', 'Caisse', 'Mobile Money agents'];
+                && $titres === ['Résumé', 'Ventes', 'Encaissements', 'Dettes clients', 'Mobile Money', 'Caisse', 'Mobile Money agents', 'Charges'];
         });
     }
 
@@ -700,5 +704,304 @@ class RapportActiviteTest extends TestCase
         $this->assertSame('Kouria', $ligne['encaisse_a']);
         $this->assertTrue($ligne['pour_autre_agence']);
         $this->assertEquals(200_000, $rapport['encaissements']['resume']['pour_autres_agences_montant']);
+    }
+
+    // ── Remise de l'agent à SON agence, par agent, charges (ADR 0064) ────────
+
+    /** @return array<string, mixed>|null ligne de l'agent dans le tableau par agent du rapport d'activité */
+    private function ligneAgent(User $agent, array $query = []): ?array
+    {
+        return collect($this->props($this->user, 'rapports.activite', $query)['rapport']['agents']['lignes'])
+            ->firstWhere('agent_id', $agent->id);
+    }
+
+    private function depense(User $auteur, Site $site, float $montant, StatutDepense $statut, string $date = '2026-09-26', CategorieDepense $categorie = CategorieDepense::INTERNE): Depense
+    {
+        return Depense::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $site->id,
+            'user_id' => $auteur->id,
+            'depense_type_id' => DepenseType::factory()->create(['organization_id' => $this->org->id, 'categorie' => $categorie->value])->id,
+            'montant' => $montant,
+            'date_depense' => $date,
+            'statut' => $statut->value,
+        ]);
+    }
+
+    /**
+     * L'agent remet à SON agence (versements de caisse), jamais à la trésorerie principale :
+     * reste = net à remettre − déjà remis (réception confirmée) ; une remise en transit reste dans le
+     * reste ; un encaissement n'est jamais une remise. Même chiffre dans « Ma situation » et dans
+     * le rapport d'activité.
+     */
+    public function test_remise_de_l_agent_a_son_agence_partielle_en_transit_puis_totale(): void
+    {
+        $caisseAgence = $this->caisseAgence($this->siteA);
+        $caisse = $this->creerCaisseActive($this->siteA->id, $this->agentA->id);
+        $this->encaisser($this->vente($this->siteA, $this->agentA, 1_000_000), $this->agentA, 1_000_000);
+
+        $avant = $this->props($this->agentA, 'ma-situation')['rapport']['remise'];
+        $this->assertEquals(0.0, $avant['deja_remis'], 'Un encaissement n\'est jamais une remise.');
+        $this->assertEquals(1_000_000, $avant['net_a_remettre']);
+        $this->assertEquals(1_000_000, $avant['reste_a_remettre']);
+        $this->assertSame('a_remettre', $avant['statut']);
+        $this->assertSame('Non remis', $avant['statut_label']);
+        $this->assertSame([$this->siteA->nom], $avant['agences']);
+        $this->assertSame('2026-09-26', $avant['depuis']);
+
+        $service = app(MouvementFondsService::class);
+        $recu = $service->verserCaisseAgent($this->org->id, $caisse, $caisseAgence->id, 400_000, 'Versement', $this->agentA->id);
+        $service->recevoir($recu, $this->user->id, $caisseAgence->id);
+        $enTransit = $service->verserCaisseAgent($this->org->id, $caisse, $caisseAgence->id, 200_000, 'Versement', $this->agentA->id);
+
+        $remise = $this->props($this->agentA, 'ma-situation')['rapport']['remise'];
+        $this->assertEquals(400_000, $remise['deja_remis']);
+        $this->assertEquals(400_000, $remise['remis']);
+        $this->assertEquals(200_000, $remise['en_transit']);
+        // Envoyée mais non confirmée : la remise en transit fait encore partie du reste.
+        $this->assertEquals(600_000, $remise['reste_a_remettre']);
+        $this->assertSame('remise_en_cours', $remise['statut']);
+
+        // Même agent, même chiffre dans le rapport d'activité.
+        $ligne = $this->ligneAgent($this->agentA);
+        $this->assertSame($remise, $ligne['remise']);
+        $this->assertEquals(1_000_000, $ligne['encaisse_montant']);
+
+        $service->recevoir($enTransit, $this->user->id, $caisseAgence->id);
+        $partiel = $this->props($this->agentA, 'ma-situation')['rapport']['remise'];
+        $this->assertEquals(600_000, $partiel['deja_remis']);
+        $this->assertEquals(400_000, $partiel['reste_a_remettre']);
+        $this->assertEquals(0.0, $partiel['en_transit']);
+        $this->assertSame('partiellement_remis', $partiel['statut']);
+
+        $service->recevoir($service->verserCaisseAgent($this->org->id, $caisse, $caisseAgence->id, 400_000, 'Solde', $this->agentA->id), $this->user->id, $caisseAgence->id);
+        $total = $this->props($this->agentA, 'ma-situation')['rapport']['remise'];
+        $this->assertEquals(1_000_000, $total['deja_remis']);
+        $this->assertEquals(0.0, $total['reste_a_remettre']);
+        $this->assertSame('remis', $total['statut']);
+        $this->assertSame('Totalement remis', $total['statut_label']);
+    }
+
+    /**
+     * Exemple du métier (15/11/2026) : encaissé 1 000 000, charges validées 200 000 → net 800 000 ;
+     * déjà remis 500 000 → reste 300 000. Charges en attente, rejetées, annulées ou supprimées : jamais
+     * déduites. Une charge validée n'est déduite qu'une fois (elle ne touche pas la caisse de l'agent).
+     */
+    public function test_seules_les_charges_validees_diminuent_le_montant_a_remettre(): void
+    {
+        $caisseAgence = $this->caisseAgence($this->siteA);
+        $caisse = $this->creerCaisseActive($this->siteA->id, $this->agentA->id);
+        $this->encaisser($this->vente($this->siteA, $this->agentA, 1_000_000), $this->agentA, 1_000_000);
+        $this->depense($this->agentA, $this->siteA, 200_000, StatutDepense::VALIDE);
+        $this->depense($this->agentA, $this->siteA, 50_000, StatutDepense::SOUMIS);
+        $this->depense($this->agentA, $this->siteA, 30_000, StatutDepense::REJETE);
+        $this->depense($this->agentA, $this->siteA, 20_000, StatutDepense::ANNULE);
+        $this->depense($this->agentA, $this->siteA, 70_000, StatutDepense::VALIDE)->delete();
+        // Charge validée d'un AUTRE agent : jamais déduite de la remise d'agentA.
+        $this->depense($this->agentB, $this->siteA, 90_000, StatutDepense::VALIDE);
+
+        $service = app(MouvementFondsService::class);
+        $service->recevoir($service->verserCaisseAgent($this->org->id, $caisse, $caisseAgence->id, 500_000, 'Versement', $this->agentA->id), $this->user->id, $caisseAgence->id);
+
+        $rapport = $this->props($this->agentA, 'ma-situation')['rapport'];
+        $remise = $rapport['remise'];
+        $this->assertEquals(1_000_000, $remise['encaisse']);
+        $this->assertEquals(200_000, $remise['charges_validees']);
+        $this->assertEquals(800_000, $remise['net_a_remettre']);
+        $this->assertEquals(500_000, $remise['deja_remis']);
+        $this->assertEquals(300_000, $remise['reste_a_remettre']);
+        $this->assertSame('partiellement_remis', $remise['statut']);
+
+        // Charges saisies (activité) et charges validées (déduites) restent deux indicateurs distincts.
+        $this->assertEquals(250_000, $rapport['charges']['resume']['charges_saisies']);
+        $this->assertEquals(200_000, $rapport['charges']['resume']['charges_payees']);
+
+        // Une seule déduction : la validation ne touche pas le solde de la caisse de l'agent.
+        $this->assertEquals(500_000, app(TresorerieDisponibiliteService::class)->soldePourSupport($caisse));
+
+        // Une remise en transit ne change pas le reste, elle est affichée à part.
+        $service->verserCaisseAgent($this->org->id, $caisse, $caisseAgence->id, 100_000, 'Versement', $this->agentA->id);
+        $transit = $this->props($this->agentA, 'ma-situation')['rapport']['remise'];
+        $this->assertEquals(300_000, $transit['reste_a_remettre']);
+        $this->assertEquals(100_000, $transit['en_transit']);
+        $this->assertSame('remise_en_cours', $transit['statut']);
+    }
+
+    /** Les espèces remises par l'agence à l'agent (approvisionnement reçu) augmentent ce qu'il doit remettre. */
+    public function test_un_approvisionnement_recu_augmente_le_net_a_remettre(): void
+    {
+        $caisseAgence = $this->caisseAgence($this->siteA);
+        $this->alimenterCaisse($caisseAgence, 5_000_000);
+        $caisse = $this->creerCaisseActive($this->siteA->id, $this->agentA->id);
+        $service = app(MouvementFondsService::class);
+        $approvisionnement = $service->approvisionnerCaisseAgent($this->org->id, $caisseAgence, $caisse->id, 300_000, 'Fonds de charges', $this->user->id);
+
+        $this->assertEquals(0.0, $this->props($this->agentA, 'ma-situation')['rapport']['remise']['approvisionnements'], 'Pas encore reçu par l\'agent.');
+
+        $service->recevoir($approvisionnement, $this->agentA->id, $caisse->id);
+        $this->depense($this->agentA, $this->siteA, 250_000, StatutDepense::VALIDE);
+
+        $remise = $this->props($this->agentA, 'ma-situation')['rapport']['remise'];
+        $this->assertEquals(300_000, $remise['approvisionnements']);
+        $this->assertEquals(50_000, $remise['net_a_remettre']);
+        $this->assertEquals(50_000, $remise['reste_a_remettre']);
+    }
+
+    /**
+     * Cumul jusqu'à la fin de la période, depuis la validation de la caisse : encaissé lundi, remis
+     * mardi → reste lundi = 1 000 000, reste mardi = 0 (aucun report perdu, jamais négatif) ; un
+     * encaissement antérieur à la caisse dédiée n'est pas compté.
+     */
+    public function test_le_reste_est_cumule_jusqu_a_la_fin_de_la_periode(): void
+    {
+        Carbon::setTestNow('2026-09-21 10:00:00');
+        $this->encaisser($this->vente($this->siteA, $this->agentA, 700_000, '2026-09-21 09:00:00'), $this->agentA, 700_000, 'mobile_money', '2026-09-21', 'OM-AVANT', 'orange_money');
+
+        Carbon::setTestNow('2026-09-22 08:00:00');
+        $caisseAgence = $this->caisseAgence($this->siteA);
+        $caisse = $this->creerCaisseActive($this->siteA->id, $this->agentA->id);
+        $this->encaisser($this->vente($this->siteA, $this->agentA, 1_000_000, '2026-09-22 09:00:00'), $this->agentA, 1_000_000, 'especes', '2026-09-22');
+
+        Carbon::setTestNow('2026-09-23 10:00:00');
+        $service = app(MouvementFondsService::class);
+        $service->recevoir($service->verserCaisseAgent($this->org->id, $caisse, $caisseAgence->id, 1_000_000, 'Versement de la veille', $this->agentA->id), $this->user->id, $caisseAgence->id);
+
+        Carbon::setTestNow('2026-09-26 12:00:00');
+        $lundi = $this->props($this->agentA, 'ma-situation', ['date_debut' => '2026-09-22', 'date_fin' => '2026-09-22'])['rapport']['remise'];
+        $this->assertEquals(1_000_000, $lundi['encaisse'], 'L\'encaissement d\'avant la caisse dédiée n\'est pas compté.');
+        $this->assertEquals(1_000_000, $lundi['reste_a_remettre']);
+        $this->assertEquals(0.0, $lundi['deja_remis']);
+
+        $mardi = $this->props($this->agentA, 'ma-situation', ['date_debut' => '2026-09-23', 'date_fin' => '2026-09-23'])['rapport']['remise'];
+        $this->assertEquals(1_000_000, $mardi['deja_remis']);
+        $this->assertEquals(1_000_000, $mardi['remis']);
+        $this->assertEquals(0.0, $mardi['reste_a_remettre']);
+        $this->assertSame('remis', $mardi['statut']);
+    }
+
+    /** Rapport par agence : la déduction des charges ne s'applique jamais à la remise de l'agence. */
+    public function test_la_deduction_des_charges_ne_touche_pas_la_remise_de_l_agence(): void
+    {
+        $this->siteA->update(['is_central_tresorerie' => true]);
+        $this->caisseAgence($this->siteB);
+        $this->creerCaisseActive($this->siteB->id, $this->agentSiteB->id);
+        $this->encaisser($this->vente($this->siteB, $this->agentSiteB, 600_000), $this->agentSiteB, 600_000);
+        $sans = collect($this->props($this->user, 'rapports.agences')['rapport']['agences'])->firstWhere('site_id', $this->siteB->id)['remise'];
+
+        $this->depense($this->agentSiteB, $this->siteB, 100_000, StatutDepense::VALIDE);
+        $avec = collect($this->props($this->user, 'rapports.agences')['rapport']['agences'])->firstWhere('site_id', $this->siteB->id)['remise'];
+        $agent = $this->props($this->agentSiteB, 'ma-situation')['rapport']['remise'];
+
+        $this->assertEquals(500_000, $agent['reste_a_remettre'], 'Niveau agent : charge validée déduite.');
+        // Niveau agence : règle ADR 0016 inchangée — la charge n'est pas déduite une seconde fois par ce rapport.
+        $this->assertSame($sans['remis'], $avec['remis']);
+        $this->assertSame($sans['en_transit'], $avec['en_transit']);
+    }
+
+    public function test_sans_caisse_dediee_pas_de_remise(): void
+    {
+        $this->encaisser($this->vente($this->siteA, $this->agentB, 500_000), $this->agentB, 500_000);
+
+        $this->assertNull($this->props($this->agentB, 'ma-situation')['rapport']['remise']);
+        $this->assertNull($this->ligneAgent($this->agentB)['remise']);
+    }
+
+    /** Espèces + Orange Money par agent ; somme des lignes = totaux du rapport ; colonnes communes. */
+    public function test_encaissements_par_moyen_et_par_agent_coherents_avec_les_totaux(): void
+    {
+        $this->encaisser($this->vente($this->siteA, $this->agentA, 300_000), $this->agentA, 300_000);
+        $this->encaisser($this->vente($this->siteA, $this->agentA, 200_000), $this->agentA, 200_000, 'mobile_money', '2026-09-26', 'OM-AG-1', 'orange_money');
+        $this->encaisser($this->vente($this->siteA, $this->agentB, 100_000), $this->agentB, 100_000);
+
+        $rapport = $this->props($this->user, 'rapports.activite')['rapport'];
+        $lignes = collect($rapport['agents']['lignes'])->keyBy('agent_id');
+
+        $this->assertSame(['especes', 'mobile_money:orange_money'], array_column($rapport['moyens'], 'cle'));
+        $this->assertEquals(300_000, $lignes[$this->agentA->id]['par_moyen']['especes']['montant']);
+        $this->assertEquals(200_000, $lignes[$this->agentA->id]['par_moyen']['mobile_money:orange_money']['montant']);
+        $this->assertEquals(500_000, $lignes[$this->agentA->id]['encaisse_montant']);
+        $this->assertEquals(100_000, $lignes[$this->agentB->id]['encaisse_montant']);
+        $this->assertEquals($rapport['encaissements']['resume']['montant'], $rapport['agents']['totaux']['encaisse_montant']);
+        $this->assertEquals($rapport['ventes']['resume']['facture'], $rapport['agents']['totaux']['ventes_montant']);
+        $this->assertEquals($rapport['creances']['resume']['reste'], $rapport['agents']['totaux']['dettes_montant']);
+
+        // Ma situation : mêmes chiffres pour le même agent.
+        $maSituation = $this->props($this->agentA, 'ma-situation')['rapport'];
+        $this->assertEquals(500_000, $maSituation['encaissements']['resume']['montant']);
+        $this->assertNull($maSituation['agents']);
+    }
+
+    /**
+     * Charges saisies PAR l'agent (auteur de la dépense), jamais les charges de son agence : validées
+     * et en attente comptées, brouillon et rejetée exclues, période respectée.
+     */
+    public function test_charges_saisies_par_l_agent_et_non_celles_de_son_agence(): void
+    {
+        $this->depense($this->agentA, $this->siteA, 100_000, StatutDepense::VALIDE);
+        $this->depense($this->agentA, $this->siteA, 50_000, StatutDepense::SOUMIS);
+        $this->depense($this->agentA, $this->siteA, 10_000, StatutDepense::BROUILLON);
+        $this->depense($this->agentA, $this->siteA, 20_000, StatutDepense::REJETE);
+        $this->depense($this->agentA, $this->siteA, 30_000, StatutDepense::VALIDE, '2026-09-25');
+        $this->depense($this->agentB, $this->siteA, 70_000, StatutDepense::VALIDE, categorie: CategorieDepense::LIVREUR);
+
+        $charges = $this->props($this->agentA, 'ma-situation')['rapport']['charges'];
+        $this->assertEquals(150_000, $charges['resume']['charges_saisies']);
+        $this->assertEquals(100_000, $charges['resume']['charges_payees']);
+        $this->assertEquals(50_000, $charges['resume']['charges_en_attente']);
+        $this->assertCount(2, $charges['lignes']);
+        $this->assertSame(2, $charges['total_lignes']);
+
+        $hier = $this->props($this->agentA, 'ma-situation', ['periode' => 'hier'])['rapport']['charges'];
+        $this->assertEquals(30_000, $hier['resume']['charges_saisies']);
+
+        $rapport = $this->props($this->user, 'rapports.activite')['rapport'];
+        $lignes = collect($rapport['agents']['lignes'])->keyBy('agent_id');
+        $this->assertEquals(150_000, $lignes[$this->agentA->id]['charges_saisies']);
+        $this->assertEquals(70_000, $lignes[$this->agentB->id]['charges_saisies']);
+        $this->assertEquals(70_000, $lignes[$this->agentB->id]['charges_avances_tiers']);
+        $this->assertEquals(220_000, $rapport['agents']['totaux']['charges_saisies']);
+        $this->assertEquals(220_000, $rapport['charges']['resume']['charges_saisies']);
+    }
+
+    /** Un responsable d'agence ne voit ni les agents ni les charges d'une autre agence. */
+    public function test_le_tableau_par_agent_respecte_le_perimetre_des_agences(): void
+    {
+        $responsableB = $this->creerUtilisateurNonAdmin($this->siteB, ['rapports.read']);
+        $this->encaisser($this->vente($this->siteA, $this->agentA, 300_000), $this->agentA, 300_000);
+        $this->depense($this->agentA, $this->siteA, 40_000, StatutDepense::VALIDE);
+        $this->encaisser($this->vente($this->siteB, $this->agentSiteB, 200_000), $this->agentSiteB, 200_000);
+
+        $rapport = $this->props($responsableB, 'rapports.activite')['rapport'];
+
+        $this->assertSame([$this->agentSiteB->id], array_column($rapport['agents']['lignes'], 'agent_id'));
+        $this->assertEquals(0.0, $rapport['charges']['resume']['charges_saisies']);
+    }
+
+    public function test_les_exports_reprennent_moyens_charges_remise_et_agents(): void
+    {
+        Excel::fake();
+        $this->creerCaisseActive($this->siteA->id, $this->agentA->id);
+        $this->encaisser($this->vente($this->siteA, $this->agentA, 300_000), $this->agentA, 300_000);
+        $this->depense($this->agentA, $this->siteA, 40_000, StatutDepense::VALIDE);
+
+        $this->actingAs($this->user)->get(route('rapports.activite.export'))->assertOk();
+        Excel::assertDownloaded('rapport-activite-2026-09-26.xlsx', function (RapportActiviteExport $export) {
+            $feuilles = collect($export->sheets())->keyBy(fn ($f) => $f->title());
+            $resume = collect($feuilles['Résumé']->array())->pluck(1, 0);
+            $agents = $feuilles['Agents'];
+            $ligne = collect($agents->array())->firstWhere(0, 'Moussa Sidibé');
+
+            return $resume['Encaissé Espèces'] == 300_000
+                && $resume['Encaissé Orange Money'] == 0
+                && $resume['Total encaissé'] == 300_000
+                && $resume['Charges saisies (validées + en attente)'] == 40_000
+                && $resume['  Statut'] === 'Non remis'
+                && $ligne !== null
+                && $ligne[array_search('Total encaissé', $agents->headings(), true)] == 300_000
+                && $ligne[array_search('Charges saisies', $agents->headings(), true)] == 40_000
+                && count($feuilles['Charges']->array()) === 1;
+        });
+
+        $this->actingAs($this->agentA)->get(route('ma-situation.export', ['format' => 'pdf']))->assertOk();
     }
 }
