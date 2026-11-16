@@ -7,9 +7,9 @@ use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
 use App\Models\Depense;
 use App\Models\DepenseType;
-use App\Models\Site;
 use App\Services\DroitCreationDepenseService;
 use App\Support\Depenses\DepenseListingService;
+use App\Support\Depenses\DepensePerimetre;
 use App\Support\Periodes\Periode;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,6 +20,7 @@ class IndexDepenseController extends Controller
     public function __construct(
         private readonly DepenseListingService $listing,
         private readonly DroitCreationDepenseService $droitCreationDepense,
+        private readonly DepensePerimetre $perimetre,
     ) {}
 
     public function __invoke(Request $request): Response
@@ -33,9 +34,9 @@ class IndexDepenseController extends Controller
         if (isset($filters['vehicule_ids'])) {
             $filters['vehicule_ids'] = array_values(array_filter((array) $filters['vehicule_ids']));
         }
-        $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
+        $siteIds = $this->perimetre->sitesFiltres($user, (array) $request->input('site_ids', []));
 
-        $paginator = $this->listing->query($filters, $orgId, $siteIds, $periode)
+        $paginator = $this->listing->query($user, $filters, $siteIds, $periode)
             ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
             ->paginate(30)
             ->withQueryString();
@@ -48,11 +49,7 @@ class IndexDepenseController extends Controller
             ->ordered()
             ->get(['id', 'libelle', 'categorie']);
 
-        $sites = Site::where('organization_id', $orgId)
-            ->orderBy('nom')
-            ->get(['id', 'nom']);
-
-        $statsRow = $this->listing->query($filters, $orgId, $siteIds, $periode)
+        $statsRow = $this->listing->query($user, $filters, $siteIds, $periode)
             ->reorder()
             ->selectRaw(
                 'COUNT(*) as total,
@@ -66,12 +63,14 @@ class IndexDepenseController extends Controller
         return Inertia::render('Depenses/Index', [
             'depenses' => $paginator->through(fn (Depense $d) => $this->listing->transform($d, $beneficiaireCache, $vehiculeInfoCache, $user, $droitValidation)),
             'types' => $types->map(fn ($t) => ['id' => $t->id, 'libelle' => $t->libelle, 'categorie' => $t->categorie->value]),
-            'sites' => $sites,
+            // Filtre Agence : agences du périmètre de consultation, calculé par le serveur.
+            'sites' => $this->perimetre->sitesProposes($user),
+            'voit_toutes_agences' => $this->perimetre->voitToutesLesAgences($user),
             'proprietaires' => $this->listing->optionsProprietaires($orgId),
             'vehicules' => $this->listing->optionsVehicules($orgId),
             'categories' => CategorieDepense::options(),
             'statuts' => StatutDepense::options(),
-            'filters' => array_merge($filters, ['site_ids' => $siteIds], $periode->valeursFiltre()),
+            'filters' => array_merge($filters, ['site_ids' => $siteIds ?? []], $periode->valeursFiltre()),
             'stats' => [
                 'total' => (int) $statsRow->total,
                 'montant_total' => (float) $statsRow->montant_total,

@@ -1,197 +1,46 @@
-# Standards UI — à respecter impérativement
+# Instructions pour les agents — EAU LA MAMAN (`elm-monolithe`)
 
-Ces trois règles sont contrôlées automatiquement par `node scripts/check-ui-standards.mjs`,
-exécuté dans le CI (`.github/workflows/lint.yml`, job `quality`, step "Check UI standards").
-Une PR qui les viole échoue le check **avant merge**. Lance `npm run lint:standards` en local
-pour vérifier avant de pousser.
+## Lecture obligatoire
 
-## 1. Badge de statut : point coloré, jamais de fond coloré
+**Avant toute modification d'interface (`.vue`, `.ts` du front) ou de règle métier, lire en
+entier `docs/developpement/standards.md`.** C'est la référence unique des standards ; ce fichier
+n'en est qu'un rappel. En cas de doute ou d'écart, le document fait foi.
 
-Tout affichage d'un **statut** (commande, facture, dépense, transfert, période, paiement...)
-doit utiliser le composant `resources/js/components/StatusDot.vue` :
+Autres guides : `docs/README.md` (sommaire), `docs/developpement/tests.md`,
+`docs/developpement/ci-cd.md`, et le document métier du domaine touché.
 
-```vue
-<StatusDot :status="commande.statut" :label="commande.statut_label" />
-```
+## Interdits (résumé)
 
-- Le prop `status` (la valeur brute backend, ex: `"livraison_en_cours"`) résout automatiquement
-  la couleur du point via la table centralisée dans `StatusDot.vue`.
-- **Interdit** : un `<span>`/`<Badge>` avec des classes `rounded-full` + `bg-*-50` / `bg-*-100`
-  (pill à fond coloré) pour afficher un statut. Le seul élément coloré est le point (`<span class="rounded-full ...">`
-  interne au composant), jamais le fond du texte.
-- Si une **nouvelle valeur de statut** apparaît (nouveau workflow, nouvel enum), ajoute-la
-  UNIQUEMENT dans `STATUS_COLOR_MAP` au sommet de `StatusDot.vue` — ne crée pas de map de
-  couleur locale dans la page.
-- Cette règle ne s'applique qu'aux **statuts d'entité**. Les badges de catégorie/type/rôle
-  (ex: type de produit, rôle utilisateur, catégorie de dépense) peuvent garder un fond coloré —
-  ce ne sont pas des statuts.
+Contrôlés en CI par `npm run lint:standards` (une violation bloque la pull request) :
 
-## 2. Pages de liste : actions d'en-tête + filtres en mode `trigger-only`
+1. Un statut affiché en pastille à fond coloré (`rounded-full` + `bg-*-50/100`) : utiliser
+   `<StatusDot :status :label />`.
+2. Des filtres faits main ou une recherche globale `search` : utiliser `DataFilters.vue`. Toute page
+   de liste nouvelle ou modifiée : `ListPageActions` + `<DataFilters trigger-only>`.
+3. Un `<Toast>` sans `position="top-right"` (aucune échappatoire).
+4. Une icône de copie autre que `pi pi-clipboard`, `pi pi-clipboard` sans copie réelle, ou un bouton
+   de copie sans `title="Cliquez pour copier …"`.
+5. Un filtre `type: 'date-range'` ou une liste de périodes codée en dur : utiliser
+   `type: 'period'` et le moteur `Periode` côté serveur (ADR 0057).
 
-Toute page de liste (Index) doit suivre la structure d'en-tête standard, portée par
-`resources/js/components/ListPageActions.vue` :
+Vérifiés en revue de code ou par PHPUnit :
 
-```
-[Titre + sous-titre]                     [Exporter] [Importer] [Filtres] [Nouveau]
-```
+6. Calculer des bornes de période hors de `App\Support\Periodes\Periode`.
+7. Une vue PDF de facture ou de bon avec son propre HTML/CSS : utiliser `<x-pdf.document>`.
+8. Une action (créer, modifier, supprimer, valider…) visible sans `can('…')` correspondant
+   exactement à la permission serveur.
+9. Une règle métier contrôlée seulement dans le front : le serveur fait foi.
+10. Une carte ou un bloc ajouté à un écran sans demande explicite.
+11. Un mot de passe, jeton, clé ou numéro de téléphone réel dans le dépôt (il est public).
 
-```vue
-<ListPageActions>
-    <template #export>...</template>
-    <template #import>...</template>
-    <template #filters>
-        <DataFilters trigger-only url="/produits" :values="filters" :fields="filterFields" />
-    </template>
-    <template #primary>...</template>
-</ListPageActions>
-```
+## Échappatoires
 
-- **Ordre strict, imposé par le composant** (pas par la page) : `Exporter → Importer → Filtres →
-  Nouveau`. Une page ne place plus ces boutons elle-même dans un `<div class="flex gap-2">` fait
-  main — elle passe par les slots `#export`/`#import`/`#filters`/`#primary` de `ListPageActions`.
-- Si une action n'existe pas pour la page, le slot correspondant est simplement omis (pas de
-  bouton fantôme).
-- Le bouton primaire (`#primary`) est toujours `Nouveau <entité>`, tout à droite.
-- Toute page de liste avec des filtres doit utiliser
-  `resources/js/components/filters/DataFilters.vue` en mode **`trigger-only`** : un seul bouton
-  **Filtres** dans l'en-tête (slot `#filters`), qui ouvre le drawer — plus de grosse barre de
-  champs au-dessus du tableau. Le drawer reste l'unique endroit où les champs sont affichés.
-- **Aucun champ de recherche globale** (`search`) : supprimé du composant et de toutes les pages.
-  Les pages font leur propre filtre texte via un champ `type: 'text'`.
-- **Exception, barre rapide du tableau (Ventes seulement, 25/10/2026)** : la recherche `recherche`
-  et quelques filtres texte fréquents (champs `inline: true`) s'affichent en tête de la carte du
-  tableau via `resources/js/components/filters/QuickFilters.vue`, avec
-  `<DataFilters trigger-only quick-bar>` dans l'en-tête (bouton « Filtres » inchangé). Les champs ne
-  sont jamais affichés deux fois, la recherche est traitée côté serveur et chaque saisie conserve
-  les autres filtres. Ne l'étends pas à une autre liste sans demande explicite (cf.
-  `docs/filters.md`, « Barre rapide du tableau »).
-- Ordre des champs dans le drawer : **Agence (auto, si données multi-sites) → Statut → Recherche →
-  période/dates → autres filtres métier** (véhicule, client, propriétaire, type, catégorie,
-  montant...).
-- Le filtre Agence est obligatoire dès qu'une page affiche des données multi-sites, et doit
-  envoyer `site_ids[]` au backend.
-- `DataFilters`/l'URL/le backend restent l'unique source de vérité des filtres (préparation d'une
-  future évolution "filtres de colonnes" façon Apollo/PrimeVue — pas encore développée). Ne crée
-  jamais un filtrage local différent sur une liste déjà pilotée par le backend.
-- Ne déclare pas plusieurs `ref` nommées `filterXxx`/`filtreXxx` sans importer `DataFilters.vue` —
-  c'est exactement le pattern détecté par le check CI comme "filtre fait maison".
-- Une liste sans filtre pertinent n'a pas de slot `#filters` ; une liste sans création n'a pas de
-  slot `#primary`.
+`ui-standard-ignore-file` (avec une courte justification) désactive les contrôles 1, 2 et 4 pour
+un fichier. `periode-standard-ignore: <raison>` désactive le contrôle 5 (dérogation à documenter
+dans `docs/periodes.md`). Rien ne désactive le contrôle 3.
 
-## 3. Toasts : toujours en haut à droite
+## Avant de livrer
 
-Tout composant PrimeVue `<Toast>` doit déclarer explicitement :
-
-```vue
-<Toast position="top-right" />
-```
-
-- **Interdit** : `bottom-right`, `bottom-left`, `bottom-center`, `center` ou une position dynamique.
-- Cette règle s'applique au Toast global comme aux groupes spécialisés déclarés dans une page.
-- Les appels `toast.add(...)` restent inchangés : la position est contrôlée par le composant `<Toast>` qui reçoit le message.
-- Cette règle est vérifiée dans les pages, les composants et les layouts, sans échappatoire.
-
-## 4. Règles métier : backend obligatoire
-
-Toute règle qui bloque ou autorise une action métier (stock, solde, statut, permission,
-plafond...) doit être contrôlée côté **backend**. Une désactivation de bouton, un filtre
-frontend ou un message dans Vue améliore l'expérience, mais ne remplace jamais la règle
-métier serveur.
-
-- Centralise la règle dans le service, la policy ou le mécanisme métier existant.
-- Contrôle à nouveau les opérations différées ou concurrentes au moment de leur exécution
-  réelle (ex. création de commande puis validation du chargement).
-- Une page ou une action bloquée côté interface doit toujours avoir son équivalent backend.
-
-## 5. Paramètres et choix Oui / Non
-
-Tout paramètre d'organisation doit être isolé par `organization_id`, protégé par la permission
-existante la plus adaptée et avoir une valeur par défaut sûre.
-
-- Pour un booléen, utiliser une seule case à cocher clairement libellée.
-- Si les deux choix **Oui** et **Non** doivent être visibles, utiliser des boutons radio ; deux
-  cases à cocher seraient ambiguës.
-- Les paramètres ne doivent jamais être modifiables seulement dans le frontend : vérifier la
-  permission également côté backend.
-
-## 6. Historique, motifs et filtres de modale
-
-Le motif d'un mouvement ou d'une activité doit provenir de sa source métier réelle (vente,
-transfert, ajustement, production...), jamais être déduit seulement du signe ou du montant.
-
-- `DataFilters.vue` est obligatoire pour les filtres des pages **Index**. Un filtre simple dans
-  une modale d'historique peut suivre le composant déjà utilisé dans cette modale.
-- N'ajoute au filtre que des motifs réellement pris en charge par les données et le backend.
-
-## 7. Vérifications avant livraison
-
-Après toute modification UI, lance au minimum :
-
-```bash
-npm run lint:standards
-```
-
-Ajoute et exécute les tests pertinents (Feature, Unit et/ou E2E) pour les règles métier ou les
-parcours utilisateurs modifiés. Dans le compte rendu final, indique les commandes exécutées et
-leurs résultats.
-
-## 8. Factures et bons PDF : toujours le modèle officiel partagé
-
-Toute facture ou tout bon généré en PDF (facture d'achat, bon de commande, facture de vente, et tout
-nouveau document de ce type) utilise le modèle officiel décrit dans `docs/documents-pdf.md`
-(ADR 0033) :
-
-```blade
-<x-pdf.document :document="$document" />
-```
-
-- Les données sont préparées par un constructeur `app/Support/Documents/XxxDocument.php` qui
-  retourne un `DocumentPdf` ; le rendu passe par `DocumentPdfRenderer`.
-- **Interdit** : une nouvelle vue PDF de facture ou de bon avec son propre HTML/CSS (`<style>`,
-  tableaux d'en-tête ou de totaux recopiés). Un besoin de présentation nouveau s'ajoute au modèle
-  (paramètre de `DocumentPdf` ou slot du composant), pour tous les documents.
-- Couleurs : celles du design d'origine de la facture d'achat ; seul le nom de l'organisation prend
-  les deux tons de `CharteDocument`. Pied de page légal : celui de l'organisation (Paramètres →
-  Organisation), jamais écrit dans le modèle.
-- Une mention propre à un document reste propre à ce document (ex. « Ce document n'est pas
-  l'original du fournisseur » : facture d'achat uniquement).
-- Tout nouveau type est ajouté à `tests/Feature/Documents/ModeleDocumentPdfTest.php` (même modèle,
-  propagation du bloc partagé). Cette règle n'est pas couverte par `lint:standards`.
-
-## 9. Filtres de période : un seul moteur, côté serveur
-
-Règle stricte (ADR 0057, `docs/periodes.md`) : aucun développeur ni agent IA ne crée, modifie ou
-maintient un filtre temporel en dehors du système centralisé des périodes.
-
-```php
-$periode = Periode::depuisRequeteValidee($request);   // App\Support\Periodes\Periode
-$periode->appliquer($query, 'created_at');
-```
-
-```ts
-{ key: 'periode', label: 'Période', type: 'period', defaultValue: 'tout' }
-```
-
-- Deux modes seulement : `periode=<clé>` (aujourd_hui, hier, cette_semaine, semaine_precedente,
-  ce_mois, mois_precedent, cette_annee, annee_precedente, tout) ou `date_debut` + `date_fin`
-  (incluses, ordonnées ; `date_debut` obligatoire, sans `date_fin` = jusqu'à aujourd'hui, résolu
-  par le serveur). Jamais les deux à la fois.
-- **Interdit** : calculer des bornes dans un contrôleur, un service ou le navigateur (`startOfMonth`,
-  `subMonth`, `whereDate`, `new Date()`…) ; lire `date_debut`/`date_fin` à la main ; un champ
-  `type: 'date-range'` ; une liste de périodes codée en dur côté front.
-- Une période invalide est refusée avec un message (jamais remplacée en silence).
-- Les périodes métier (quinzaines P1/P2, mois comptable, paie) restent à leurs services dédiés : ne
-  pas les remplacer par des périodes calendaires.
-- Nouvel écran filtré par période : l'inscrire dans `tests/Feature/Periodes/RegistreFiltresPeriodeTest.php`.
-- Contrôlé en CI par ce registre, `tests/Unit/Architecture/PeriodesArchitectureTest.php` et
-  `npm run lint:standards`. Dérogation : commentaire `periode-standard-ignore: <raison>` côté front,
-  exception justifiée dans `PeriodesArchitectureTest` côté backend, et ligne dans `docs/periodes.md`
-  (« Dérogations »).
-
-## Échappatoire
-
-Si un cas est légitimement hors-périmètre (ex: un badge qui ressemble à un statut mais qui est
-en fait une catégorie), ajoute le commentaire `ui-standard-ignore-file` n'importe où dans le
-fichier `.vue` pour désactiver les checks Badge/DataFilters sur ce fichier. Ajoute à côté une
-brève explication du cas hors-périmètre. À utiliser avec parcimonie — ce commentaire ne
-désactive jamais la règle Toast en haut à droite.
+Lancer au minimum `npm run lint:standards` après une modification d'interface, puis les tests du
+périmètre (section B6 du document des standards), et indiquer les commandes et leurs résultats
+dans le compte rendu.

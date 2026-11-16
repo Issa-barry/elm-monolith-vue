@@ -167,20 +167,8 @@ Ne jamais faire confiance à un montant ou à une règle métier sensible proven
 
 ## 10. UI / UX
 
-Respecter une sémantique cohérente dans toute l'application :
-
-- SUCCESS / vert = situation normale ou réussite ;
-- WARNING / orange-ambre = attention, mais opération encore autorisée ;
-- DANGER / rouge = erreur ou opération réellement bloquée ;
-- INFO / bleu = information sans anomalie.
-
-Ne pas afficher une situation autorisée en rouge simplement parce qu'une anomalie existe.
-
-Exemple :
-impayé + dérogation valide + commande autorisée
-→ WARNING, pas DANGER.
-
-Réutiliser les composants partagés et les styles existants avant d'en créer de nouveaux.
+Les standards d'interface (couleurs sémantiques, statuts, filtres, cartes, permissions…) sont dans
+`docs/developpement/standards.md`, partie A, chargé par le `CLAUDE.md` racine.
 
 Ne jamais ajouter une carte ou un autre bloc à un écran sans demande explicite de l'utilisateur, même si
 le besoin semble évident. Proposer l'ajout dans le rapport et attendre sa réponse.

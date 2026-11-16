@@ -238,7 +238,7 @@ class RapportActiviteTest extends TestCase
 
             // Colonnes : Facture, Date, Client, Véhicule, Agent…
             return count($ventes) === 1 && $ventes[0][4] === 'Moussa Sidibé'
-                && $titres === ['Résumé', 'Ventes', 'Encaissements', 'Dettes clients', 'Mobile Money', 'Caisse', 'Mobile Money agents', 'Charges'];
+                && $titres === ['Résumé', 'Ventes', 'Encaissements', 'Dettes clients', 'Mobile Money', 'Caisse', 'Mobile Money agents', 'Charges', 'Agents'];
         });
     }
 
@@ -928,7 +928,9 @@ class RapportActiviteTest extends TestCase
         // Ma situation : mêmes chiffres pour le même agent.
         $maSituation = $this->props($this->agentA, 'ma-situation')['rapport'];
         $this->assertEquals(500_000, $maSituation['encaissements']['resume']['montant']);
-        $this->assertNull($maSituation['agents']);
+        // Ma situation : la seule ligne de l'agent connecté, mêmes chiffres que dans le rapport d'activité.
+        $this->assertSame([$this->agentA->id], array_column($maSituation['agents']['lignes'], 'agent_id'));
+        $this->assertEquals($lignes[$this->agentA->id]['encaisse_montant'], $maSituation['agents']['lignes'][0]['encaisse_montant']);
     }
 
     /**

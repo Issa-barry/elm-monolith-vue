@@ -315,31 +315,34 @@ caisse, transferts Mobile Money) ; l'**agence** remet à la trésorerie principa
   annulées, supprimées exclues.
 - **Moyens** : mêmes colonnes que le rapport par agence (`RapportActiviteService::colonnesMoyens()`) ;
   total encaissé = somme des colonnes.
-- **Rapport d'activité** : cartes Ventes, Total encaissé, Dettes clients, Charges saisies, Remis à
-  l'agence ; tableau **une ligne par agent** (`parAgent()` : agent, agence de rattachement, ventes,
-  Espèces, Orange Money, total encaissé, dettes clients, charges saisies, charges validées, puis
-  groupe « Remise à l'agence de rattachement » : net à remettre, déjà remis, en transit, reste,
-  statut ; ligne Total = totaux du rapport). Le nom de l'agent et l'icône « Opérations » filtrent la
-  page sur cet agent.
-- **Ma situation** : cartes Mes ventes, Mes encaissements, Mes dettes clients, Mes charges saisies
-  (dont validées / en attente), Remis à mon agence (période), Reste à remettre à mon agence ; blocs
-  **Mes encaissements** (par moyen, total) et **Remises à {agence}** (calcul ligne à ligne :
-  encaissé, approvisionnements, charges validées, net, déjà remis, reste, dont en transit) ; onglet
-  **Mes charges** (liste, lien vers la dépense seulement avec `depenses.read` et le module Dépenses).
+- **Présentation (15/11/2026)** : les deux pages **gardent leur design et leurs cartes-onglets**
+  (Ma caisse, ventes, encaissements, dettes clients, Mobile Money, caisses dédiées). Deux cartes
+  s'ajoutent à la suite :
+  - **Charges** (Rapport d'activité) / **Mes charges** (Ma situation) : total des charges validées
+    et leur nombre, saisies en attente à part ; l'onglet liste les charges (lien vers la dépense
+    seulement avec `depenses.read` et le module Dépenses) ;
+  - **Détail des situations des agents** / **Détail de ma situation** : ouvre sous les cartes le
+    tableau consolidé (même tableau que le rapport par agence, une ligne par agent : agent, agence
+    de rattachement, ventes, Espèces, Orange Money, total encaissé, dettes clients, charges saisies,
+    charges validées, puis « Remise à l'agence de rattachement » : net à remettre, déjà remis, en
+    transit, reste, statut ; ligne Total). Second clic : repli (retour à la carte Ventes). Rapport
+    d'activité : le nom de l'agent et « Opérations » filtrent la page sur cet agent. Ma situation :
+    la seule ligne de l'agent connecté, sans lien, suivie du calcul de sa remise ligne à ligne
+    (encaissé, approvisionnements, charges validées, net, déjà remis, reste, dont en transit).
 - Même agent, mêmes chiffres dans Ma situation et dans le rapport d'activité filtré sur lui.
 
 ## Écran et exports
 
-- Même langage graphique sur les trois rapports (référence : Rapport par agence) : en-tête compact,
-  cartes `KpiCard compact`, tableau (montants en GNF sans unité, zéros atténués, groupe « Remis » sur
-  fond distinct), statuts `StatusDot`, liste empilée sous 1024 px.
-- Détail du rapport d'activité et de Ma situation en onglets **Ventes / Encaissements / Dettes
-  clients / Mobile Money / Caisse / Charges** (onglet porté par l'URL, `?tab=`). Au plus **300
+- Rapport d'activité et Ma situation : cartes-onglets (`CarteSection`), une carte ouvre son détail.
+  Le tableau consolidé (« Détail… ») reprend le tableau du rapport par agence (montants en GNF sans
+  unité, zéros atténués, groupe « Remis » sur fond distinct, liste empilée sous 1024 px).
+- Onglets portés par l'URL (`?tab=` : ventes, encaissements, creances, mobile_money, caisse,
+  charges, synthese). Au plus **300
   lignes** par onglet à l'écran (les plus récentes ; les plus anciennes pour les dettes) ; les totaux
   portent toujours sur tout le périmètre ; l'export contient toutes les lignes.
 - Statuts de facture, de versement, de dépense et de remise : `StatusDot`.
 - **Excel** : Résumé (moyens et total encaissé, charges, remise à l'agence), une feuille par onglet,
-  feuille **Charges**, et feuille **Agents** pour le rapport d'activité. **PDF** : paysage, mêmes
+  feuille **Charges**, et feuille **Agents** (une ligne par agent ; dans Ma situation, la sienne). **PDF** : paysage, mêmes
   sections (indicateurs, détail par agent, charges).
 
 ## Permissions (RAP-009)

@@ -107,6 +107,13 @@ const props = withDefaults(
          * ne comptent pas dans son badge et ne sont pas effacés par son « Réinitialiser ».
          */
         quickBar?: boolean;
+        /**
+         * Périmètre d'agences propre à la page, calculé par le serveur (ex. Dépenses, ADR 0065) :
+         * `sites` contient alors exactement les agences consultables et l'utilisateur y choisit
+         * librement une ou plusieurs agences (vide = tout son périmètre). Absent : périmètre global
+         * (`auth.voit_toutes_agences`), sélecteur verrouillé sur ses agences.
+         */
+        toutesAgences?: boolean | null;
     }>(),
     {
         baseParams: () => ({}),
@@ -118,6 +125,7 @@ const props = withDefaults(
         triggerOnly: false,
         triggerTarget: null,
         quickBar: false,
+        toutesAgences: null,
     },
 );
 
@@ -172,12 +180,26 @@ function describeSavedFilters(
 // Filtre Agence libre : l'utilisateur consulte toutes les agences (administrateur ou permission
 // « vision 360° », ADR 0025). Calculé par le backend (auth.voit_toutes_agences), jamais déduit du
 // nom d'un rôle. Ne concerne que la consultation.
+const perimetrePage = computed(
+    () => props.toutesAgences !== null && props.toutesAgences !== undefined,
+);
+
 const toutesAgences = computed(() => {
+    if (perimetrePage.value) return props.toutesAgences === true;
     const auth = (page.props as Record<string, unknown>).auth as
         | Record<string, unknown>
         | undefined;
     return auth?.voit_toutes_agences === true;
 });
+
+// Sélection d'agences libre parmi les options (vide = tout le périmètre).
+const selectionAgencesLibre = computed(
+    () => toutesAgences.value || perimetrePage.value,
+);
+
+const placeholderAgences = computed(() =>
+    toutesAgences.value ? 'Toutes les agences' : 'Toutes mes agences',
+);
 
 // Sites de l'utilisateur connecté (vide s'il consulte toutes les agences, non-vide sinon)
 const authUserSites = computed<SiteOption[]>(() => {
@@ -200,6 +222,9 @@ const effectiveSites = computed<SiteOption[]>(() => {
 // - toutes les agences consultables → tous les sites de l'organisation
 // - sinon → uniquement ses sites
 const siteOptions = computed(() => {
+    if (perimetrePage.value) {
+        return props.sites.map((s) => ({ value: s.id, label: s.nom }));
+    }
     if (!toutesAgences.value && authUserSites.value.length > 0) {
         return authUserSites.value.map((s) => ({ value: s.id, label: s.nom }));
     }
@@ -207,7 +232,7 @@ const siteOptions = computed(() => {
 });
 
 // Périmètre limité à ses agences : sélecteur verrouillé (périmètre imposé par le backend)
-const siteSelectorLocked = computed(() => !toutesAgences.value);
+const siteSelectorLocked = computed(() => !selectionAgencesLibre.value);
 
 // ── État local ────────────────────────────────────────────────────────────────
 
@@ -232,7 +257,11 @@ function toArray(val: unknown): string[] {
 function initLocal() {
     const v = props.values ?? {};
 
-    if (!toutesAgences.value && authUserSites.value.length > 0) {
+    if (
+        !perimetrePage.value &&
+        !toutesAgences.value &&
+        authUserSites.value.length > 0
+    ) {
         localSiteIds.value = authUserSites.value.map((s) => s.id);
     } else {
         localSiteIds.value = toArray(v.site_ids);
@@ -405,8 +434,8 @@ function meaningfulTotal(options?: FilterOption[]): number {
 function buildParams(): Record<string, string | string[]> {
     const params: Record<string, string | string[]> = { ...props.baseParams };
 
-    // Filtre agence : seulement si toutes les agences sont consultables, et seulement si une sélection partielle
-    if (toutesAgences.value && localSiteIds.value.length > 0) {
+    // Filtre agence : seulement si la sélection est libre, et seulement si une sélection partielle
+    if (selectionAgencesLibre.value && localSiteIds.value.length > 0) {
         const totalSites = siteOptions.value.length;
         if (totalSites <= 1 || localSiteIds.value.length < totalSites) {
             params.site_ids = localSiteIds.value;
@@ -485,7 +514,7 @@ function applyFilters() {
 /** `toutEffacer` : retrait d'une vue enregistrée — vide aussi la barre rapide. */
 function resetFilters(toutEffacer = false) {
     const garderBarreRapide = separateQuickFields.value && !toutEffacer;
-    if (toutesAgences.value) {
+    if (selectionAgencesLibre.value) {
         localSiteIds.value = [];
     }
 
@@ -579,14 +608,14 @@ const activeFilterCount = computed(
         (separateQuickFields.value
             ? 0
             : countActiveFields(inlineFields.value)) +
-        (toutesAgences.value && localSiteIds.value.length > 0 ? 1 : 0),
+        (selectionAgencesLibre.value && localSiteIds.value.length > 0 ? 1 : 0),
 );
 
 const hasActiveFilters = computed(
     () =>
         drawerFilterCount.value > 0 ||
         countActiveFields(inlineFields.value) > 0 ||
-        (toutesAgences.value && localSiteIds.value.length > 0),
+        (selectionAgencesLibre.value && localSiteIds.value.length > 0),
 );
 </script>
 
@@ -605,8 +634,8 @@ const hasActiveFilters = computed(
                 <FilterMultiSelect
                     v-model="localSiteIds"
                     :options="siteOptions"
-                    placeholder="Toutes les agences"
-                    :empty-means-all="toutesAgences"
+                    :placeholder="placeholderAgences"
+                    :empty-means-all="selectionAgencesLibre"
                     :disabled="siteSelectorLocked"
                 />
                 <Lock
@@ -872,8 +901,8 @@ const hasActiveFilters = computed(
                             <FilterMultiSelect
                                 v-model="localSiteIds"
                                 :options="siteOptions"
-                                placeholder="Toutes les agences"
-                                :empty-means-all="toutesAgences"
+                                :placeholder="placeholderAgences"
+                                :empty-means-all="selectionAgencesLibre"
                                 :disabled="siteSelectorLocked"
                             />
                         </div>

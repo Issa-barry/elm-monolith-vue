@@ -1284,13 +1284,8 @@ function submitBrouillon() {
                                 <Select
                                     input-id="dep-site"
                                     v-model="form.site_id"
-                                    :options="[
-                                        {
-                                            id: '',
-                                            nom: 'Aucune agence spécifique',
-                                        },
-                                        ...sites,
-                                    ]"
+                                    :options="sites"
+                                    placeholder="Choisir une agence"
                                     option-label="nom"
                                     option-value="id"
                                     :disabled="!can_change_site"

@@ -111,6 +111,7 @@ final class PermissionCatalog
         'depenses.valider' => 'Dépenses — valider',
         'depenses.rejeter' => 'Dépenses — rejeter',
         'depenses.annuler' => 'Dépenses — annuler',
+        'depenses.lecture_toutes_agences' => 'Dépenses — consulter les dépenses de toutes les agences (sinon : ses agences de rattachement et celles où son rôle valide)',
         'produits.ajuster_stock' => 'Produits — ajuster le stock',
         'ventes.confirmer' => 'Ventes — confirmer',
         'ventes.precommander' => 'Ventes — créer une précommande (acompte initial compris)',
@@ -266,6 +267,7 @@ final class PermissionCatalog
             'resources' => ['parametres-depenses', 'depenses'],
             'standalone' => [
                 'Dépenses' => ['depenses.soumettre', 'depenses.valider', 'depenses.rejeter', 'depenses.annuler'],
+                'Périmètre de visibilité' => ['depenses.lecture_toutes_agences'],
             ],
         ],
         'rapports' => [

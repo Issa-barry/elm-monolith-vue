@@ -77,7 +77,7 @@ class ShowUserController extends Controller
             'situation' => $perimetre !== null ? $situation->pourPerimetre($perimetre) : null,
             'situation_periode' => $periode->pourFront(),
             'lien_rapport' => $perimetre !== null ? $this->lienRapport($perimetre, $periode) : null,
-            'depenses' => $peutVoirDepenses ? $depenses->pourAgent($user) : null,
+            'depenses' => $peutVoirDepenses ? $depenses->pourAgent($user, $consulteur) : null,
         ]);
     }
 

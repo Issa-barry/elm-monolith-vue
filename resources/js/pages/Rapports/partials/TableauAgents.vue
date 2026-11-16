@@ -18,6 +18,10 @@ const props = defineProps<{
     moyens: MoyenColonne[];
     /** Lien vers le détail des opérations d'un agent (même page filtrée sur l'agent). */
     hrefAgent: (agentId: string) => string;
+    /** Titre du tableau (« Détail de ma situation » dans Ma situation). */
+    titre?: string;
+    /** Liens vers les opérations de l'agent (inutiles dans Ma situation : la page est déjà la sienne). */
+    sansLien?: boolean;
 }>();
 
 const moyen = (l: LigneAgent, cle: string) => l.par_moyen?.[cle]?.montant ?? 0;
@@ -37,7 +41,7 @@ const agences = (l: LigneAgent) =>
                 class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3"
             >
                 <h2 id="titre-tableau-agents" class="text-sm font-semibold">
-                    Détail par agent
+                    {{ titre ?? 'Détail par agent' }}
                     <span class="font-normal text-muted-foreground"
                         >· {{ pluriel(lignes.length, 'agent') }}</span
                     >
@@ -167,14 +171,18 @@ const agences = (l: LigneAgent) =>
                                 class="sticky left-0 z-10 bg-card px-4 py-3 align-top font-medium"
                             >
                                 <Link
-                                    v-if="l.agent_id"
+                                    v-if="l.agent_id && !sansLien"
                                     :href="hrefAgent(l.agent_id)"
                                     class="hover:text-primary hover:underline"
                                     >{{ l.agent }}</Link
                                 >
-                                <span v-else class="text-muted-foreground">{{
-                                    l.agent
-                                }}</span>
+                                <span
+                                    v-else
+                                    :class="
+                                        !l.agent_id && 'text-muted-foreground'
+                                    "
+                                    >{{ l.agent }}</span
+                                >
                             </td>
                             <td
                                 class="px-3 py-3 align-top text-sm whitespace-nowrap text-muted-foreground"
@@ -334,7 +342,7 @@ const agences = (l: LigneAgent) =>
                             </td>
                             <td class="px-3 py-2.5 align-top">
                                 <Link
-                                    v-if="l.agent_id"
+                                    v-if="l.agent_id && !sansLien"
                                     :href="hrefAgent(l.agent_id)"
                                     :aria-label="`Voir les opérations de ${l.agent}`"
                                     title="Voir les opérations de l'agent"
@@ -493,7 +501,10 @@ const agences = (l: LigneAgent) =>
                 >
                     Aucune caisse dédiée
                 </p>
-                <div v-if="l.agent_id" class="border-t px-4 py-2.5 text-sm">
+                <div
+                    v-if="l.agent_id && !sansLien"
+                    class="border-t px-4 py-2.5 text-sm"
+                >
                     <Link
                         :href="hrefAgent(l.agent_id)"
                         class="inline-flex items-center gap-1 font-medium text-primary"
