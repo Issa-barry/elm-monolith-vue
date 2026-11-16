@@ -39,6 +39,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     // Écart de commission encore à régulariser (ADR 0043) : attention, rien n'est bloqué
     // hormis le paiement de la fiche concernée.
     a_regulariser: 'bg-amber-500',
+    // ADR 0066 : client créé à l'inscription, nature commerciale à confirmer.
+    a_qualifier: 'bg-amber-500',
     // Partage Livreur d'un véhicule (liste des véhicules, PartageConformiteVehiculesService).
     fait: 'bg-emerald-500',
     non_requis: 'bg-zinc-400 dark:bg-zinc-500',

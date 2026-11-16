@@ -5,9 +5,9 @@ import { formatQuantite } from '@/lib/utils';
 // « Remis » sur fond distinct.
 
 export const TH =
-    'px-3 py-2.5 text-right text-xs font-medium whitespace-nowrap';
+    'px-5 py-2.5 text-right text-xs font-medium whitespace-nowrap';
 export const TD =
-    'px-3 py-3 text-right align-top tabular-nums whitespace-nowrap';
+    'px-5 py-3 text-right align-top tabular-nums whitespace-nowrap';
 export const REMISE = 'bg-muted/30';
 export const TOTAL_ENCAISSE = 'border-x bg-muted/40';
 

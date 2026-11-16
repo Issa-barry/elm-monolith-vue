@@ -88,6 +88,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $parDefaut($roles['admin_entreprise'], [
             // Personnes
             'clients.create',           'clients.read',           'clients.update',           'clients.delete',
+            'clients.qualifier',
             'prestataires.create',      'prestataires.read',      'prestataires.update',      'prestataires.delete',
             'livreurs.create',          'livreurs.read',          'livreurs.update',          'livreurs.delete',
             'proprietaires.create',     'proprietaires.read',     'proprietaires.update',     'proprietaires.delete',

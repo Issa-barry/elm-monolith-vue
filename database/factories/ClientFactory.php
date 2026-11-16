@@ -41,4 +41,19 @@ class ClientFactory extends Factory
             'cashback_montant_par_pack' => 300,
         ];
     }
+
+    /**
+     * Fiche créée à l'inscription d'un livreur ou d'un propriétaire, pas encore qualifiée
+     * (ADR 0066) — même état que Client::creerNonQualifie().
+     */
+    public function nonQualifie(): static
+    {
+        return $this->state([
+            'type' => ClientType::EXTERNE->value,
+            'cashback_eligible' => false,
+            'cashback_montant_par_pack' => null,
+        ])->afterMaking(function (Client $client) {
+            $client->creeNonQualifie = true;
+        });
+    }
 }

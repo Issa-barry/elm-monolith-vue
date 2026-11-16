@@ -62,6 +62,8 @@ interface Client {
     supprimable: boolean;
     type: string;
     type_label: string;
+    /** ADR 0066 : false = client créé à l'inscription, pas encore utilisable en vente. */
+    qualifie: boolean;
     cashback_eligible: boolean;
     cashback_montant_par_pack: number | null;
 }
@@ -257,6 +259,12 @@ function confirmDelete(c: Client) {
                         <div class="truncate text-sm font-medium">
                             {{ c.nom_complet }}
                         </div>
+                        <StatusDot
+                            v-if="!c.qualifie"
+                            status="a_qualifier"
+                            label="À qualifier"
+                            size="sm"
+                        />
                         <div
                             v-if="c.email"
                             class="truncate text-xs text-muted-foreground"
@@ -522,11 +530,19 @@ function confirmDelete(c: Client) {
                         style="min-width: 150px"
                     >
                         <template #body="{ data }">
-                            <span
-                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
-                            >
-                                {{ data.type_label }}
-                            </span>
+                            <div class="flex flex-col items-start gap-1">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                                >
+                                    {{ data.type_label }}
+                                </span>
+                                <StatusDot
+                                    v-if="!data.qualifie"
+                                    status="a_qualifier"
+                                    label="À qualifier"
+                                    data-testid="client-a-qualifier"
+                                />
+                            </div>
                         </template>
                     </Column>
 

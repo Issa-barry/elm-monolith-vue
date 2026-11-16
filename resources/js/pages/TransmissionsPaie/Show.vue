@@ -848,137 +848,158 @@ function periodeLigne(l: Ligne): string {
                     </div>
                 </div>
 
+                <!-- Un seul tableau : chaque salarié est un groupe de lignes (nom et total sur toute sa hauteur) -->
                 <div
-                    v-for="s in salaries"
-                    :key="s.employe_id"
-                    class="overflow-hidden rounded-xl border bg-card"
+                    class="overflow-x-auto rounded-xl border bg-card"
+                    data-testid="detail-salaries"
                 >
-                    <div
-                        class="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3.5"
-                    >
-                        <div>
-                            <p class="font-medium">{{ s.salarie }}</p>
-                            <p class="text-xs text-muted-foreground">
-                                {{ s.matricule ?? '—'
-                                }}<template v-if="s.site">
-                                    · {{ s.site }}</template
-                                ><template v-if="s.fonction">
-                                    · {{ s.fonction }}</template
+                    <table class="w-full min-w-[1080px] text-sm">
+                        <thead
+                            class="border-b bg-muted/30 text-xs text-muted-foreground"
+                        >
+                            <tr>
+                                <th class="px-4 py-3 text-left font-medium">
+                                    Salarié
+                                </th>
+                                <th class="px-4 py-3 text-left font-medium">
+                                    Élément
+                                </th>
+                                <th class="px-4 py-3 text-left font-medium">
+                                    Origine
+                                </th>
+                                <th class="px-4 py-3 text-left font-medium">
+                                    Période
+                                </th>
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Montant validé (RH)
+                                </th>
+                                <th class="px-4 py-3 text-left font-medium">
+                                    Calcul
+                                </th>
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Montant du mois
+                                </th>
+                                <th
+                                    class="border-l px-4 py-3 text-right font-medium"
                                 >
-                            </p>
-                        </div>
-                        <div class="text-right text-sm">
-                            <p
-                                class="font-semibold whitespace-nowrap tabular-nums"
+                                    Total salarié
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody
+                            v-for="s in salaries"
+                            :key="s.employe_id"
+                            class="border-b last:border-b-0 hover:bg-muted/20"
+                            :data-testid="`salarie-${s.employe_id}`"
+                        >
+                            <tr
+                                v-for="(l, i) in s.lignes"
+                                :key="l.id"
+                                class="align-top"
+                                :class="{ 'border-t border-dashed': i > 0 }"
                             >
-                                {{ gnf(s.total_verse) }}
-                            </p>
-                            <p
-                                v-if="s.total_valorise > 0"
-                                class="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
-                            >
-                                + {{ gnf(s.total_valorise) }} valorisés
-                            </p>
-                        </div>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full min-w-[900px] text-sm">
-                            <thead class="text-xs text-muted-foreground">
-                                <tr>
-                                    <th class="px-4 py-3 text-left font-medium">
-                                        Élément
-                                    </th>
-                                    <th class="px-4 py-3 text-left font-medium">
-                                        Origine
-                                    </th>
-                                    <th class="px-4 py-3 text-left font-medium">
-                                        Période
-                                    </th>
-                                    <th
-                                        class="px-4 py-3 text-right font-medium"
-                                    >
-                                        Montant validé (RH)
-                                    </th>
-                                    <th class="px-4 py-3 text-left font-medium">
-                                        Calcul
-                                    </th>
-                                    <th
-                                        class="px-4 py-3 text-right font-medium"
-                                    >
-                                        Montant du mois
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y">
-                                <tr
-                                    v-for="l in s.lignes"
-                                    :key="l.id"
-                                    class="align-top"
+                                <td
+                                    v-if="i === 0"
+                                    :rowspan="s.lignes.length"
+                                    class="w-[220px] border-r px-4 py-3"
                                 >
-                                    <td class="px-4 py-3">
-                                        {{ l.libelle }}
-                                        <p
-                                            class="text-[11px] text-muted-foreground"
+                                    <p class="font-medium">{{ s.salarie }}</p>
+                                    <p class="text-xs text-muted-foreground">
+                                        {{ s.matricule ?? '—'
+                                        }}<template v-if="s.site">
+                                            · {{ s.site }}</template
                                         >
-                                            {{ l.categorie_label
-                                            }}<template
-                                                v-if="
-                                                    l.versement === 'valorise'
-                                                "
-                                            >
-                                                · valorisé, hors net</template
-                                            >
-                                        </p>
-                                    </td>
-                                    <td class="px-4 py-3 text-muted-foreground">
-                                        {{ l.source }}
-                                    </td>
-                                    <td
-                                        class="px-4 py-3 whitespace-nowrap text-muted-foreground"
+                                    </p>
+                                    <p
+                                        v-if="s.fonction"
+                                        class="text-xs text-muted-foreground"
                                     >
-                                        {{ periodeLigne(l) }}
-                                    </td>
-                                    <td
-                                        class="px-4 py-3 text-right whitespace-nowrap tabular-nums"
+                                        {{ s.fonction }}
+                                    </p>
+                                </td>
+                                <td class="px-4 py-3">
+                                    {{ l.libelle }}
+                                    <p
+                                        class="text-[11px] text-muted-foreground"
                                     >
-                                        <template
-                                            v-if="l.montant_reference !== null"
-                                            >{{
-                                                gnf(l.montant_reference)
-                                            }}</template
+                                        {{ l.categorie_label
+                                        }}<template
+                                            v-if="l.versement === 'valorise'"
                                         >
-                                        <template v-else-if="l.taux !== null"
-                                            >{{
-                                                l.taux.toLocaleString('fr-FR')
-                                            }}
-                                            %</template
+                                            · valorisé, hors net</template
                                         >
-                                    </td>
-                                    <td
-                                        class="max-w-[320px] px-4 py-3 text-xs leading-relaxed text-muted-foreground"
+                                    </p>
+                                </td>
+                                <td class="px-4 py-3 text-muted-foreground">
+                                    {{ l.source }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 whitespace-nowrap text-muted-foreground"
+                                >
+                                    {{ periodeLigne(l) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right whitespace-nowrap tabular-nums"
+                                >
+                                    <template
+                                        v-if="l.montant_reference !== null"
+                                        >{{
+                                            gnf(l.montant_reference)
+                                        }}</template
                                     >
-                                        {{ l.detail_calcul }}
-                                    </td>
-                                    <td
-                                        class="px-4 py-3 text-right font-medium whitespace-nowrap tabular-nums"
-                                        :class="{
-                                            'text-muted-foreground':
-                                                l.versement === 'valorise',
-                                        }"
+                                    <template v-else-if="l.taux !== null"
+                                        >{{
+                                            l.taux.toLocaleString('fr-FR')
+                                        }}
+                                        %</template
                                     >
-                                        {{ gnf(l.montant) }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                                </td>
+                                <td
+                                    class="max-w-[280px] px-4 py-3 text-xs leading-relaxed text-muted-foreground"
+                                >
+                                    {{ l.detail_calcul }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right font-medium whitespace-nowrap tabular-nums"
+                                    :class="{
+                                        'text-muted-foreground':
+                                            l.versement === 'valorise',
+                                    }"
+                                >
+                                    {{ gnf(l.montant) }}
+                                </td>
+                                <td
+                                    v-if="i === 0"
+                                    :rowspan="s.lignes.length"
+                                    class="border-l px-4 py-3 text-right"
+                                >
+                                    <p
+                                        class="font-semibold whitespace-nowrap tabular-nums"
+                                        data-testid="total-salarie"
+                                    >
+                                        {{ gnf(s.total_verse) }}
+                                    </p>
+                                    <p
+                                        v-if="s.total_valorise > 0"
+                                        class="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+                                    >
+                                        + {{ gnf(s.total_valorise) }} valorisés
+                                    </p>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tbody v-if="salaries.length === 0">
+                            <tr>
+                                <td
+                                    colspan="8"
+                                    class="px-4 py-6 text-center text-muted-foreground"
+                                >
+                                    Aucun salarié ne correspond.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-                <p
-                    v-if="salaries.length === 0"
-                    class="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground"
-                >
-                    Aucun salarié ne correspond.
-                </p>
             </div>
 
             <!-- Versions du mois -->

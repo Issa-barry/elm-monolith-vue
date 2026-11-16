@@ -50,6 +50,7 @@ class EditClientController extends Controller
                 'is_active' => $client->is_active,
                 'type' => $client->type->value,
                 'type_label' => $client->type->label(),
+                'qualifie' => $client->estQualifie(),
                 'cashback_eligible' => $client->cashback_eligible,
                 'cashback_montant_par_pack' => $client->cashback_montant_par_pack,
                 'derogation_impayes_autorisee' => $client->derogation_impayes_autorisee,

@@ -26,7 +26,12 @@ class UpdateCommandeVenteController extends Controller
         // s'appuyant uniquement sur le bypass Gate::before — jamais couvert par authorize() seul.
         abort_if(! $vente->isEditable(), 403, 'Cette commande ne peut plus être modifiée après le brouillon.');
 
-        $data = $request->validate($this->formBuilder->commandeValidationRules(), $this->formBuilder->commandeValidationMessages());
+        // Client déjà porté par la commande : accepté tant qu'il n'est pas remplacé, même non
+        // qualifié (ADR 0066) — le brouillon reste modifiable, prix et historique inchangés.
+        $data = $request->validate(
+            $this->formBuilder->commandeValidationRules($vente->organization_id, $vente->client_id),
+            $this->formBuilder->commandeValidationMessages(),
+        );
 
         $this->formBuilder->ensureVehiculeOrClientSelected($data);
         // nature_operation est figée à la création (jamais recalculée ici, cf. NatureOperation) —

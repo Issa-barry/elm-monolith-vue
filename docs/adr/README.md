@@ -87,5 +87,6 @@ amende ou remplace.
 | [0063](0063-rapport-activite-par-agence.md) | Rapport d'activité par agence et remise à la trésorerie principale | 2026-11-13 | Accepté |
 | [0064](0064-remise-agent-agence-et-harmonisation-rapports.md) | Remise de l'agent à son agence et harmonisation des rapports | 2026-11-14 | Accepté |
 | [0065](0065-visibilite-des-depenses-par-agence.md) | Visibilité des dépenses par agence, configurable par rôle | 2026-11-15 | Accepté |
+| [0066](0066-qualification-commerciale-des-clients-crees-a-l-inscription.md) | Qualification commerciale des clients créés à l'inscription | 2026-11-16 | Accepté |
 
-Dernier numéro attribué : **0065**. Le prochain ADR sera le **0066**.
+Dernier numéro attribué : **0066**. Le prochain ADR sera le **0067**.

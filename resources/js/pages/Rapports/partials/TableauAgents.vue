@@ -61,13 +61,13 @@ const agences = (l: LigneAgent) =>
                         <tr class="text-xs text-muted-foreground">
                             <th
                                 scope="col"
-                                class="sticky left-0 z-10 bg-card px-4 pt-2.5"
+                                class="sticky left-0 z-10 bg-card px-5 pt-2.5"
                             />
                             <th scope="col" colspan="2" />
                             <th
                                 scope="colgroup"
                                 :colspan="colonnesEncaissements"
-                                class="border-l px-3 pt-2.5 text-left font-medium"
+                                class="border-l px-5 pt-2.5 text-left font-medium"
                             >
                                 Encaissements de la période
                             </th>
@@ -77,7 +77,7 @@ const agences = (l: LigneAgent) =>
                                 colspan="5"
                                 :class="
                                     cn(
-                                        'border-l px-3 pt-2.5 text-left font-semibold text-foreground',
+                                        'border-l px-5 pt-2.5 text-left font-semibold text-foreground',
                                         REMISE,
                                     )
                                 "
@@ -92,13 +92,13 @@ const agences = (l: LigneAgent) =>
                         <tr class="border-b text-muted-foreground">
                             <th
                                 scope="col"
-                                class="sticky left-0 z-10 bg-card px-4 py-2.5 text-left text-xs font-medium"
+                                class="sticky left-0 z-10 bg-card px-5 py-2.5 text-left text-xs font-medium"
                             >
                                 Agent
                             </th>
                             <th
                                 scope="col"
-                                class="px-3 py-2.5 text-left text-xs font-medium"
+                                class="px-5 py-2.5 text-left text-xs font-medium"
                             >
                                 Agence
                             </th>
@@ -150,13 +150,13 @@ const agences = (l: LigneAgent) =>
                                 :class="
                                     cn(
                                         REMISE,
-                                        'px-3 py-2.5 text-left text-xs font-medium',
+                                        'px-5 py-2.5 text-left text-xs font-medium',
                                     )
                                 "
                             >
                                 Statut
                             </th>
-                            <th scope="col" class="px-3 py-2.5">
+                            <th scope="col" class="px-5 py-2.5">
                                 <span class="sr-only">Actions</span>
                             </th>
                         </tr>
@@ -168,7 +168,7 @@ const agences = (l: LigneAgent) =>
                             data-testid="rapport-agent-ligne"
                         >
                             <td
-                                class="sticky left-0 z-10 bg-card px-4 py-3 align-top font-medium"
+                                class="sticky left-0 z-10 bg-card px-5 py-3 align-top font-medium"
                             >
                                 <Link
                                     v-if="l.agent_id && !sansLien"
@@ -185,7 +185,7 @@ const agences = (l: LigneAgent) =>
                                 >
                             </td>
                             <td
-                                class="px-3 py-3 align-top text-sm whitespace-nowrap text-muted-foreground"
+                                class="px-5 py-3 align-top text-sm whitespace-nowrap text-muted-foreground"
                             >
                                 {{ agences(l) }}
                             </td>
@@ -318,7 +318,7 @@ const agences = (l: LigneAgent) =>
                                     :class="
                                         cn(
                                             REMISE,
-                                            'px-3 py-3 align-top whitespace-nowrap',
+                                            'px-5 py-3 align-top whitespace-nowrap',
                                         )
                                     "
                                 >
@@ -334,13 +334,13 @@ const agences = (l: LigneAgent) =>
                                 :class="
                                     cn(
                                         REMISE,
-                                        'border-l px-3 py-3 text-right align-top text-xs text-muted-foreground',
+                                        'border-l px-5 py-3 text-right align-top text-xs text-muted-foreground',
                                     )
                                 "
                             >
                                 Aucune caisse dédiée
                             </td>
-                            <td class="px-3 py-2.5 align-top">
+                            <td class="px-5 py-2.5 align-top">
                                 <Link
                                     v-if="l.agent_id && !sansLien"
                                     :href="hrefAgent(l.agent_id)"
@@ -370,7 +370,7 @@ const agences = (l: LigneAgent) =>
                             class="border-t-2 bg-muted font-semibold"
                             data-testid="rapport-agents-total"
                         >
-                            <td class="sticky left-0 z-10 bg-muted px-4 py-3">
+                            <td class="sticky left-0 z-10 bg-muted px-5 py-3">
                                 Total
                             </td>
                             <td />

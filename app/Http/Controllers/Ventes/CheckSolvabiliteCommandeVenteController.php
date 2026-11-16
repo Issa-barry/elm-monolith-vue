@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\SolvabiliteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CheckSolvabiliteCommandeVenteController extends Controller
 {
@@ -19,12 +20,13 @@ class CheckSolvabiliteCommandeVenteController extends Controller
      */
     public function __invoke(Request $request): JsonResponse
     {
+        $orgId = auth()->user()->organization_id;
+
         $request->validate([
             'vehicule_id' => 'nullable|exists:vehicules,id',
-            'client_id' => 'nullable|exists:clients,id',
+            // Borné à l'organisation (CLAUDE.md § 11) : jamais l'aperçu d'un client d'une autre.
+            'client_id' => ['nullable', Rule::exists('clients', 'id')->where('organization_id', $orgId)->whereNull('deleted_at')],
         ]);
-
-        $orgId = auth()->user()->organization_id;
 
         return response()->json($this->solvabiliteService->evaluer(
             $orgId,
