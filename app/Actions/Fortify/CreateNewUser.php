@@ -234,17 +234,16 @@ class CreateNewUser implements CreatesNewUsers
                 'personne_id' => $existing->personne_id ?? $user->personne_id,
             ]);
         } else {
-            $client = Client::create([
+            // Fiche technique de l'espace client, NON qualifiée (ADR 0066) : Externe n'est qu'une
+            // valeur de colonne en attendant qu'un utilisateur habilité choisisse la vraie nature ;
+            // tant qu'elle n'est pas qualifiée, elle n'est jamais utilisable dans une vente.
+            $client = Client::creerNonQualifie([
                 'organization_id' => $organizationId,
                 'user_id' => $user->id,
                 'personne_id' => $user->personne_id,
                 'nom' => $user->nom,
                 'prenom' => $user->prenom,
                 'telephone' => $telephone,
-                // Explicite plutôt que de reposer sur le défaut colonne (cf.
-                // FelloDemoCustomersSeeder, même remarque) : un compte auto-créé à
-                // l'inscription n'a pas de nature commerciale connue, Externe est la
-                // valeur neutre (pas de règle cashback obligatoire contrairement à Revendeur).
                 'type' => ClientType::EXTERNE->value,
             ]);
             // R1 (ADR 0060, lot 7a) : identité reprise de la Personne si la synchronisation est

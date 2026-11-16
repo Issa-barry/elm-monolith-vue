@@ -41,6 +41,7 @@ const client = {
     is_active: true,
     type: 'grossiste',
     type_label: 'Grossiste',
+    qualifie: true,
     cashback_eligible: false,
     cashback_montant_par_pack: null,
     supprimable: true,

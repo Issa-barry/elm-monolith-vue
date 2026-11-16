@@ -83,6 +83,7 @@ export type StandalonePermission =
     | 'rh-transmissions-paie.preparer'
     | 'rh-transmissions-paie.valider'
     | 'rh-transmissions-paie.transmettre'
+    | 'clients.qualifier'
     | 'parrains.read'
     | 'rattachements-comptes.gerer'
     | 'contacts.read'

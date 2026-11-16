@@ -44,8 +44,11 @@ class IndexPdvController extends Controller
                 ];
             })->values();
 
+        // Clients qualifiés seulement (ADR 0066) : une fiche créée à l'inscription d'un livreur ou
+        // d'un propriétaire n'est vendable qu'après qualification.
         $clients = Client::where('organization_id', $orgId)
             ->where('is_active', true)
+            ->qualifies()
             ->orderBy('nom')
             ->get(['id', 'nom', 'prenom', 'telephone'])
             ->map(fn (Client $c) => [

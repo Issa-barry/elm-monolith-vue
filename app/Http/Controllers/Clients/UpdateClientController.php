@@ -16,6 +16,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class UpdateClientController extends Controller
 {
@@ -43,6 +44,19 @@ class UpdateClientController extends Controller
             ...$this->reglesEntrepriseLiee(),
         ], ClientValidationMessages::pour());
         $raisonSocialeSaisie = (string) ($data['raison_sociale'] ?? '');
+
+        // ADR 0066 : la nature commerciale fixe les prix et le cashback — la changer exige
+        // `clients.qualifier`, en plus de la modification (coordonnées). Pour un client créé à
+        // l'inscription, elle se choisit seulement par l'action « Qualifier » de sa fiche.
+        $natureChangee = isset($data['type']) && $data['type'] !== $client->type->value;
+        if ($natureChangee) {
+            if (! $client->estQualifie()) {
+                throw ValidationException::withMessages([
+                    'type' => 'Ce client n\'est pas encore qualifié : sa nature se choisit avec l\'action « Qualifier » de sa fiche.',
+                ]);
+            }
+            $this->authorize('qualifier', $client);
+        }
 
         $data = CashbackEligibiliteService::resoudreEligibilite($data);
         CashbackEligibiliteService::validerCoherence(
@@ -85,7 +99,12 @@ class UpdateClientController extends Controller
         $identiteEntreprise = $professionnel ? $this->identiteEntreprise($data, $raisonSocialeSaisie) : null;
         $relie = $client->entreprise_tierce_id !== null;
 
-        DB::transaction(function () use ($client, $data, $identitePersonne, $entreprises, $identiteEntreprise, $relie, $request) {
+        DB::transaction(function () use ($client, $data, $identitePersonne, $entreprises, $identiteEntreprise, $relie, $request, $natureChangee) {
+            if ($natureChangee) {
+                // Requalification : enregistrée avec la nouvelle nature par le même update() plus bas.
+                $client->forceFill(['qualifie_le' => now(), 'qualifie_par' => $request->user()->id]);
+            }
+
             if ($client->personne_id) {
                 // Édite l'identité déjà rattachée EN PLACE, jamais de re-résolution par téléphone
                 // (même principe que ProprietaireController::update()) : éditer un client ne doit

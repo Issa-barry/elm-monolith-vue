@@ -426,6 +426,8 @@ class ApiRegistrationTest extends TestCase
 
         $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000100'))->first();
         $this->assertEquals($user->id, $client->fresh()->user_id);
+        // ADR 0066 : un client saisi au back-office reste qualifié quand son titulaire s'inscrit.
+        $this->assertTrue($client->fresh()->estQualifie());
     }
 
     public function test_register_completes_blank_identity_of_existing_personne(): void
@@ -498,6 +500,12 @@ class ApiRegistrationTest extends TestCase
         $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000100'))->first();
         $this->assertEquals($user->id, $livreur->fresh()->user_id);
         $this->assertTrue($user->hasRole('livreur'));
+
+        // ADR 0066 : fiche client technique, nature Externe par défaut, NON qualifiée.
+        $client = Client::where('organization_id', $org->id)->where('user_id', $user->id)->firstOrFail();
+        $this->assertSame('externe', $client->type->value);
+        $this->assertFalse($client->estQualifie());
+        $this->assertNull($client->qualifie_par);
     }
 
     public function test_register_links_proprietaire_and_assigns_role(): void
@@ -515,6 +523,10 @@ class ApiRegistrationTest extends TestCase
         $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000100'))->first();
         $this->assertEquals($user->id, $proprietaire->fresh()->user_id);
         $this->assertTrue($user->hasRole('proprietaire'));
+
+        // ADR 0066 : un propriétaire n'est jamais qualifié commercialement par son inscription.
+        $client = Client::where('organization_id', $org->id)->where('user_id', $user->id)->firstOrFail();
+        $this->assertFalse($client->estQualifie());
     }
 
     // ─── Vérification email ─────────────────────────────────────────────────────

@@ -60,9 +60,15 @@ const props = withDefaults(
         clientId?: number;
         /** Entreprise déjà reliée (modification d'un client professionnel). */
         entreprise?: EntrepriseReliee | null;
+        /**
+         * ADR 0066 : nature non modifiable ici (client à qualifier, ou utilisateur sans
+         * `clients.qualifier`) — message expliquant pourquoi ; null = modifiable.
+         */
+        natureVerrouillee?: string | null;
     }>(),
     {
         readonly: false,
+        natureVerrouillee: null,
         types: () => [
             { value: 'externe', label: 'Externe' },
             { value: 'revendeur', label: 'Revendeur' },
@@ -556,7 +562,7 @@ function onSubmit() {
                     option-label="label"
                     option-value="value"
                     class="w-full"
-                    :disabled="isReadOnly"
+                    :disabled="isReadOnly || !!natureVerrouillee"
                     :class="[
                         readonlyDropdownClass,
                         { 'p-invalid': errors.type },
@@ -564,6 +570,13 @@ function onSubmit() {
                 />
                 <p v-if="errors.type" class="mt-1 text-xs text-destructive">
                     {{ errors.type }}
+                </p>
+                <p
+                    v-else-if="natureVerrouillee"
+                    class="mt-1.5 text-xs text-amber-700 dark:text-amber-300"
+                    data-testid="client-nature-verrouillee"
+                >
+                    {{ natureVerrouillee }}
                 </p>
                 <p v-else class="mt-1.5 text-xs text-muted-foreground">
                     Un client externe vient charger ses propres commandes, hors

@@ -323,6 +323,10 @@ class CreateNewUserTest extends TestCase
             'organization_id' => $org->id,
             'telephone' => '+224622000011',
             'user_id' => $user->id,
+            'type' => 'externe',
+            // ADR 0066 : fiche technique non qualifiée, jamais vendable avant qualification.
+            'qualifie_le' => null,
+            'qualifie_par' => null,
         ]);
         $this->assertTrue($user->hasRole('livreur'));
     }
@@ -357,6 +361,7 @@ class CreateNewUserTest extends TestCase
             'organization_id' => $org->id,
             'telephone' => '+224622000012',
             'user_id' => $user->id,
+            'qualifie_le' => null,
         ]);
         $this->assertTrue($user->hasRole('proprietaire'));
     }

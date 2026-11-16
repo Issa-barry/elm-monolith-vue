@@ -46,7 +46,8 @@ class EditCommandeVenteController extends Controller
             // Client grossiste (ADR 0023) : seuls les véhicules d'usage Grossiste peuvent le
             // livrer — la page bascule sur cette liste dès qu'un client grossiste est choisi.
             'vehicules_grossiste' => $this->formBuilder->vehiculesGrossistes($orgId),
-            'clients' => $this->formBuilder->clientsActifs($orgId),
+            // Client déjà porté par la commande gardé dans la liste même non qualifié (ADR 0066).
+            'clients' => $this->formBuilder->clientsActifs($orgId, $vente->client_id),
             'user_site' => $this->formBuilder->getUserSite(),
             'can_modifier_qte' => auth()->user()->can('ventes.qte.update'),
             'autoriser_saisie_dessous_qte_max' => Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),

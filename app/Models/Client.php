@@ -39,9 +39,63 @@ class Client extends Model
         'seuil_derogation_impayes',
     ];
 
+    /**
+     * Qualification commerciale (ADR 0066) : `qualifie_le`/`qualifie_par` ne sont jamais saisis par
+     * un formulaire (hors $fillable). Tout client créé est qualifié à sa création (back-office,
+     * import, seed…), par l'utilisateur connecté s'il y en a un — sauf celui créé à l'inscription
+     * d'un livreur ou d'un propriétaire (creerNonQualifie()), qualifié ensuite par
+     * QualificationClientService.
+     */
+    public bool $creeNonQualifie = false;
+
+    protected static function booted(): void
+    {
+        static::creating(function (Client $client) {
+            if ($client->creeNonQualifie || $client->qualifie_le !== null) {
+                return;
+            }
+
+            $client->qualifie_le = now();
+            $client->qualifie_par = auth()->id();
+        });
+    }
+
+    /**
+     * Fiche client technique créée à l'inscription d'un livreur ou d'un propriétaire : nécessaire à
+     * son espace client, mais sans nature commerciale confirmée — jamais utilisable dans une vente
+     * avant qualification (ADR 0066).
+     *
+     * @param  array<string, mixed>  $attributs
+     */
+    public static function creerNonQualifie(array $attributs): self
+    {
+        $client = new self($attributs);
+        $client->creeNonQualifie = true;
+        $client->save();
+
+        return $client;
+    }
+
+    public function estQualifie(): bool
+    {
+        return $this->qualifie_le !== null;
+    }
+
+    /** Clients utilisables dans une vente (ADR 0066). */
+    public function scopeQualifies($query)
+    {
+        return $query->whereNotNull('qualifie_le');
+    }
+
+    public function qualifiePar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'qualifie_par');
+    }
+
     protected function casts(): array
     {
         return [
+            'qualifie_le' => 'datetime',
             'is_active' => 'boolean',
             'type' => ClientType::class,
             'cashback_eligible' => 'boolean',

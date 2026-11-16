@@ -35,6 +35,13 @@ class ClientPolicy
             && $this->sameOrganization($user, $client);
     }
 
+    /** Qualification commerciale d'un client créé à l'inscription (ADR 0066). */
+    public function qualifier(User $user, Client $client): bool
+    {
+        return $user->can('clients.qualifier')
+            && $this->sameOrganization($user, $client);
+    }
+
     private function sameOrganization(User $user, Client $client): bool
     {
         return $user->organization_id === $client->organization_id;

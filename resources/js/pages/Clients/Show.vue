@@ -2,7 +2,16 @@
 import DerogationImpayesCard from '@/components/DerogationImpayesCard.vue';
 import DetailHeader from '@/components/DetailHeader.vue';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { useFlashToast } from '@/composables/useFlashToast';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -40,6 +49,8 @@ interface ClientData {
     is_active: boolean;
     type: string;
     type_label: string;
+    /** ADR 0066 : false = client créé à l'inscription, pas encore utilisable en vente. */
+    qualifie: boolean;
     cashback_eligible: boolean;
     cashback_montant_par_pack: number | null;
     derogation_impayes_autorisee: boolean;
@@ -67,6 +78,7 @@ interface TarifGrossiste {
 
 const props = defineProps<{
     client: ClientData;
+    types: { value: string; label: string }[];
     cashback_solde: CashbackSolde | null;
     seuil_global_impayes: number;
     tarifs_grossiste: {
@@ -90,6 +102,52 @@ const cashbackForm = useForm({
     cashback_eligible: Boolean(props.client.cashback_eligible),
     cashback_montant_par_pack: props.client.cashback_montant_par_pack,
 });
+
+// ── Qualification commerciale (ADR 0066) — client créé à l'inscription d'un livreur ou d'un
+// propriétaire : sa nature est choisie ici, par un utilisateur `clients.qualifier`. Le serveur
+// applique les règles de cashback (Revendeur obligatoirement éligible avec un montant).
+const qualificationOuverte = ref(false);
+const qualificationForm = useForm<{
+    type: string | null;
+    cashback_eligible: boolean;
+    cashback_montant_par_pack: number | null;
+}>({
+    type: null,
+    cashback_eligible: false,
+    cashback_montant_par_pack: null,
+});
+const qualificationRevendeur = computed(
+    () => qualificationForm.type === 'revendeur',
+);
+
+function ouvrirQualification(): void {
+    qualificationForm.reset();
+    qualificationForm.clearErrors();
+    qualificationOuverte.value = true;
+}
+
+function onQualificationTypeChange(type: string): void {
+    qualificationForm.type = type;
+    qualificationForm.cashback_eligible = type === 'revendeur';
+    if (!qualificationForm.cashback_eligible) {
+        qualificationForm.cashback_montant_par_pack = null;
+    }
+}
+
+function qualifier(): void {
+    qualificationForm.post(
+        '/backoffice/clients/' + props.client.id + '/qualification',
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                qualificationOuverte.value = false;
+            },
+        },
+    );
+}
+
+const CROIX_INACTIVE =
+    '[&>button:last-child]:pointer-events-none [&>button:last-child]:opacity-40';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -345,6 +403,28 @@ function saveTarifs(): void {
                     </Link>
                 </template>
             </DetailHeader>
+
+            <div
+                v-if="!client.qualifie"
+                class="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+                data-testid="client-a-qualifier-message"
+            >
+                <p>
+                    Client créé à l'inscription d'un livreur ou d'un
+                    propriétaire : sa nature commerciale n'a pas encore été
+                    confirmée. Il ne peut pas être choisi dans une vente tant
+                    qu'il n'est pas qualifié.
+                </p>
+                <Button
+                    v-if="can('clients.qualifier')"
+                    size="sm"
+                    class="shrink-0"
+                    data-testid="client-qualifier-button"
+                    @click="ouvrirQualification"
+                >
+                    Qualifier
+                </Button>
+            </div>
 
             <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
                 <aside
@@ -1195,5 +1275,133 @@ function saveTarifs(): void {
                 </div>
             </div>
         </div>
+
+        <Dialog
+            :open="qualificationOuverte"
+            @update:open="
+                (ouvert: boolean) => {
+                    if (!qualificationForm.processing)
+                        qualificationOuverte = ouvert;
+                }
+            "
+        >
+            <DialogContent
+                class="sm:max-w-md"
+                :class="{ [CROIX_INACTIVE]: qualificationForm.processing }"
+            >
+                <DialogHeader>
+                    <DialogTitle
+                        >Qualifier {{ client.nom_complet }}</DialogTitle
+                    >
+                    <DialogDescription>
+                        Choisissez sa nature commerciale : elle détermine ses
+                        prix de vente. Le client pourra ensuite être choisi dans
+                        une vente.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <fieldset class="space-y-2">
+                    <legend class="mb-1 text-sm font-medium">
+                        Nature commerciale
+                    </legend>
+                    <label
+                        v-for="option in types"
+                        :key="option.value"
+                        class="flex items-center gap-2 text-sm"
+                    >
+                        <input
+                            type="radio"
+                            name="qualification_type"
+                            :value="option.value"
+                            :checked="qualificationForm.type === option.value"
+                            :disabled="qualificationForm.processing"
+                            :data-testid="'qualification-type-' + option.value"
+                            @change="onQualificationTypeChange(option.value)"
+                        />
+                        {{ option.label }}
+                    </label>
+                    <p
+                        v-if="qualificationForm.errors.type"
+                        class="text-xs text-destructive"
+                    >
+                        {{ qualificationForm.errors.type }}
+                    </p>
+                </fieldset>
+
+                <div v-if="qualificationForm.type" class="space-y-2">
+                    <label
+                        v-if="!qualificationRevendeur"
+                        class="flex items-center gap-2 text-sm"
+                    >
+                        <input
+                            v-model="qualificationForm.cashback_eligible"
+                            type="checkbox"
+                            :disabled="qualificationForm.processing"
+                            data-testid="qualification-cashback"
+                        />
+                        Activer le cashback
+                    </label>
+                    <p v-else class="text-xs text-muted-foreground">
+                        Un client Revendeur est obligatoirement éligible au
+                        cashback.
+                    </p>
+                    <div v-if="qualificationForm.cashback_eligible">
+                        <Label for="qualification_cashback_montant">
+                            Cashback par pack (GNF)
+                        </Label>
+                        <InputNumber
+                            v-model="
+                                qualificationForm.cashback_montant_par_pack
+                            "
+                            input-id="qualification_cashback_montant"
+                            :min="1"
+                            :use-grouping="true"
+                            locale="fr-GN"
+                            class="mt-1 w-full"
+                            input-class="w-full"
+                            :disabled="qualificationForm.processing"
+                        />
+                    </div>
+                    <p
+                        v-if="
+                            qualificationForm.errors.cashback_eligible ||
+                            qualificationForm.errors.cashback_montant_par_pack
+                        "
+                        class="text-xs text-destructive"
+                    >
+                        {{
+                            qualificationForm.errors.cashback_eligible ||
+                            qualificationForm.errors.cashback_montant_par_pack
+                        }}
+                    </p>
+                </div>
+
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        :disabled="qualificationForm.processing"
+                        @click="qualificationOuverte = false"
+                    >
+                        Annuler
+                    </Button>
+                    <Button
+                        :disabled="
+                            qualificationForm.processing ||
+                            !qualificationForm.type
+                        "
+                        :aria-busy="qualificationForm.processing"
+                        data-testid="qualification-confirmer"
+                        @click="qualifier"
+                    >
+                        <Spinner v-if="qualificationForm.processing" />
+                        {{
+                            qualificationForm.processing
+                                ? 'Qualification…'
+                                : 'Qualifier'
+                        }}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>
