@@ -40,7 +40,11 @@ const ligne = {
     source: 'Contrat',
 };
 
-const SALARIES = [
+type Salaries = InstanceType<
+    typeof TransmissionsPaieShow
+>['$props']['salaries'];
+
+const SALARIES: Salaries = [
     {
         employe_id: '01JEMPLOYE',
         salarie: 'Moussa SIDIBE',
@@ -53,7 +57,7 @@ const SALARIES = [
     },
 ];
 
-const monter = (salaries: unknown[] = SALARIES) =>
+const monter = (salaries: Salaries = SALARIES) =>
     shallowMount(TransmissionsPaieShow, {
         props: {
             transmission: {
