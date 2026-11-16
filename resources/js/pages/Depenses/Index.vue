@@ -71,6 +71,7 @@ const props = defineProps<{
     depenses: Paginator;
     types: TypeOption[];
     sites: { id: string; nom: string }[];
+    voit_toutes_agences: boolean;
     proprietaires: { value: string; label: string; recherche: string }[];
     vehicules: {
         value: string;
@@ -557,6 +558,7 @@ const categorieColors: Record<string, string> = {
                                 url="/backoffice/depenses"
                                 :values="filterValues"
                                 :sites="sites"
+                                :toutes-agences="voit_toutes_agences"
                                 :result-count="depenses.total"
                                 :fields="filterFields"
                             />

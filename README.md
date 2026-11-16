@@ -1,234 +1,71 @@
-php artisan migrate --force
+# EAU LA MAMAN — back-office (`elm-monolithe`)
+
+Application de gestion d'EAU LA MAMAN : ventes et encaissements, logistique et stock, véhicules et
+livreurs, trésorerie et comptabilité, commissions, RH et paie, rapports. Elle sert aussi l'API des
+applications mobiles et du site.
+
+## Stack
+
+| Couche | Technologie |
+|---|---|
+| Back-end | PHP 8.4, Laravel 12, Fortify, Sanctum, Spatie Permission, Pennant |
+| Front-end | Vue 3, TypeScript, Inertia.js, Vite, Tailwind CSS 4, PrimeVue |
+| Base de données | MySQL (SQLite en mémoire pour les tests) |
+| Tests | PHPUnit, Vitest, Playwright |
+| Connexion | Numéro de téléphone + mot de passe |
+
+Détail : [vue d'ensemble de l'architecture](docs/architecture/vue-ensemble.md).
+
+## Documentation
+
+**Point d'entrée : [docs/README.md](docs/README.md)**, qui recense les guides techniques, les
+règles métier par domaine et les décisions (ADR).
+
+| Je veux… | Document |
+|---|---|
+| Installer le projet sur mon poste | [docs/installation/environnement-local.md](docs/installation/environnement-local.md) |
+| Comprendre une variable du `.env` | [docs/installation/configuration.md](docs/installation/configuration.md) |
+| Connaître les règles à respecter (interface, serveur) | [docs/developpement/standards.md](docs/developpement/standards.md) |
+| Comprendre l'architecture | [docs/architecture/vue-ensemble.md](docs/architecture/vue-ensemble.md) |
+| Connaître les branches et les versions | [docs/developpement/workflow-git.md](docs/developpement/workflow-git.md) |
+| Comprendre la CI et les déploiements automatiques | [docs/developpement/ci-cd.md](docs/developpement/ci-cd.md) |
+| Lancer les tests | [docs/developpement/tests.md](docs/developpement/tests.md) |
+| Déployer (Hostinger, premier déploiement, `/install`) | [docs/deploiement/hostinger.md](docs/deploiement/hostinger.md) |
+| Utiliser l'organisation de démonstration | [docs/installation/demonstration.md](docs/installation/demonstration.md) |
+| Retrouver une décision | [docs/adr/README.md](docs/adr/README.md) |
+
+## Aide-mémoire
+
+Serveur local : `php artisan serve` (port 8000). Le port 8080 est utilisé par les tests E2E.
+
+Après une mise à jour du code en local (`git pull`) :
+
+```bash
+composer install
+npm install
+php artisan migrate
 php artisan optimize:clear
-php artisan optimize 
+npm run build        # ou npm run dev
+```
 
+Sur un serveur, le déploiement automatique fait l'équivalent, plus le seeder des rôles
+([hostinger.md](docs/deploiement/hostinger.md#ce-que-fait-le-déploiement-automatique)).
 
-# en DEV (a ne pas supprimer par IA)
+En DEV (a ne pas supprimer par IA) — **vide entièrement la base locale** et la remplit avec les
+données de développement :
+
+```bash
 php artisan migrate:fresh --seed
-php artisan optimize:clear
-php artisan optimize 
-
-# Déploiement
-
-## ⚠️ Ne jamais faire en production
-
-`migrate:fresh --seed` (et toute variante `migrate:fresh`) — bloqué en dur côté code
-(`DB::prohibitDestructiveCommands`, cf. `AppServiceProvider`) même avec `--force`, mais à
-ne jamais taper par réflexe : ça vide toute la base. Utiliser `migrate --force` seul.
-
-`db:seed` sans `--class=RolesAndPermissionsSeeder` — le seeder par défaut (`DatabaseSeeder`) crée
-des clients/livreurs/véhicules/produits fictifs, pas fait pour la production.
-
-## 1er déploiement (base vide, une seule fois)
-
-Le déploiement (CI/CD ou manuel) ne fait **que de l'infrastructure** : migrations + données
-strictement globales (permissions, rôles système). Il ne crée **jamais** d'organisation, de site
-ou d'utilisateur métier — sur une base neuve, `organizations` doit rester vide après cette étape,
-quelle que soit l'instance (vraie prod "Eau la maman", preprod formation, démo, futur client...).
-C'est `/install` (ou `app:install` en CLI) qui crée l'organisation, à partir du nom saisi
-(`InstallationService::resolveOrganization`) — jamais un seeder.
-
-```bash
-cd ~/domains/xxx.com/public_html
-export PHP=/opt/alt/php84/usr/bin/php   # si besoin de forcer la version PHP
-composer2 install --no-dev --prefer-dist --optimize-autoloader
-
-# Configurer .env (DB, APP_ENV=production, APP_INSTALL_TOKEN=<clé secrète>...) puis :
-$PHP artisan key:generate
-$PHP artisan migrate --force
-$PHP artisan db:seed --class=RolesAndPermissionsSeeder --force
-
-ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
-
-$PHP artisan optimize:clear
-$PHP artisan optimize
-
-```
-php artisan key:generate
-php artisan migrate --force
-php artisan db:seed --class=RolesAndPermissionsSeeder --force
-php artisan optimize:clear
-
-
-
-
-
-Puis, **depuis un navigateur**, ouvrir `https://ton-domaine/install` et suivre l'assistant
-(3 étapes : Entreprise, Super Admin, Résumé). C'est la façon recommandée de terminer la
-première installation : le pipeline CI/CD (`deploy-hostinger.yml`) ne lance **jamais** cette
-étape automatiquement — elle demande une saisie humaine (nom de l'entreprise, ville/quartier
-du siège, identité et mot de passe du Super Admin) qui n'a pas sa place dans un script de
-déploiement.
-
-Aucun site n'est créé pendant l'installation : le premier site se configure à la première
-connexion (onboarding post-connexion), puis les suivants depuis l'application (CRUD Sites ou
-import flotte), jamais seedés.
-Le catalogue de départ (catégories, options, types de véhicule) n'est plus une case à cocher :
-il est désormais toujours créé, en on_premise comme en saas — seuls les produits restent à
-créer manuellement après coup.
-
-L'assistant web est protégé par `APP_INSTALL_TOKEN` (variable d'environnement à définir dans
-`.env` avant le 1er accès — la clé n'est jamais stockée en base ni loguée, seule sa
-vérification est mémorisée en session) et devient automatiquement inaccessible (404) dès que
-l'installation est marquée terminée : impossible de la relancer par erreur ensuite.
-
-Pour un déploiement scripté/CI sans navigateur, la même logique reste disponible en CLI :
-
-```bash
-$PHP artisan app:install
-```
-
-CLI et web partagent exactement le même service (`InstallationService`) — les deux produisent
-un résultat identique. Aucun slug n'est demandé : il est généré automatiquement à partir du
-nom saisi, modifiable ensuite dans les paramètres de l'entreprise (backoffice). L'installation
-est idempotente par nom d'entreprise (en on-premise) : si une organisation du même nom existe
-déjà (ex: reprise d'une installation interrompue), elle est réutilisée au lieu d'être recréée —
-il suffit donc de saisir le même nom que celui déjà en base pour juste ajouter le super_admin.
-Dans les deux cas, le mot de passe est choisi directement par la personne qui installe (saisie
-masquée en CLI, champ mot de passe en web) — il n'est jamais généré, affiché en clair, ni
-conservé.
-
-## Déploiements suivants (uniquement)
-
-```bash
-$PHP artisan migrate --force
-$PHP artisan optimize:clear
-$PHP artisan optimize
-```
-
-```bash
-php artisan migrate --force
 php artisan optimize:clear
 php artisan optimize
 ```
 
-C'est exactement ce que fait `deploy-hostinger.yml` automatiquement sur push vers `main` —
-avec le pipeline CI/CD configuré, ces commandes n'ont normalement plus besoin d'être tapées
-à la main.
+> ⚠️ Jamais `migrate:fresh` en production (bloqué par le code, même avec `--force`) ni `db:seed`
+> sans `--class=RolesAndPermissionsSeeder`. Règles complètes :
+> [docs/deploiement/hostinger.md](docs/deploiement/hostinger.md#règles-à-respecter).
 
-## Sur ton PC (si build manuel, hors CI/CD)
+## Contribuer
 
-```bash
-npm run build
-git add public/build
-git commit -m "build: production"
-git push
-```
- 
-## Organisation de démonstration — Fello Demo
- 
-
-```bash
-php artisan db:seed --class=FelloDemoSeeder
-```
- https://demo.felloconsulting.fr/
-
-Comptes de démo (mot de passe `FelloDemo@2025`) :
-
-| Compte | Téléphone | Rôle | Site par défaut |
-|---|---|---|---|
-| Admin Fello Demo | +224600000101 | admin_entreprise | Boutique Madina |
-| Commercial Fello Demo | +224600000102 | commerciale | Boutique Cosa |
- 
-
-## Stack technique
-
-| Couche | Technologie |
-|---|---|
-| Backend | Laravel 12, Fortify, Spatie Permission |
-| Frontend | Vue 3, Inertia.js, Vite, Tailwind CSS, PrimeVue |
-| Auth | Connexion par numéro de téléphone + mot de passe |
-| Tests | PHPUnit (Feature tests) |
-
-## Tests
-
-```bash
-# Tous les tests
-php artisan test
-
-# Fichier spécifique
-php artisan test tests/Feature/Auth/RegistrationTest.php
-```
-
-### Tests E2E (Playwright)
-
-```bash
-# 1) Première installation du navigateur E2E (une seule fois)
-npm run e2e:install
-
-# 2) Lancer toute la suite E2E
-npm run e2e
-
-# 3) Mode interactif / debug
-npm run e2e:headed
-npm run e2e:ui
-
-# 4) Voir le rapport HTML après exécution
-npm run e2e:report
-```
-
-`npm run e2e` reconstruit aussi les assets front (`npm run e2e:build`) avec `APP_ENV=e2e` avant de
-lancer Playwright — indispensable : les actions générées par Wayfinder (`resources/js/actions/**`)
-embarquent une URL absolue basée sur `APP_URL`, figée au moment du build. Sans ce rebuild sous
-`.env.e2e`, les assets déjà compilés pointent vers l'`APP_URL` de `.env` (ex. `:8000`) au lieu du
-serveur E2E (`:8080`) → CORS bloqué → login E2E impossible sur une base fraîche. Si tu lances un
-scénario directement via `npx playwright test <fichier>` (sans passer par `npm run e2e`), assure-toi
-d'avoir exécuté `npm run e2e:db:reset && npm run e2e:build` au moins une fois avant.
-
-Scénarios E2E disponibles :
-
-```bash
-# Smoke
-npx playwright test tests/e2e/smoke.spec.ts
-
-# Produits
-npx playwright test tests/e2e/produit-flow.spec.ts
-
-# Livreurs
-npx playwright test tests/e2e/livreur-flow.spec.ts
-
-# Propriétaires
-npx playwright test tests/e2e/proprietaire-flow.spec.ts
-
-# Véhicules
-npx playwright test tests/e2e/vehicule-flow.spec.ts
-```
-
-Variables d'environnement E2E utiles (optionnelles) :
-
-```bash
-```
-
-### Divers
-
-```bash
-# Code coverage
-php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
-
-# Serveur de dev local
-php artisan serve --port=8080
-```
-
-Procédure complète pour repartir à zéro sur formation
-Déployer ce commit sur pre-prod (le nouveau code doit être en place avant de pouvoir lancer la commande via SSH).
-En SSH sur formation :
-
-php artisan accounts:purge --organization=elm
-(tapez SUPPRIMER après avoir vérifié l'URL/l'environnement affichés)
-Recréer le premier compte, toujours via SSH :
-
-php artisan app:install
-Au prompt "Nom de l'entreprise", tapez exactement Eau la maman (correspondance exacte, insensible à la casse) — ça réutilise l'organisation existante (avec son catalogue/sites/etc. intacts) plutôt que d'en créer une nouvelle, puisqu'elle n'a plus de super_admin après la purge.
-Vous êtes de nouveau super_admin, vous invitez ensuite vos comptes de recette normalement via l'app.
-
-
-
-D'après votre environnement local, les URLs sont :
-
-Swagger UI (client/mobile) : http://127.0.0.1:8080/docs/api (ou http://localhost:8000/docs/api selon le port sur lequel tourne votre php artisan serve — j'ai vu les deux dans vos configs)
-JSON brut correspondant : .../docs/api.json
-Swagger UI (vitrine, server-to-server) : .../docs/vitrine
-JSON brut correspondant : .../docs/vitrine.json
-En local (APP_ENV=local), l'accès est libre, pas besoin d'être connecté. Si jamais vous testez avec APP_ENV réglé sur autre chose que local, il faudra être connecté en tant que staff (session web) pour que le Gate viewApiDocs laisse passer.
-
-Si votre serveur local n'est pas démarré, lancez php artisan serve (ou composer dev) puis ouvrez l'URL correspondant au port affiché.
+- Flux des branches : `dev → pre-prod → production → main`, contrôlé par la CI.
+- La documentation concernée est mise à jour dans la même pull request que le code.
+- Aucun mot de passe, jeton ni clé dans le dépôt.

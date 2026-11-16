@@ -33,7 +33,9 @@ class EditDepenseController extends Controller
                 'depense_type_id' => $depense->depense_type_id,
                 'beneficiaire_type' => $depense->beneficiaire_type,
                 'beneficiaire_id' => $depense->beneficiaire_id,
-                'site_id' => $depense->site_id,
+                // Ancienne dépense sans agence (ADR 0065) : sélecteur verrouillé prérempli avec la
+                // première agence proposée ; un administrateur choisit lui-même.
+                'site_id' => $depense->site_id ?? ($user->agitSurToutesLesAgences() ? null : $sites->first()['id'] ?? null),
                 'montant' => (float) $depense->montant,
                 'date_depense' => $depense->date_depense->toDateString(),
                 'commentaire' => $depense->commentaire ?? '',

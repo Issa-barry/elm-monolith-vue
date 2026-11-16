@@ -179,6 +179,84 @@ describe('DataFilters — bouton seul', () => {
     });
 });
 
+describe('DataFilters — périmètre d’agences propre à la page (toutes-agences)', () => {
+    const monterPerimetre = (
+        toutesAgences: boolean,
+        values: Record<string, unknown> = {},
+    ) =>
+        shallowMount(DataFilters, {
+            props: {
+                url: '/backoffice/depenses',
+                fields: [],
+                values,
+                triggerOnly: true,
+                toutesAgences,
+                sites: [
+                    { id: 'cba', nom: 'Cba' },
+                    { id: 'matoto', nom: 'Matoto' },
+                ],
+                resultCount: 0,
+            },
+            global: { renderStubDefaultSlot: true },
+        });
+
+    it('limité à ses agences : sélecteur libre parmi les agences du serveur, malgré le périmètre global', async () => {
+        routerGet.mockClear();
+        const precedent = auth.valeur;
+        auth.valeur = {
+            voit_toutes_agences: false,
+            user_sites: [{ id: 'matoto', nom: 'Matoto' }],
+        };
+        try {
+            const wrapper = monterPerimetre(false);
+            const agence = wrapper.getComponent(FilterMultiSelect);
+            expect(agence.props('options')).toEqual([
+                { value: 'cba', label: 'Cba' },
+                { value: 'matoto', label: 'Matoto' },
+            ]);
+            expect(agence.props('disabled')).toBe(false);
+            expect(agence.props('modelValue')).toEqual([]);
+            expect(agence.props('placeholder')).toBe('Toutes mes agences');
+
+            agence.vm.$emit('update:modelValue', ['cba']);
+            await nextTick();
+            wrapper.getComponent(FilterDrawer).vm.$emit('apply');
+            expect(routerGet).toHaveBeenCalledWith(
+                '/backoffice/depenses',
+                { site_ids: ['cba'] },
+                expect.anything(),
+            );
+        } finally {
+            auth.valeur = precedent;
+        }
+    });
+
+    it('toutes les agences : sélection multiple, et vide = toutes les agences', async () => {
+        routerGet.mockClear();
+        const precedent = auth.valeur;
+        // La permission propre à la page prime sur le périmètre global.
+        auth.valeur = { voit_toutes_agences: false, user_sites: [] };
+        try {
+            const wrapper = monterPerimetre(true, { site_ids: ['cba'] });
+            const agence = wrapper.getComponent(FilterMultiSelect);
+            expect(agence.props('modelValue')).toEqual(['cba']);
+            expect(agence.props('placeholder')).toBe('Toutes les agences');
+            expect(agence.props('emptyMeansAll')).toBe(true);
+
+            agence.vm.$emit('update:modelValue', []);
+            await nextTick();
+            wrapper.getComponent(FilterDrawer).vm.$emit('apply');
+            expect(routerGet).toHaveBeenCalledWith(
+                '/backoffice/depenses',
+                {},
+                expect.anything(),
+            );
+        } finally {
+            auth.valeur = precedent;
+        }
+    });
+});
+
 describe('DataFilters — champ numérique inline', () => {
     beforeEach(() => routerGet.mockClear());
 

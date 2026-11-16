@@ -33,6 +33,7 @@ use App\Services\SavedFilterService;
 use App\Services\VehiculeCapaciteService;
 use App\Services\Vehicules\VehiculeListExport;
 use App\Services\Vehicules\VehiculeSituationVentesService;
+use App\Support\Depenses\DepensePerimetre;
 use App\Support\Periodes\Periode;
 use App\Support\SavedFilters\SavedFilterScopes;
 use App\Support\Vehicules\VehiculeIndexFilters;
@@ -396,7 +397,8 @@ class VehiculeController extends Controller
 
         $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'parrain.personne', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
 
-        $depenses = Depense::where('beneficiaire_type', 'vehicule')
+        $depenses = app(DepensePerimetre::class)->appliquer(Depense::query(), $request->user())
+            ->where('beneficiaire_type', 'vehicule')
             ->where('beneficiaire_id', $vehicule->id)
             ->where('organization_id', $vehicule->organization_id)
             ->with('depenseType:id,libelle')

@@ -166,6 +166,7 @@ class DepenseTest extends TestCase
     {
         $this->post('/backoffice/depenses', [
             'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $this->user->sites()->first()->id,
             'montant' => 25000,
             'date_depense' => now()->toDateString(),
             'statut' => StatutDepense::BROUILLON->value,
@@ -205,6 +206,7 @@ class DepenseTest extends TestCase
         $this->post('/backoffice/depenses', [
             'depense_type_id' => $typeEmploye->id,
             'beneficiaire_id' => $employe->id,
+            'site_id' => $this->user->sites()->first()->id,
             'montant' => 100000,
             'date_depense' => now()->toDateString(),
             'statut' => StatutDepense::BROUILLON->value,
@@ -308,6 +310,7 @@ class DepenseTest extends TestCase
 
         $this->put("/backoffice/depenses/{$depense->id}", [
             'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $this->user->sites()->first()->id,
             'montant' => 20000,
             'date_depense' => now()->toDateString(),
         ])->assertRedirect();
@@ -1375,6 +1378,7 @@ class DepenseTest extends TestCase
 
         $this->patch("/backoffice/depenses/{$depense->id}", [
             'depense_type_id' => $this->typeInterne->id,
+            'site_id' => $this->user->sites()->first()->id,
             'montant' => 75000,
             'date_depense' => '2026-06-14',
             'commentaire' => 'Corrigé après rejet',

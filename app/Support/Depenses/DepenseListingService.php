@@ -28,12 +28,18 @@ final class DepenseListingService
 {
     public function __construct(
         private readonly DroitCreationDepenseService $droitCreationDepense,
+        private readonly DepensePerimetre $perimetre,
     ) {}
 
-    /** @param  ?Periode  $periode  période résolue par le contrôleur (Periode::depuisRequeteValidee) */
-    public function query(array $filters, string $orgId, array $siteIds = [], ?Periode $periode = null): Builder
+    /**
+     * @param  ?array<int, string>  $siteIds  agences du filtre déjà croisées avec le périmètre
+     *                                        (DepensePerimetre::sitesFiltres) : null = tout le périmètre
+     * @param  ?Periode  $periode  période résolue par le contrôleur (Periode::depuisRequeteValidee)
+     */
+    public function query(User $user, array $filters, ?array $siteIds = null, ?Periode $periode = null): Builder
     {
-        $query = Depense::forOrg($orgId)
+        $orgId = $user->organization_id;
+        $query = $this->perimetre->appliquer(Depense::forOrg($orgId), $user)
             ->orderByDesc('date_depense')
             ->orderByDesc('created_at');
 
@@ -46,7 +52,7 @@ final class DepenseListingService
         if (! empty($filters['categorie'])) {
             $query->whereHas('depenseType', fn ($q) => $q->whereIn('categorie', (array) $filters['categorie']));
         }
-        if (! empty($siteIds)) {
+        if ($siteIds !== null) {
             $query->whereIn('site_id', $siteIds);
         }
         $periode?->appliquer($query, 'date_depense', colonneDate: true);

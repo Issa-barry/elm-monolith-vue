@@ -60,23 +60,31 @@ Agence ── remises (transfert entre agences, règlement)     ──▶  trés
 3. **Moyens d'encaissement** : mêmes colonnes que le rapport par agence (Espèces, Orange Money, et tout
    autre moyen seulement s'il a été encaissé), total encaissé = somme des colonnes —
    `RapportActiviteService::colonnesMoyens()`, partagée par les trois rapports.
-4. **Rapport d'activité** : une ligne par agent (`RapportActiviteService::parAgent()`, requêtes
-   regroupées sur les mêmes bases que les blocs — la somme des lignes redonne les totaux). Cartes :
-   Ventes, Total encaissé, Dettes clients, Charges saisies, Remis à l'agence. Le détail (ventes,
-   encaissements, dettes, Mobile Money, caisses, charges) reste en onglets ; « Opérations » filtre la
-   page sur l'agent.
-5. **Ma situation** : six cartes (Mes ventes, Mes encaissements, Mes dettes clients, Mes charges
-   saisies, Remis à mon agence, Reste à remettre à mon agence), « Mes encaissements » par moyen avec
-   total, « Remises à mon agence » (remis, en transit, reste, statut), onglet Mes charges avec la liste
-   et le lien vers la dépense (seulement avec `depenses.read` et le module Dépenses).
+4. **Présentation (révisée le 15/11/2026, décision de l'utilisateur)** : le Rapport d'activité et Ma
+   situation **gardent leur design et leurs cartes-onglets existants** (Ma caisse, ventes,
+   encaissements, dettes clients, Mobile Money, caisses dédiées). La refonte du 14/11 (en-tête et
+   cartes compactes du rapport par agence) est abandonnée pour ces deux pages. Deux cartes sont
+   ajoutées à la suite :
+   - **Charges / Mes charges** : total des charges validées (nombre), saisies en attente à part ;
+     son onglet liste les charges (lien vers la dépense seulement avec `depenses.read` et le module
+     Dépenses) ;
+   - **Détail des situations des agents / Détail de ma situation** : ouvre, sous les cartes, le
+     tableau consolidé du rapport par agence au niveau agent (`TableauAgents` : agent, agence,
+     ventes, espèces, Orange Money, total encaissé, dettes, charges saisies, charges validées, net à
+     remettre, déjà remis, en transit, reste, statut ; ligne Total dans le rapport) ; un second clic
+     le replie. Dans Ma situation : la seule ligne de l'agent (`parAgent()` sur son périmètre), sans
+     lien, suivie du calcul de sa remise ligne à ligne.
+5. **Une ligne par agent** : `RapportActiviteService::parAgent()`, requêtes regroupées sur les mêmes
+   bases que les blocs — la somme des lignes redonne les totaux ; même chiffre pour un agent dans les
+   deux pages.
 6. **Exports** Excel et PDF : moyens et total encaissé, charges saisies, remise à l'agence, feuille /
    tableau « Agents » (rapport d'activité) et liste des charges.
 
 ## Conséquences
 
-- Les trois écrans partagent la même identité (cartes `KpiCard compact`, tableau, groupe « Remis »
-  sur fond distinct, statuts `StatusDot`) ; seuls le niveau (agence ou agent) et la destination de la
-  remise changent.
+- Le tableau consolidé (en-têtes groupés, montants sans unité, groupe « Remis » sur fond distinct,
+  `StatusDot`) est le même sur les trois écrans ; le Rapport d'activité et Ma situation le proposent
+  à la demande sans changer leur présentation existante.
 - Ma situation et le rapport d'activité filtré sur un agent donnent les mêmes chiffres (même moteur).
 - Le Rapport par agence n'a pas changé de comportement : ses charges et ses colonnes de moyens
   passent seulement par les mêmes services partagés.

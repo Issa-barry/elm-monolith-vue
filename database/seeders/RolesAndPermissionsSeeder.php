@@ -139,6 +139,7 @@ class RolesAndPermissionsSeeder extends Seeder
             // Finances
             'depenses.create',          'depenses.read',          'depenses.update',          'depenses.delete',
             'depenses.soumettre',       'depenses.valider',       'depenses.rejeter',         'depenses.annuler',
+            'depenses.lecture_toutes_agences',
             'comptabilite.create',      'comptabilite.read',      'comptabilite.update',      'comptabilite.delete',
             'comptabilite.payer',
             'journal-financier.create', 'journal-financier.read', 'journal-financier.update', 'journal-financier.delete',

@@ -329,6 +329,12 @@ Construction des params :
 
 Le filtre Agence/Site est dans la **barre principale** (pas dans le drawer). Il est libre pour qui consulte toutes les agences — administrateur, superviseur (ADR 0034) ou rôle ayant la permission `sites.lecture_toutes_agences` (ADR 0025) — et verrouillé sur ses agences pour les autres. `DataFilters.vue` lit `auth.voit_toutes_agences` (calculé par le serveur), jamais le nom d'un rôle ; le serveur reste l'autorité et ignore toute agence demandée hors périmètre.
 
+**Périmètre propre à une page** (Dépenses, ADR 0065) : la page passe `:toutes-agences` (booléen
+calculé par le serveur) et `:sites` = exactement les agences consultables. Le sélecteur n'est alors
+jamais verrouillé : l'utilisateur choisit une ou plusieurs agences parmi celles proposées, vide = tout
+son périmètre (« Toutes les agences » ou « Toutes mes agences »). Sans cette prop, comportement global
+ci-dessus inchangé.
+
 ```vue
 <DataFilters
     :sites="sites"

@@ -11,8 +11,7 @@ class HistoriqueDepenseController extends Controller
 {
     public function __invoke(Depense $depense): JsonResponse
     {
-        abort_unless(auth()->user()->organization_id === $depense->organization_id, 403);
-        abort_unless(auth()->user()->can('depenses.read'), 403);
+        $this->authorize('view', $depense);
 
         $logs = AuditLog::where('auditable_type', $depense->getMorphClass())
             ->where('auditable_id', $depense->id)

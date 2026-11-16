@@ -83,6 +83,7 @@ class DepenseConcerneConsultantParrainTest extends TestCase
         return $this->post('/backoffice/depenses', [
             'depense_type_id' => $type->id,
             'beneficiaire_id' => $beneficiaireId,
+            'site_id' => $this->user->sites()->first()->id,
             'montant' => 30000,
             'date_depense' => now()->toDateString(),
             'statut' => StatutDepense::BROUILLON->value,

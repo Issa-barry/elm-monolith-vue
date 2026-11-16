@@ -2,7 +2,8 @@
 
 - **Date** : 2026-10-10
 - **Statut** : accepté le 2026-10-10 (décisions de l'utilisateur pendant le chantier) — point 5
-  amendé par [ADR 0034](0034-superviseur-agit-sur-toutes-les-agences.md) pour le rôle superviseur
+  amendé par [ADR 0034](0034-superviseur-agit-sur-toutes-les-agences.md) pour le rôle superviseur ;
+  « Conséquences » (dépenses) amendé par [ADR 0065](0065-visibilite-des-depenses-par-agence.md)
 - **Amende** : [ADR 0021](0021-achats-bon-de-commande-valide-par-plafond-de-role.md), point 2 « voir »
   et point 8 (liste des réceptions), en consultation seulement
 - **Détail fonctionnel** : [docs/sites.md](../sites.md) (périmètre de consultation),
@@ -64,8 +65,11 @@ l'interface (`DataFilters.vue`) déduisait de son côté le verrouillage du **no
 - Un rôle doté de la permission voit les mêmes listes, totaux, exports et statistiques qu'un
   administrateur, sur les seuls écrans où il a « Lire ». Les badges « à réceptionner » /
   « à confirmer » restent calculés sur ses agences : ils signalent des actions qui lui reviennent.
-- Les écrans déjà sans filtrage d'agence côté serveur (dépenses, véhicules, clients, fiche d'une
-  commande de vente) ne changent pas : ils étaient déjà consultables par toute l'organisation.
+- Les écrans déjà sans filtrage d'agence côté serveur (véhicules, clients, fiche d'une commande de
+  vente) ne changent pas : ils étaient déjà consultables par toute l'organisation. **Dépenses :
+  amendé par [ADR 0065](0065-visibilite-des-depenses-par-agence.md)** (15/11/2026) — limitées aux
+  agences de l'utilisateur, toutes les agences avec cette vision 360° ou la permission
+  `depenses.lecture_toutes_agences`.
 - L'API mobile `GET /api/v1/backoffice/stats` reste calculée sur l'agence par défaut de l'utilisateur,
   pour tous les rôles, administrateurs compris : aucune distinction de rôle n'y existait à étendre.
 - Le catalogue passe à 221 permissions.
