@@ -104,6 +104,11 @@ class FicheCaisseService
             'solde_actuel' => $this->disponibilite->soldePourSupport($caisse, now()),
             'en_cours' => $this->resumeVersements($versements, StatutMouvementFonds::ENVOYE),
             'contestes' => $this->resumeVersements($versements, StatutMouvementFonds::CONTESTE),
+            // Remis à l'agence sur la période : versements dont l'agence a CONFIRMÉ la réception dans la
+            // période (même définition que le « remis » d'une agence à la trésorerie principale, ADR 0016).
+            'recus_periode' => $this->resumeVersements($versements->filter(fn (array $v) => $v['date_reception'] !== null
+                && $v['date_reception'] >= $debut->toDateString()
+                && $v['date_reception'] <= $fin->toDateString()), StatutMouvementFonds::RECU),
             'versements_periode' => $versements
                 ->filter(fn (array $v) => $v['date_envoi'] !== null
                     && $v['date_envoi'] >= $debut->toDateString()

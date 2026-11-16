@@ -2,17 +2,11 @@
 
 namespace App\Services\Rapports;
 
-use App\Enums\CategorieDepense;
-use App\Enums\ModePaiement;
-use App\Enums\OperateurMobileMoney;
-use App\Enums\StatutDepense;
 use App\Models\Site;
-use App\Services\Comptabilite\DepenseComptabilisationService;
 use App\Services\Tresorerie\RemisesAgencesService;
 use App\Support\Rapports\RapportPerimetre;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Rapport d'activité par agence (docs/rapports.md, ADR 0063) : une ligne par agence du périmètre,
@@ -33,17 +27,10 @@ use Illuminate\Support\Facades\DB;
  */
 class RapportAgencesService
 {
-    private const CHARGES_VIDES = [
-        'charges_payees' => 0.0,
-        'charges_payees_nombre' => 0,
-        'charges_en_attente' => 0.0,
-        'charges_en_attente_nombre' => 0,
-        'charges_avances_tiers' => 0.0,
-    ];
-
     public function __construct(
         private readonly RapportActiviteService $rapports,
         private readonly RemisesAgencesService $remises,
+        private readonly ChargesRapportService $charges,
     ) {}
 
     /**
@@ -63,16 +50,17 @@ class RapportAgencesService
                 $sites->pluck('id')->all(),
             ))->keyBy('site_id');
 
-        $charges = $this->charges($p, $sites->pluck('id')->all());
+        // Charges saisies DANS l'agence (axe `site_id`) : jamais déduites du remis ni du reste à remettre.
+        $charges = $this->charges->parSite($p, $sites->pluck('id')->all());
 
         $agences = $sites
             ->map(fn (Site $site) => [
                 ...$this->agence($p, $site, $central?->id, $remises->get($site->id)),
-                ...($charges[$site->id] ?? self::CHARGES_VIDES),
+                ...($charges[$site->id] ?? ChargesRapportService::VIDES),
             ])
             ->values();
 
-        $moyens = $this->moyens($agences);
+        $moyens = RapportActiviteService::colonnesMoyens($agences->flatMap(fn (array $a) => array_values($a['par_moyen'])));
 
         return [
             'agences' => $agences->all(),
@@ -94,61 +82,6 @@ class RapportAgencesService
             ->when($p->siteIds !== null, fn ($q) => $q->whereIn('id', $p->siteIds))
             ->orderBy('nom')
             ->get(['id', 'nom']);
-    }
-
-    /**
-     * Charges saisies dans chaque agence (module Dépenses, `depenses.site_id`), datées par
-     * `date_depense` sur la période (décision du 14/11/2026) :
-     *
-     * - payées = dépenses VALIDÉES — la validation passe l'écriture de sortie de trésorerie
-     *   (DepenseComptabilisationService) : il n'existe pas de dépense validée non payée ;
-     * - en attente = dépenses SOUMISES, pas encore validées (rien n'est sorti de la trésorerie) ;
-     * - dont avances sur tiers = part des payées comptabilisée en avance récupérable (véhicule,
-     *   propriétaire, livreur, parrain), pas en charge de l'entreprise.
-     *
-     * Brouillons, rejetées, annulées et supprimées exclues. Jamais déduites du remis ni du reste à
-     * remettre : la trésorerie de l'agence les intègre déjà par ses propres écritures.
-     *
-     * @param  list<string>  $siteIds
-     * @return array<string, array<string, float|int>>
-     */
-    private function charges(RapportPerimetre $p, array $siteIds): array
-    {
-        if ($siteIds === []) {
-            return [];
-        }
-
-        $valide = StatutDepense::VALIDE->value;
-        $soumis = StatutDepense::SOUMIS->value;
-        $avances = array_map(fn (CategorieDepense $c) => $c->value, DepenseComptabilisationService::CATEGORIES_AVANCE_TIERS);
-        $marques = implode(', ', array_fill(0, count($avances), '?'));
-
-        return DB::table('depenses as d')
-            ->leftJoin('depense_types as t', 't.id', '=', 'd.depense_type_id')
-            ->where('d.organization_id', $p->organizationId)
-            ->whereNull('d.deleted_at')
-            ->whereIn('d.site_id', $siteIds)
-            ->whereIn('d.statut', [$valide, $soumis])
-            // Bornes semi-ouvertes (ADR 0057, comme Periode::appliquer) : sûres quel que soit le
-            // stockage de la colonne date (SQLite y ajoute 00:00:00).
-            ->where('d.date_depense', '>=', $p->debut()->toDateString())
-            ->where('d.date_depense', '<', $p->fin()->startOfDay()->addDay()->toDateString())
-            ->groupBy('d.site_id')
-            ->select('d.site_id')
-            ->selectRaw('COALESCE(SUM(CASE WHEN d.statut = ? THEN d.montant ELSE 0 END), 0) as payees', [$valide])
-            ->selectRaw('COALESCE(SUM(CASE WHEN d.statut = ? THEN 1 ELSE 0 END), 0) as payees_nombre', [$valide])
-            ->selectRaw('COALESCE(SUM(CASE WHEN d.statut = ? THEN d.montant ELSE 0 END), 0) as en_attente', [$soumis])
-            ->selectRaw('COALESCE(SUM(CASE WHEN d.statut = ? THEN 1 ELSE 0 END), 0) as en_attente_nombre', [$soumis])
-            ->selectRaw("COALESCE(SUM(CASE WHEN d.statut = ? AND t.categorie IN ({$marques}) THEN d.montant ELSE 0 END), 0) as avances", [$valide, ...$avances])
-            ->get()
-            ->mapWithKeys(fn ($l) => [(string) $l->site_id => [
-                'charges_payees' => round((float) $l->payees, 2),
-                'charges_payees_nombre' => (int) $l->payees_nombre,
-                'charges_en_attente' => round((float) $l->en_attente, 2),
-                'charges_en_attente_nombre' => (int) $l->en_attente_nombre,
-                'charges_avances_tiers' => round((float) $l->avances, 2),
-            ]])
-            ->all();
     }
 
     /**
@@ -226,44 +159,6 @@ class RapportAgencesService
             'statut' => $ligne['statut'],
             'statut_label' => $ligne['statut_label'],
         ];
-    }
-
-    /**
-     * Colonnes de moyens (décision du 14/11/2026) : Espèces et Orange Money toujours, les moyens
-     * utilisés aujourd'hui. Un autre moyen (Kulu, virement, chèque…) n'a de colonne que s'il a
-     * réellement été encaissé sur la période : le total encaissé reste toujours la somme des colonnes
-     * affichées, sans montant caché. Ordre : espèces, Mobile Money (Orange Money en tête), virement, chèque.
-     *
-     * @param  Collection<int, array<string, mixed>>  $agences
-     * @return list<array{cle: string, libelle: string}>
-     */
-    private function moyens(Collection $agences): array
-    {
-        $toujours = [
-            ['mode_paiement' => ModePaiement::ESPECES->value, 'operateur_mobile_money' => null],
-            ['mode_paiement' => ModePaiement::MOBILE_MONEY->value, 'operateur_mobile_money' => OperateurMobileMoney::ORANGE_MONEY->value],
-        ];
-
-        return collect($toujours)
-            ->concat($agences->flatMap(fn (array $a) => array_values($a['par_moyen'])))
-            ->map(fn (array $m) => [
-                'cle' => RapportActiviteService::cleMoyen((string) $m['mode_paiement'], $m['operateur_mobile_money']),
-                'libelle' => RapportActiviteService::libelleMoyen((string) $m['mode_paiement'], $m['operateur_mobile_money']),
-                'ordre' => RapportActiviteService::ordreMoyen($m['mode_paiement']).$this->ordreOperateur($m['operateur_mobile_money']),
-            ])
-            ->unique('cle')
-            ->sortBy(fn (array $m) => $m['ordre'].$m['libelle'])
-            ->map(fn (array $m) => ['cle' => $m['cle'], 'libelle' => $m['libelle']])
-            ->values()
-            ->all();
-    }
-
-    /** Rang de l'opérateur dans OperateurMobileMoney (Orange Money d'abord) ; sans opérateur en dernier. */
-    private function ordreOperateur(?string $operateur): string
-    {
-        $rang = array_search(OperateurMobileMoney::tryFrom((string) $operateur), OperateurMobileMoney::cases(), true);
-
-        return str_pad((string) ($rang === false ? 99 : $rang), 2, '0', STR_PAD_LEFT);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 Lot 1 livré le 2026-09-26. Décisions : [ADR 0007](adr/0007-rapport-activite-perimetre-et-regles-de-calcul.md).
 Rapport par agence et périodes communes : [ADR 0063](adr/0063-rapport-activite-par-agence.md) (13/11/2026).
+Remise de l'agent à son agence et harmonisation des trois rapports : [ADR 0064](adr/0064-remise-agent-agence-et-harmonisation-rapports.md) (14/11/2026).
 
 ## Où
 
@@ -282,16 +283,64 @@ encaissements, dettes, Mobile Money, caisses) ; **Remises** ouvre le détail de 
 conditions que cette route). Export Excel : feuille Résumé (périmètre, période, totaux) + feuille
 Agences (le tableau).
 
+## Niveau agent : remise à l'agence, charges, tableau par agent (RAP-012, 14/11/2026)
+
+Décisions : [ADR 0064](adr/0064-remise-agent-agence-et-harmonisation-rapports.md). Remise à **deux
+niveaux**, traçables séparément : l'**agent** remet à **son agence de rattachement** (versements de
+caisse, transferts Mobile Money) ; l'**agence** remet à la trésorerie principale (RAP-011, ADR 0016).
+
+- **Remise de l'agent** (`RemiseAgentService`, règle du 15/11/2026) :
+
+  | Ligne | Calcul |
+  |---|---|
+  | Encaissé | espèces + Mobile Money dont l'agent est l'auteur (virement, chèque exclus : banque de l'agence) |
+  | + Approvisionnements reçus | espèces remises par l'agence à l'agent, réception confirmée (ADR 0018) |
+  | − Charges validées | dépenses de l'agent au statut Validé (jamais en attente, rejetées, annulées) |
+  | **= Montant net à remettre** | |
+  | − Déjà remis | versements de caisse / transferts Mobile Money reçus par l'agence |
+  | **= Reste à remettre** | dont **en transit** (envoyé, non confirmé : toujours dans le reste) |
+
+  Cumul **jusqu'à la fin de la période**, depuis la validation de la première caisse dédiée ou du
+  premier compte Mobile Money de l'agent. Exemple : encaissé 1 000 000, charges validées 200 000 → net
+  800 000 ; déjà remis 500 000 → reste 300 000. **Remis sur la période** = réceptions confirmées
+  pendant la période. Pas de double déduction : la validation d'une dépense crédite la caisse de
+  l'agence (571000), jamais la caisse de l'agent. **Statut** = `RemisesAgencesService::statut()`,
+  la même règle que les agences. Agence de rattachement = agence de la caisse / du compte. Sans
+  caisse ni compte validé : « Aucune caisse dédiée ». Un encaissement n'est jamais une remise.
+  **Le rapport par agence n'applique pas cette déduction** (règle ADR 0016 inchangée).
+- **Charges saisies par l'agent** (`ChargesRapportService`, axe `user_id`) : dépenses dont il est
+  l'auteur, **validées + en attente de validation** (activité), `date_depense` dans la période,
+  agences du périmètre ; **charges validées** affichées à part (ce qui est déduit de la remise).
+  Jamais les charges de son agence (axe `site_id`, rapport par agence). Brouillons, rejetées,
+  annulées, supprimées exclues.
+- **Moyens** : mêmes colonnes que le rapport par agence (`RapportActiviteService::colonnesMoyens()`) ;
+  total encaissé = somme des colonnes.
+- **Rapport d'activité** : cartes Ventes, Total encaissé, Dettes clients, Charges saisies, Remis à
+  l'agence ; tableau **une ligne par agent** (`parAgent()` : agent, agence de rattachement, ventes,
+  Espèces, Orange Money, total encaissé, dettes clients, charges saisies, charges validées, puis
+  groupe « Remise à l'agence de rattachement » : net à remettre, déjà remis, en transit, reste,
+  statut ; ligne Total = totaux du rapport). Le nom de l'agent et l'icône « Opérations » filtrent la
+  page sur cet agent.
+- **Ma situation** : cartes Mes ventes, Mes encaissements, Mes dettes clients, Mes charges saisies
+  (dont validées / en attente), Remis à mon agence (période), Reste à remettre à mon agence ; blocs
+  **Mes encaissements** (par moyen, total) et **Remises à {agence}** (calcul ligne à ligne :
+  encaissé, approvisionnements, charges validées, net, déjà remis, reste, dont en transit) ; onglet
+  **Mes charges** (liste, lien vers la dépense seulement avec `depenses.read` et le module Dépenses).
+- Même agent, mêmes chiffres dans Ma situation et dans le rapport d'activité filtré sur lui.
+
 ## Écran et exports
 
-- Chiffres clés : ventes, encaissé, créances en cours, caisse (solde théorique ou « Aucune caisse »).
-- Onglets **Ventes / Encaissements / Créances / Mobile Money / Caisse** (onglet porté par l'URL,
-  `?tab=`). Au plus **300 lignes** par onglet à l'écran (les plus récentes ; les plus anciennes pour
-  les créances) ; les totaux portent toujours sur tout le périmètre ; l'export contient toutes les
-  lignes.
-- Statuts de facture et de versement : `StatusDot`.
-- **Excel** : une feuille par onglet + une feuille Résumé (périmètre, agences, agent, période).
-  **PDF** : paysage, mêmes sections.
+- Même langage graphique sur les trois rapports (référence : Rapport par agence) : en-tête compact,
+  cartes `KpiCard compact`, tableau (montants en GNF sans unité, zéros atténués, groupe « Remis » sur
+  fond distinct), statuts `StatusDot`, liste empilée sous 1024 px.
+- Détail du rapport d'activité et de Ma situation en onglets **Ventes / Encaissements / Dettes
+  clients / Mobile Money / Caisse / Charges** (onglet porté par l'URL, `?tab=`). Au plus **300
+  lignes** par onglet à l'écran (les plus récentes ; les plus anciennes pour les dettes) ; les totaux
+  portent toujours sur tout le périmètre ; l'export contient toutes les lignes.
+- Statuts de facture, de versement, de dépense et de remise : `StatusDot`.
+- **Excel** : Résumé (moyens et total encaissé, charges, remise à l'agence), une feuille par onglet,
+  feuille **Charges**, et feuille **Agents** pour le rapport d'activité. **PDF** : paysage, mêmes
+  sections (indicateurs, détail par agent, charges).
 
 ## Permissions (RAP-009)
 
