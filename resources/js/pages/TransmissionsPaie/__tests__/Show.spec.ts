@@ -40,7 +40,20 @@ const ligne = {
     source: 'Contrat',
 };
 
-const monter = () =>
+const SALARIES = [
+    {
+        employe_id: '01JEMPLOYE',
+        salarie: 'Moussa SIDIBE',
+        matricule: '751450',
+        site: 'Matoto',
+        fonction: null,
+        total_verse: 3950013,
+        total_valorise: 250000,
+        lignes: [ligne],
+    },
+];
+
+const monter = (salaries: unknown[] = SALARIES) =>
     shallowMount(TransmissionsPaieShow, {
         props: {
             transmission: {
@@ -74,18 +87,7 @@ const monter = () =>
                 a_jour: null,
                 peut_annuler_validation: false,
             },
-            salaries: [
-                {
-                    employe_id: '01JEMPLOYE',
-                    salarie: 'Moussa SIDIBE',
-                    matricule: '751450',
-                    site: 'Matoto',
-                    fonction: null,
-                    total_verse: 3950013,
-                    total_valorise: 250000,
-                    lignes: [ligne],
-                },
-            ],
+            salaries,
             recapitulatif: [
                 {
                     cle: 'salaire',
@@ -149,5 +151,59 @@ describe('Transmission de paie — détail', () => {
             '250 000 GNF',
             '-1 702 300 GNF',
         ]);
+    });
+
+    it('présente le détail par salarié dans un seul tableau, un groupe de lignes par salarié', () => {
+        const prime = {
+            ...ligne,
+            id: 'ligne-2',
+            origine: 'affectation' as const,
+            libelle: 'vacance',
+            categorie_label: 'Prime',
+            montant_reference: 200,
+            montant: 13,
+            detail_calcul: '200 GNF × 2/31 jours',
+            source: 'Affectation',
+        };
+        const wrapper = monter([
+            {
+                ...SALARIES[0],
+                total_verse: 750013,
+                total_valorise: 0,
+                lignes: [ligne, prime],
+            },
+            {
+                ...SALARIES[0],
+                employe_id: '01JAUTRE',
+                salarie: 'Fatoumata SIDIBÉ',
+                total_verse: 700000,
+                total_valorise: 0,
+                lignes: [{ ...ligne, id: 'ligne-3' }],
+            },
+        ]);
+
+        const tableaux = wrapper.findAll(
+            '[data-testid="detail-salaries"] table',
+        );
+        expect(tableaux).toHaveLength(1);
+
+        const groupe = wrapper.find('[data-testid="salarie-01JEMPLOYE"]');
+        expect(groupe.findAll('tr')).toHaveLength(2);
+        expect(groupe.find('td').attributes('rowspan')).toBe('2');
+        expect(groupe.find('td').text()).toContain('Moussa SIDIBE');
+        expect(groupe.find('[data-testid="total-salarie"]').text()).toBe(
+            '750 013 GNF',
+        );
+
+        expect(
+            wrapper
+                .find(
+                    '[data-testid="salarie-01JAUTRE"] [data-testid="total-salarie"]',
+                )
+                .text(),
+        ).toBe('700 000 GNF');
+        expect(wrapper.findAll('[data-testid="total-salarie"]')).toHaveLength(
+            2,
+        );
     });
 });
