@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CommandeVente;
 use App\Models\EncaissementVente;
 use App\Models\Parametre;
+use App\Rules\ClientUtilisableEnVente;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
@@ -50,10 +51,11 @@ class StorePrecommandeController extends Controller
         $avecAcompte = (float) $request->input('acompte_montant', 0) > 0;
 
         $data = $request->validate([
-            ...$this->formBuilder->commandeValidationRules(),
+            ...$this->formBuilder->commandeValidationRules($orgId),
             // Client et véhicule bornés à l'organisation (CLAUDE.md § 11) : jamais une précommande
-            // facturée au client ou livrée par le véhicule d'une autre organisation.
-            'client_id' => ['required', Rule::exists('clients', 'id')->where('organization_id', $orgId)->whereNull('deleted_at')],
+            // facturée au client ou livrée par le véhicule d'une autre organisation. Client qualifié
+            // (ADR 0066).
+            'client_id' => ['required', new ClientUtilisableEnVente($orgId)],
             // Le mode de remise n'est pas stocké : il est dérivé du véhicule (décision D4, comme le
             // mode Grossiste). La question posée à l'agent est seulement rendue cohérente ici.
             'mode_remise' => 'required|in:retrait,livraison',

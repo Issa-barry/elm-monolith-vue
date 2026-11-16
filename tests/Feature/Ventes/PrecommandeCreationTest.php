@@ -195,6 +195,18 @@ class PrecommandeCreationTest extends TestCase
 
     // ── Refus : rien n'est enregistré ─────────────────────────────────────────
 
+    public function test_client_non_qualifie_est_refuse_sans_rien_enregistrer(): void
+    {
+        // ADR 0066 : fiche créée à l'inscription d'un livreur ou d'un propriétaire, pas qualifiée.
+        $nonQualifie = Client::factory()->nonQualifie()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post('/backoffice/precommandes', $this->payload(10, 0, ['client_id' => $nonQualifie->id, 'mode_paiement' => null]))
+            ->assertSessionHasErrors('client_id');
+
+        $this->assertRienEnregistre();
+    }
+
     public function test_acompte_inferieur_au_minimum_est_refuse_sans_rien_enregistrer(): void
     {
         $this->exigerAcompte(30);

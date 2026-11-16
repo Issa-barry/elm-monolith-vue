@@ -19,7 +19,9 @@ class ClientTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['clients.read', 'clients.create', 'clients.update', 'clients.delete']);
+        // clients.qualifier : plusieurs tests changent la nature d'un client existant, ce qui
+        // l'exige depuis l'ADR 0066 (contrôle couvert par Clients\QualificationClientTest).
+        $this->initOrgAndUser(['clients.read', 'clients.create', 'clients.update', 'clients.delete', 'clients.qualifier']);
     }
 
     // ── index ─────────────────────────────────────────────────────────────────

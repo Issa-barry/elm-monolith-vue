@@ -52,6 +52,7 @@ use App\Http\Controllers\Clients\DestroyClientController;
 use App\Http\Controllers\Clients\DestroyVehiculeClientController;
 use App\Http\Controllers\Clients\EditClientController;
 use App\Http\Controllers\Clients\IndexClientController;
+use App\Http\Controllers\Clients\QualifierClientController;
 use App\Http\Controllers\Clients\ShowClientController;
 use App\Http\Controllers\Clients\ShowTarifsGrossisteClientController;
 use App\Http\Controllers\Clients\StoreClientController;
@@ -502,6 +503,9 @@ Route::prefix('backoffice')->group(function () {
         Route::delete('clients/{client}', DestroyClientController::class)->name('clients.destroy');
         Route::patch('clients/{client}/cashback', UpdateCashbackClientController::class)
             ->name('clients.cashback.update');
+        // ADR 0066 : qualification commerciale d'un client créé à l'inscription.
+        Route::post('clients/{client}/qualification', QualifierClientController::class)
+            ->name('clients.qualification');
         Route::patch('clients/{client}/derogation-impayes', UpdateDerogationClientController::class)
             ->name('clients.derogation-impayes.update');
         // Tarifs Grossiste — propres à ce client (cf. CategorieTarifGrossisteController), jamais

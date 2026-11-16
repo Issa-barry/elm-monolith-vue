@@ -60,7 +60,21 @@ indépendant, cf. `TelephoneOwnerLookupService`, désormais obsolète sur ce poi
   complètent uniquement ceux que cette `Personne` n'a pas encore (fiche back-office souvent
   limitée à `nom_complet`) ; une valeur déjà renseignée n'est jamais écrasée et `nom_complet`
   ne change pas. **Après activation (lot 7a)** : le client créé à l'inscription reçoit l'identité de
-  sa Personne (inscription et ADR 0056 inchangés par ailleurs).
+  sa Personne (inscription et ADR 0056 inchangés par ailleurs). Si aucun client n'existe et que le
+  téléphone est celui d'un livreur ou d'un propriétaire, une fiche Client technique est créée pour
+  son espace client : nature Externe en base, **non qualifiée** (CLIENTPERSONNE-009).
+- **CLIENTPERSONNE-009** — Qualification commerciale (ADR 0066) : une inscription crée une identité
+  et un accès, jamais un client commercial. La fiche créée à l'inscription d'un livreur ou d'un
+  propriétaire n'est pas qualifiée (`clients.qualifie_le` vide) : elle n'est proposée dans aucune
+  vente (commande, précommande, PDV) et le serveur la refuse, sauf sur une commande qui la porte
+  déjà, tant que le client n'est pas remplacé. Un utilisateur ayant la permission `clients.qualifier`
+  la qualifie depuis la fiche client (action « Qualifier ») : nature et cashback (règles CASHBACK-001/002
+  inchangées), `qualifie_le` et `qualifie_par` enregistrés ensemble. La simple modification de la
+  fiche ne change pas la nature d'un client non qualifié ; changer la nature d'un client déjà
+  qualifié exige aussi `clients.qualifier` (requalification enregistrée), les coordonnées restant
+  modifiables avec la seule permission de modification. Tout autre client (back-office, import,
+  client existant rattaché à l'inscription) est qualifié à sa création. La liste des clients
+  signale « À qualifier ». Les ventes refusent aussi un client d'une autre organisation.
 - **CLIENTPERSONNE-008** — Pré-remplissage de l'inscription et de l'invitation par téléphone
   (`check-phone`, `register/lookup`) : l'identité d'un client se lit sur sa `Personne`, avec
   repli sur ses colonnes `clients.prenom`/`nom`. L'écran verrouille les champs pré-remplis : une
@@ -90,6 +104,7 @@ organisation.
 | Champ | Table | Rôle |
 |---|---|---|
 | `personne_id` | `clients` | FK nullable vers `personnes`, `restrictOnDelete` — ajoutée par [`add_personne_id_to_clients_table`](../database/migrations/2026_09_08_090000_add_personne_id_to_clients_table.php). |
+| `qualifie_le`, `qualifie_par` | `clients` | Qualification commerciale (ADR 0066), ajoutées par [`add_qualification_commerciale_to_clients`](../database/migrations/2026_11_16_120000_add_qualification_commerciale_to_clients.php). Vide = client créé à l'inscription, non vendable. Reprise : qualifié seulement si certainement saisi au back-office (sans compte, ou créé plus de 2 minutes avant le compte avec un `nom_complet`) ; `qualifie_par` vide pour la reprise. |
 | `Personne::assertTelephoneDisponible()` | `app/Models/Personne.php` | Garde centralisée (Client, Parrain) empêchant qu'une édition en place ne collisionne silencieusement avec une autre `Personne` de l'organisation. |
 
 ## Hors périmètre de ce chantier

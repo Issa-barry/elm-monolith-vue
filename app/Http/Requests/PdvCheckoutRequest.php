@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\ClientUtilisableEnVente;
 use Illuminate\Foundation\Http\FormRequest;
 
 class PdvCheckoutRequest extends FormRequest
@@ -15,7 +16,8 @@ class PdvCheckoutRequest extends FormRequest
     {
         return [
             'mode' => ['required', 'string', 'in:Vente rapide,Client,Livreur'],
-            'client_id' => ['nullable', 'exists:clients,id'],
+            // Client de l'organisation et qualifié (ADR 0066, CLAUDE.md § 11).
+            'client_id' => ['nullable', new ClientUtilisableEnVente((string) $this->user()?->organization_id)],
             'vehicule_id' => ['nullable', 'exists:vehicules,id'],
             'client_vehicule_id' => ['nullable', 'exists:client_vehicules,id'],
             'lignes' => ['required', 'array', 'min:1'],

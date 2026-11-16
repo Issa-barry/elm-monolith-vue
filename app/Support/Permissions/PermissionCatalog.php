@@ -72,6 +72,7 @@ final class PermissionCatalog
         'imports-vehicules-maj.read' => 'Import véhicules — consulter les imports',
         'imports-produits.create' => 'Import produits — lancer un import',
         'imports-produits.read' => 'Import produits — consulter les imports',
+        'clients.qualifier' => 'Clients — qualifier un client créé à l’inscription (choisir sa nature commerciale, il devient alors utilisable dans une vente)',
         'parrains.read' => 'Parrains — consulter la liste et les fiches',
         'rattachements-comptes.gerer' => 'Comptes — rattacher ou détacher un compte (parrain, consultant, interlocuteur) ; donne accès à ses commissions',
         // Référentiel Contacts (ADR 0060) : identité des fiches Personne et Entreprise. Hors
@@ -199,6 +200,7 @@ final class PermissionCatalog
             'label' => 'Clients & Contacts',
             'resources' => ['clients', 'prestataires', 'livreurs', 'proprietaires'],
             'standalone' => [
+                'Clients' => ['clients.qualifier'],
                 'Parrains' => ['parrains.read'],
                 'Comptes' => ['rattachements-comptes.gerer'],
                 'Référentiel Contacts' => [

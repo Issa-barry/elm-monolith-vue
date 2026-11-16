@@ -35,7 +35,7 @@ class StoreCommandeVenteController extends Controller
             return $redirect;
         }
 
-        $data = $request->validate($this->formBuilder->commandeValidationRules(), $this->formBuilder->commandeValidationMessages());
+        $data = $request->validate($this->formBuilder->commandeValidationRules($orgId), $this->formBuilder->commandeValidationMessages());
 
         // Tronc commun partagé avec la précommande (dérivations, garde-fous, impayés, prix figés,
         // lignes, audit) — cf. CommandeVenteCreationService. Seule la suite est propre à la vente.

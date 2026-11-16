@@ -21,6 +21,7 @@ use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\VarianteStock;
 use App\Models\Vehicule;
+use App\Rules\ClientUtilisableEnVente;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionProcessusDefaults;
@@ -289,11 +290,18 @@ final class CommandeVenteFormBuilder
         ];
     }
 
-    public function clientsActifs(string $orgId): Collection
+    /**
+     * Clients proposés dans une vente : actifs et qualifiés (ADR 0066) — une fiche créée à
+     * l'inscription d'un livreur ou d'un propriétaire n'apparaît qu'une fois qualifiée. En
+     * modification, $clientActuelId garde le client déjà porté par la commande, même non qualifié.
+     */
+    public function clientsActifs(string $orgId, ?string $clientActuelId = null): Collection
     {
         return Client::with('vehicules')
             ->where('organization_id', $orgId)
             ->where('is_active', true)
+            ->where(fn ($q) => $q->whereNotNull('qualifie_le')
+                ->when($clientActuelId, fn ($q) => $q->orWhere('id', $clientActuelId)))
             ->orderBy('nom_complet')
             ->get()
             ->map(fn (Client $c) => [
@@ -313,11 +321,16 @@ final class CommandeVenteFormBuilder
             ]);
     }
 
-    public function commandeValidationRules(): array
+    /**
+     * $clientActuelId : client déjà porté par la commande modifiée — accepté tant qu'il n'est pas
+     * remplacé, même non qualifié (ADR 0066).
+     */
+    public function commandeValidationRules(string $orgId, ?string $clientActuelId = null): array
     {
         return [
             'vehicule_id' => 'nullable|exists:vehicules,id',
-            'client_id' => 'nullable|exists:clients,id',
+            // Client de l'organisation et qualifié (ADR 0066, CLAUDE.md § 11).
+            'client_id' => ['nullable', new ClientUtilisableEnVente($orgId, $clientActuelId)],
             'nature_operation' => ['nullable', Rule::in(NatureOperation::values())],
             // mode_remise_grossiste n'est PLUS un champ soumis (décision produit du 05/09/2026,
             // révision UX) : dérivé côté serveur depuis vehicule_id, cf. deriverModeRemiseGrossiste()

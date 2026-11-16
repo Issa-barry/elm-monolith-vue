@@ -3,6 +3,7 @@ import type { EntrepriseReliee } from '@/components/contacts/RattachementEntrepr
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useFlashToast } from '@/composables/useFlashToast';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { paysOptionsByCode } from '@/lib/pays';
 import { type BreadcrumbItem } from '@/types';
@@ -27,6 +28,8 @@ interface ClientData {
     is_active: boolean;
     type: string;
     type_label: string;
+    /** ADR 0066 : false = client créé à l'inscription, pas encore qualifié. */
+    qualifie: boolean;
     cashback_eligible: boolean;
     cashback_montant_par_pack: number | null;
     /** Lot 7b : client professionnel ; `nom_complet` est alors le nom du contact. */
@@ -139,6 +142,20 @@ function formatMontant(v: number): string {
 }
 
 // ── Véhicules externes — toujours facultatifs (cf. ClientVehicle) ───────────
+// ADR 0066 : la nature commerciale (prix, cashback) ne change qu'avec `clients.qualifier` ; celle
+// d'un client créé à l'inscription se choisit par l'action « Qualifier » de sa fiche.
+const { can } = usePermissions();
+const natureVerrouilleeMessage = computed<string | null>(() => {
+    if (!props.client.qualifie) {
+        return "Client créé à l'inscription, à qualifier : sa nature se choisit avec l'action « Qualifier » de sa fiche.";
+    }
+    if (!can('clients.qualifier')) {
+        return 'Changer la nature commerciale demande la permission « Clients — qualifier ».';
+    }
+
+    return null;
+});
+
 const isExterne = computed(() => props.client.type === 'externe');
 const showVehiculeForm = reactive({ open: false });
 const vehiculeForm = useForm({
@@ -300,6 +317,7 @@ function destroyVehicule(vehiculeId: number) {
                 :types="types"
                 :client-id="client.id"
                 :entreprise="entreprise"
+                :nature-verrouillee="natureVerrouilleeMessage"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

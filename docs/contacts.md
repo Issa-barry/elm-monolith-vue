@@ -69,7 +69,9 @@ sur les ventes, commissions, comptabilité ou logistique.
   organisation et catégorie. Les codes système reprennent les valeurs déjà stockées : natures client
   `externe`, `revendeur`, `distributeur`, `grossiste` (`clients.type`) et `consultant`
   (`prestataires.type`). `clients.type` reste la seule source lue par les prix, le PDV et les
-  commissions ; depuis le lot 6b, la qualification Consultant se lit sur les qualifications du
+  commissions — pour un client qualifié seulement : une fiche créée à l'inscription d'un livreur ou
+  d'un propriétaire n'est vendable qu'après qualification (ADR 0066,
+  [CLIENTPERSONNE-009](identite-client-personne.md)) ; depuis le lot 6b, la qualification Consultant se lit sur les qualifications du
   prestataire (CONTACT-039), `prestataires.type` n'étant plus qu'une copie de compatibilité.
 - **CONTACT-009** — Une sous-catégorie système (les 4 natures client, Consultant — D18) ne change ni
   de code ni de catégorie, ne se renomme pas et ne se désactive pas ; seul son ordre se modifie
