@@ -98,6 +98,7 @@ class FonctionsContactTest extends TestCase
         $parFonction = collect($resultat)->keyBy('fonction');
         $this->assertSame('grossiste', $parFonction['client']['sous_categorie']);
         $this->assertSame('mecanicien', $parFonction['prestataire']['sous_categorie']);
+        $this->assertNull($parFonction['proprietaire']['sous_categorie'], 'Le type de fiche n\'est pas une sous-catégorie de fonction.');
         $this->assertSame($entreprise->id, $parFonction['interlocuteur']['entreprise_tierce_id']);
     }
 

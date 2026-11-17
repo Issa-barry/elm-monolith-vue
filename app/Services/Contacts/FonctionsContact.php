@@ -47,7 +47,7 @@ final class FonctionsContact
             $fonctions[] = $this->ligne('prestataire', $prestataire->id, $prestataire->is_active, $prestataire->type?->value);
         }
         foreach (Proprietaire::where('personne_id', $personne->id)->orderBy('created_at')->get() as $proprietaire) {
-            $fonctions[] = $this->ligne('proprietaire', $proprietaire->id, $proprietaire->is_active, $proprietaire->type?->value);
+            $fonctions[] = $this->ligne('proprietaire', $proprietaire->id, $proprietaire->is_active, null);
         }
         foreach (Parrain::visiblesPar($lecteur)->where('parrains.personne_id', $personne->id)->orderBy('parrains.created_at')->get() as $parrain) {
             $fonctions[] = $this->ligne('parrain', $parrain->id, $parrain->is_active, null);

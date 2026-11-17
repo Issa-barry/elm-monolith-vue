@@ -8,6 +8,7 @@
  */
 import OptionFusion from '@/components/contacts/OptionFusion.vue';
 import DetailHeader from '@/components/DetailHeader.vue';
+import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -91,6 +92,13 @@ interface Simulation {
         secondaire: string | null;
         retires: Numero[];
     };
+    /** Suit le numéro principal retenu : jamais choisi à part (CONTACT-058). */
+    pays: {
+        pays: string | null;
+        code_pays: string | null;
+        code_phone_pays: string | null;
+        deduit: boolean;
+    };
     interlocuteur_principal: {
         options: {
             id: string;
@@ -146,17 +154,36 @@ function telephone(valeur: string | null): string {
     return formatPhoneDisplay(valeur, null) ?? valeur ?? '—';
 }
 
+// Provenance du numéro et son rang actuel, pas son rang après la fusion.
 function origineNumero(n: Numero): string {
     if (!n.fiche || !n.rang) return n.origine;
-    return `${SOURCE[n.fiche]} · ${n.rang}`;
+    return `Vient de la ${SOURCE[n.fiche].toLowerCase()} (${n.rang} actuel)`;
 }
 
 // ── Étape 1 : fiche à fusionner ─────────────────────────────────────────
-const terme = ref(props.recherche);
+// Par téléphone : même saisie que la création d'un contact (pays + numéro national, indicatif
+// ajouté automatiquement) ; un numéro international collé dans la recherche texte reste reconnu.
+type ModeRecherche = 'telephone' | 'texte';
+const parTelephone = props.recherche === '' || props.recherche.startsWith('+');
+const mode = ref<ModeRecherche>(parTelephone ? 'telephone' : 'texte');
+const terme = ref(parTelephone ? '' : props.recherche);
+const telephoneSaisi = ref(parTelephone ? props.recherche : '');
+const cleTelephone = ref(0);
+const termeEnvoye = computed(() =>
+    (mode.value === 'telephone' ? telephoneSaisi.value : terme.value).trim(),
+);
+function choisirMode(m: ModeRecherche) {
+    if (mode.value === m) return;
+    mode.value = m;
+    if (m === 'telephone') {
+        telephoneSaisi.value = '';
+        cleTelephone.value++;
+    }
+}
 function rechercher() {
     router.get(
         urlPage.value,
-        { recherche: terme.value },
+        { recherche: termeEnvoye.value },
         { preserveState: true, preserveScroll: true, replace: true },
     );
 }
@@ -251,6 +278,13 @@ const numerosRepris = computed(() =>
         numero(props.simulation?.telephones.secondaire ?? null),
     ].filter((n): n is Numero => n !== null && n.fiche === 'b'),
 );
+const paysFinal = computed(() => {
+    const p = props.simulation?.pays;
+    if (!p?.pays) return 'Non renseigné';
+    return p.code_pays && p.code_pays !== p.pays
+        ? `${p.pays} (${p.code_pays})`
+        : p.pays;
+});
 const nonRepris = computed(() =>
     differences.value.filter((c) => valeurEcartee(c) !== null),
 );
@@ -421,15 +455,64 @@ const erreurs = computed(() =>
                         <p class="text-xs text-muted-foreground">
                             Fiche à fusionner, puis archivée
                         </p>
-                        <form class="flex gap-2" @submit.prevent="rechercher">
+                        <div
+                            class="grid grid-cols-2 gap-2"
+                            role="radiogroup"
+                            aria-label="Rechercher par"
+                        >
+                            <button
+                                v-for="o in [
+                                    {
+                                        key: 'telephone' as const,
+                                        label: 'Par téléphone',
+                                    },
+                                    {
+                                        key: 'texte' as const,
+                                        label: 'Par nom ou e-mail',
+                                    },
+                                ]"
+                                :key="o.key"
+                                type="button"
+                                role="radio"
+                                :aria-checked="mode === o.key"
+                                class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                                :class="
+                                    mode === o.key
+                                        ? 'border-primary bg-primary/5 text-primary'
+                                        : 'text-muted-foreground hover:bg-muted'
+                                "
+                                :data-testid="`fusion-mode-${o.key}`"
+                                @click="choisirMode(o.key)"
+                            >
+                                {{ o.label }}
+                            </button>
+                        </div>
+                        <form
+                            class="flex flex-col gap-2 sm:flex-row"
+                            @submit.prevent="rechercher"
+                        >
+                            <PhoneCountryInput
+                                v-if="mode === 'telephone'"
+                                id="fusion-telephone"
+                                :key="cleTelephone"
+                                class="w-full"
+                                :model-value="telephoneSaisi"
+                                :remember-choice="false"
+                                :required="false"
+                                data-testid="fusion-recherche-telephone"
+                                @update:model-value="telephoneSaisi = $event"
+                            />
                             <InputText
+                                v-else
                                 v-model="terme"
                                 class="w-full"
-                                placeholder="Nom, téléphone, e-mail…"
+                                placeholder="Nom, e-mail…"
                                 data-testid="fusion-recherche"
                             />
                             <Button
                                 type="submit"
+                                class="shrink-0"
+                                :disabled="termeEnvoye.length < 2"
                                 data-testid="fusion-rechercher"
                             >
                                 <Search class="mr-1.5 h-4 w-4" />
@@ -474,8 +557,8 @@ const erreurs = computed(() =>
                             Aucune fiche trouvée.
                         </p>
                         <p v-else class="text-sm text-muted-foreground">
-                            Recherchez la fiche en double par son nom, son
-                            téléphone ou son e-mail.
+                            Recherchez la fiche en double par son téléphone, son
+                            nom ou son e-mail.
                         </p>
                     </div>
                 </div>
@@ -528,6 +611,16 @@ const erreurs = computed(() =>
                             >
                         </p>
                     </div>
+
+                    <p
+                        class="-mt-3 text-sm text-muted-foreground"
+                        data-testid="fusion-aide-choix"
+                    >
+                        Chaque ligne se choisit séparément : la fiche conservée
+                        garde son historique et peut reprendre n'importe quelle
+                        information de l'autre fiche. Le pays suit le numéro
+                        principal.
+                    </p>
 
                     <div class="space-y-3">
                         <p
@@ -641,6 +734,18 @@ const erreurs = computed(() =>
                                 />
                             </div>
                         </div>
+                        <p
+                            class="text-sm text-muted-foreground"
+                            data-testid="fusion-pays"
+                        >
+                            Pays de la fiche :
+                            <span class="font-medium text-foreground">{{
+                                paysFinal
+                            }}</span>
+                            <template v-if="simulation.pays.deduit">
+                                — suit le numéro principal.</template
+                            >
+                        </p>
                         <p
                             v-if="simulation.telephones.retires.length > 0"
                             class="flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-300"
@@ -814,6 +919,8 @@ const erreurs = computed(() =>
                             </dt>
                             <dd>{{ c.valeur }}</dd>
                         </template>
+                        <dt class="text-muted-foreground">Pays</dt>
+                        <dd data-testid="fusion-recap-pays">{{ paysFinal }}</dd>
                         <dt class="text-muted-foreground">
                             Téléphone principal
                         </dt>
