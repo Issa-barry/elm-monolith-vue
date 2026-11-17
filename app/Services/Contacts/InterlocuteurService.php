@@ -6,6 +6,7 @@ use App\Enums\AuditEvent;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\EntrepriseTierce;
 use App\Models\Personne;
+use App\Models\Prestataire;
 use App\Models\User;
 use App\Services\AuditLogService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -158,6 +159,44 @@ final class InterlocuteurService
 
             return $interlocuteur->refresh();
         });
+    }
+
+    /**
+     * Autorise ou retire la consultation des commissions de l'entreprise (COMPTE-006). L'interlocuteur
+     * n'en devient pas bénéficiaire : il lit les parts du prestataire consultant de l'entreprise, par
+     * son compte relié (ActivitesCompteResolver). Autoriser exige une entreprise consultante et un
+     * interlocuteur actif ; retirer est toujours possible.
+     */
+    public function definirAccesCommissions(EntrepriseInterlocuteur $interlocuteur, bool $acces, User $acteur): EntrepriseInterlocuteur
+    {
+        $entreprise = $interlocuteur->entrepriseTierce;
+        $this->assertMemeOrganisation($entreprise, $acteur);
+
+        $interlocuteur->refresh();
+        if ($interlocuteur->acces_commissions === $acces) {
+            return $interlocuteur;
+        }
+
+        if ($acces && ! $this->entrepriseConsultante($entreprise)) {
+            throw ValidationException::withMessages(['acces_commissions' => "Cette entreprise n'est pas un prestataire consultant : elle n'a pas de commissions à consulter."]);
+        }
+        if ($acces && ! $interlocuteur->is_active) {
+            throw ValidationException::withMessages(['acces_commissions' => "Cet interlocuteur est désactivé : réactivez-le avant de l'autoriser."]);
+        }
+
+        $interlocuteur->forceFill(['acces_commissions' => $acces])->save();
+        $this->journal->record($interlocuteur, AuditEvent::UPDATED, $acteur, ['acces_commissions' => ! $acces], ['acces_commissions' => $acces]);
+
+        return $interlocuteur->refresh();
+    }
+
+    /** Même critère que ActivitesCompteResolver : un prestataire qualifié Consultant porté par l'entreprise. */
+    public function entrepriseConsultante(EntrepriseTierce $entreprise): bool
+    {
+        return Prestataire::where('organization_id', $entreprise->organization_id)
+            ->where('entreprise_tierce_id', $entreprise->id)
+            ->qualifiesConsultant()
+            ->exists();
     }
 
     /** Le lien est conservé (historique, accès aux commissions tracé) ; il perd le rôle de principal. */

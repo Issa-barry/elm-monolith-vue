@@ -174,7 +174,17 @@ sur les ventes, commissions, comptabilité ou logistique.
   est inscrit au journal d'audit existant (`created`, `updated`, `status_changed`) avec des
   identifiants et des indicateurs seulement (entreprise, principal, personne existante, anciens
   principaux, noms des champs modifiés) : jamais de nom, de téléphone, d'e-mail ni le texte des
-  notes. L'accès aux commissions (`acces_commissions`) n'est ni affiché ni modifié par ces écrans.
+  notes. L'accès aux commissions (`acces_commissions`) ne se modifie que par sa case à cocher dédiée
+  (CONTACT-026b) ; désactiver ou réactiver un interlocuteur ne le change pas.
+- **CONTACT-026b** — Accès aux commissions (17/11/2026, COMPTE-006 de
+  [rattachement-comptes.md](rattachement-comptes.md)) : pour une entreprise qui porte un prestataire
+  qualifié Consultant, chaque interlocuteur a une case « Peut consulter les commissions de
+  l'entreprise », réservée à `rattachements-comptes.gerer` (entreprise visible vérifiée côté serveur,
+  `POST …/interlocuteurs/{interlocuteur}/acces-commissions`). Autoriser se confirme et exige un
+  interlocuteur actif ; retirer est immédiat et toujours possible. Sans cette permission, l'accès
+  accordé s'affiche en lecture seule. Un interlocuteur autorisé sans compte relié est signalé :
+  l'accès s'ouvre dès que son compte l'est. Chaque changement est journalisé (`updated`, ancienne et
+  nouvelle valeur).
 
 - **CONTACT-027** — Propriétaire entreprise (lot 5) : un propriétaire de type entreprise est relié à
   une fiche Entreprise (`proprietaires.entreprise_tierce_id`) ; `personne_id` reste son contact
