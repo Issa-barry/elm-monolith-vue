@@ -11,7 +11,7 @@ développement.
 
 | Outil | Version | Remarque |
 |---|---|---|
-| PHP | **8.4** conseillé (celle de la CI et des serveurs) ; minimum 8.2 (`composer.json`) | 8.5 fonctionne (testé), avec des avertissements « Deprecated » de Composer sans conséquence |
+| PHP | **8.4** conseillé (celle de la CI et des serveurs) ; minimum réel **8.3** : `composer.json` annonce 8.2, mais `spatie/laravel-permission` exige 8.3 | 8.5 fonctionne (testé), avec des avertissements « Deprecated » de Composer sans conséquence |
 | Composer | 2.x | |
 | Node.js | **22** (celle de la CI) | npm 10 |
 | MySQL | 8.x | MariaDB non testé |

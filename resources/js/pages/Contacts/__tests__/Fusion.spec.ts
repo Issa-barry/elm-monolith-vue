@@ -45,14 +45,6 @@ const simulation = (surcharges: Record<string, unknown> = {}) => ({
             choix: 'a',
         },
         {
-            cle: 'pays',
-            libelle: 'Pays',
-            valeur_a: 'Guinée (GN)',
-            valeur_b: 'Guinée (GN)',
-            different: false,
-            choix: 'a',
-        },
-        {
             cle: 'ville',
             libelle: 'Ville',
             valeur_a: null,
@@ -82,6 +74,12 @@ const simulation = (surcharges: Record<string, unknown> = {}) => ({
         secondaire: '224624000002',
         retires: [],
     },
+    pays: {
+        pays: 'Guinée',
+        code_pays: 'GN',
+        code_phone_pays: '+224',
+        deduit: true,
+    },
     interlocuteur_principal: null,
     relations: [],
     compte: null,
@@ -98,7 +96,7 @@ const simulation = (surcharges: Record<string, unknown> = {}) => ({
     ...surcharges,
 });
 
-const monter = (sim: ReturnType<typeof simulation> | null) =>
+const monter = (sim: ReturnType<typeof simulation> | null, recherche = '') =>
     mount(Fusion, {
         props: {
             type: 'personne',
@@ -108,7 +106,7 @@ const monter = (sim: ReturnType<typeof simulation> | null) =>
                 lien: '/a',
                 telephone: null,
             },
-            recherche: '',
+            recherche,
             candidats: [],
             // Données de test volontairement partielles : forme vérifiée par le serveur.
             simulation: sim as never,
@@ -117,6 +115,7 @@ const monter = (sim: ReturnType<typeof simulation> | null) =>
         },
         global: {
             stubs: {
+                Select: true,
                 AppLayout: { template: '<div><slot /></div>' },
                 DetailHeader: {
                     template:
@@ -218,6 +217,76 @@ describe('Fusion.vue', () => {
         expect(vue.get('[data-testid="fusion-nom-final"]').text()).toBe(
             'Chauffeur-7',
         );
+    });
+
+    it('n’offre aucun choix de pays : il suit le numéro principal retenu', () => {
+        const vue = monter(
+            simulation({
+                pays: {
+                    pays: 'France',
+                    code_pays: 'FR',
+                    code_phone_pays: '+33',
+                    deduit: true,
+                },
+            }),
+        );
+
+        expect(vue.find('[data-testid^="fusion-champ-pays"]').exists()).toBe(
+            false,
+        );
+        expect(vue.get('[data-testid="fusion-pays"]').text()).toContain(
+            'France (FR)',
+        );
+        expect(vue.get('[data-testid="fusion-pays"]').text()).toContain(
+            'suit le numéro principal',
+        );
+    });
+
+    it('indique la provenance d’un numéro, pas son rang après la fusion', () => {
+        const vue = monter(simulation());
+
+        expect(
+            vue.get('[data-testid="fusion-secondaire-224624000002"]').text(),
+        ).toContain('Vient de la fiche à fusionner (principal actuel)');
+    });
+
+    it('recherche par téléphone avec le pays choisi : l’indicatif est ajouté sans le saisir', async () => {
+        const { router } = await import('@inertiajs/vue3');
+        vi.mocked(router.get).mockClear();
+        const vue = monter(null);
+
+        expect(
+            vue.find('[data-testid="fusion-recherche-telephone"]').exists(),
+        ).toBe(true);
+        await vue.get('#fusion-telephone').setValue('0624000002');
+        await vue.get('form').trigger('submit');
+
+        expect(router.get).toHaveBeenCalledWith(
+            '/backoffice/contacts/fusion/personne/A1',
+            { recherche: '+224624000002' },
+            expect.anything(),
+        );
+    });
+
+    it('reprend une recherche internationale avec son pays et garde la recherche par nom', async () => {
+        const { router } = await import('@inertiajs/vue3');
+        vi.mocked(router.get).mockClear();
+        const vue = monter(null, '+33758855039');
+
+        expect(
+            (vue.get('#fusion-telephone').element as HTMLInputElement).value,
+        ).toBe('758855039');
+        await vue.get('form').trigger('submit');
+        expect(vi.mocked(router.get).mock.calls.at(-1)?.[1]).toEqual({
+            recherche: '+33758855039',
+        });
+
+        await vue.get('[data-testid="fusion-mode-texte"]').trigger('click');
+        await vue.get('[data-testid="fusion-recherche"]').setValue('Barry');
+        await vue.get('form').trigger('submit');
+        expect(vi.mocked(router.get).mock.calls.at(-1)?.[1]).toEqual({
+            recherche: 'Barry',
+        });
     });
 
     it('n’envoie qu’une fois sur un double clic', async () => {

@@ -14,6 +14,7 @@ use App\Services\AuditLogService;
 use App\Services\Comptes\RattachementAutomatiqueService;
 use App\Services\Contacts\ClientIdentiteSynchronisation;
 use App\Services\Contacts\VisibiliteContacts;
+use App\Services\Rh\RechercheEmployeParTelephone;
 use App\Support\Clients\ClientUniqueness;
 use App\Support\Contacts\NumeroSecondaire;
 use App\Support\Contacts\PresentationContacts;
@@ -43,14 +44,16 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 final class FusionContacts
 {
-    /** Champs arbitrés d'une Personne : clé => [libellé, colonnes]. Téléphones à part. */
+    /**
+     * Champs arbitrés d'une Personne : clé => [libellé, colonnes]. Téléphones à part ; le pays n'est
+     * pas arbitré, il suit le numéro principal retenu (CONTACT-058, voir paysFinal()).
+     */
     public const CHAMPS_PERSONNE = [
         'nom' => ['Nom', ['nom']],
         'prenom' => ['Prénom', ['prenom']],
         'nom_complet' => ['Nom complet', ['nom_complet']],
         'surnom' => ['Surnom', ['surnom']],
         'email' => ['E-mail', ['email']],
-        'pays' => ['Pays', ['pays', 'code_pays']],
         'ville' => ['Ville', ['ville']],
         'quartier' => ['Quartier', ['quartier']],
         'adresse' => ['Adresse', ['adresse']],
@@ -69,7 +72,6 @@ final class FusionContacts
         'identifiant_fiscal' => ['NIF', ['identifiant_fiscal']],
         'rccm' => ['RCCM', ['rccm']],
         'email' => ['E-mail', ['email']],
-        'pays' => ['Pays', ['pays', 'code_pays']],
         'ville' => ['Ville', ['ville']],
         'quartier' => ['Quartier', ['quartier']],
         'adresse' => ['Adresse', ['adresse']],
@@ -192,6 +194,7 @@ final class FusionContacts
             'nom_final' => $this->nomFinal($type, $a, $b, $champs, $telephones, $acteur),
             'champs' => $champs,
             'telephones' => $telephones,
+            'pays' => $this->paysFinal($a, $b, $telephones),
             'interlocuteur_principal' => $principal,
             'relations' => $this->relations($references, $lignes, $laisses),
             'compte' => $compte,
@@ -431,6 +434,36 @@ final class FusionContacts
             'principal' => $principal,
             'secondaire' => $secondaire,
             'retires' => array_values(array_filter($numeros, fn ($n) => ! in_array($n['normalise'], [$principal, $secondaire], true))),
+        ];
+    }
+
+    /**
+     * CONTACT-058 : comme à la création et à la modification d'une fiche (ReglesContact), le pays,
+     * son code et l'indicatif se déduisent du numéro principal retenu ; ils ne sont jamais choisis
+     * à part, sinon la fiche garderait un pays différent de celui de son numéro. Un ancien numéro
+     * non reconnu garde le pays de la fiche dont il était le numéro principal ; sans numéro
+     * (entreprise), le pays de A est gardé, complété par celui de B s'il est vide.
+     *
+     * @return array{pays: ?string, code_pays: ?string, code_phone_pays: ?string, deduit: bool}
+     */
+    private function paysFinal(Model $a, Model $b, array $telephones): array
+    {
+        $numero = collect($telephones['numeros'])->firstWhere('normalise', $telephones['principal']);
+        if ($numero !== null) {
+            $info = RechercheEmployeParTelephone::normaliser($numero['valeur'], $numero['code_phone_pays'] ?? null);
+            if ($info !== null) {
+                return ['pays' => $info['pays'], 'code_pays' => $info['code_pays'], 'code_phone_pays' => $info['indicatif'], 'deduit' => true];
+            }
+            $source = $numero['rang'] === 'principal' && $numero['fiche'] === 'b' ? $b : $a;
+        } else {
+            $source = $this->vide([$a->getRawOriginal('pays'), $a->getRawOriginal('code_pays')]) ? $b : $a;
+        }
+
+        return [
+            'pays' => $source->getRawOriginal('pays'),
+            'code_pays' => $source->getRawOriginal('code_pays'),
+            'code_phone_pays' => $source->getRawOriginal('code_phone_pays'),
+            'deduit' => false,
         ];
     }
 
@@ -734,12 +767,18 @@ final class FusionContacts
             $a->forceFill([
                 'telephone' => $principal['valeur'],
                 'telephone_normalise' => $principal['normalise'],
-                'code_phone_pays' => $principal['code_phone_pays'] ?? $a->getRawOriginal('code_phone_pays'),
             ]);
         } elseif ($type === ContactsFusion::TYPE_ENTREPRISE) {
             $a->forceFill(['telephone' => null, 'telephone_normalise' => null]);
         }
         $a->telephone_secondaire = $secondaire['valeur'] ?? null;
+
+        $pays = $simulation['pays'];
+        $a->forceFill([
+            'pays' => $pays['pays'],
+            'code_pays' => $pays['code_pays'],
+            'code_phone_pays' => $pays['code_phone_pays'],
+        ]);
     }
 
     // ── Instantanés des effets induits ──────────────────────────────────────
@@ -819,7 +858,7 @@ final class FusionContacts
     private function nomFinal(string $type, Personne|EntrepriseTierce $a, Personne|EntrepriseTierce $b, array $champs, array $telephones, User $lecteur): string
     {
         $copie = clone $a;
-        $this->appliquerChoix($type, $copie, $b, ['champs' => $champs, 'telephones' => $telephones]);
+        $this->appliquerChoix($type, $copie, $b, ['champs' => $champs, 'telephones' => $telephones, 'pays' => $this->paysFinal($a, $b, $telephones)]);
 
         if ($copie instanceof EntrepriseTierce) {
             return (string) $copie->raison_sociale;
@@ -913,7 +952,7 @@ final class FusionContacts
         $libelles = [
             'telephone' => 'Téléphone principal', 'telephone_normalise' => 'Téléphone principal (normalisé)',
             'telephone_secondaire' => 'Téléphone secondaire', 'telephone_secondaire_normalise' => 'Téléphone secondaire (normalisé)',
-            'code_phone_pays' => 'Indicatif',
+            'code_phone_pays' => 'Indicatif', 'pays' => 'Pays', 'code_pays' => 'Pays (code)',
         ];
         foreach ($type === ContactsFusion::TYPE_PERSONNE ? self::CHAMPS_PERSONNE : self::CHAMPS_ENTREPRISE as [$libelle, $colonnes]) {
             foreach ($colonnes as $colonne) {
@@ -933,7 +972,6 @@ final class FusionContacts
         return match ($cle) {
             'contact_personne_id' => Personne::withTrashed()->find($valeurs[0])?->nom_complet ?? '—',
             'is_active' => (bool) $valeurs[0] ? 'Active' : 'Inactive',
-            'pays' => trim(($valeurs[0] ?? '').(($valeurs[1] ?? null) ? " ({$valeurs[1]})" : '')),
             'position' => implode(', ', array_map(fn ($v) => (string) $v, $valeurs)),
             default => (string) $valeurs[0],
         };

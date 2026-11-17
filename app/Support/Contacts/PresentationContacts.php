@@ -4,7 +4,6 @@ namespace App\Support\Contacts;
 
 use App\Enums\ContactCategorie;
 use App\Enums\StatutEmploye;
-use App\Enums\TypeProprietaire;
 use App\Models\CategorieLibre;
 use App\Models\ContactSousCategorie;
 use App\Models\EntrepriseTierce;
@@ -191,7 +190,6 @@ final class PresentationContacts
 
         return match ($fonction) {
             'client', 'prestataire' => $this->libellesSousCategories["{$fonction}:{$code}"] ?? $code,
-            'proprietaire' => TypeProprietaire::tryFrom($code)?->label(),
             'employe' => StatutEmploye::tryFrom($code)?->label(),
             default => null,
         };

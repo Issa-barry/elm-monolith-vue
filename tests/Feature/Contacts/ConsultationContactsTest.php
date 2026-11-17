@@ -6,6 +6,7 @@ use App\Enums\ClientType;
 use App\Enums\PrestataireType;
 use App\Features\ModuleFeature;
 use App\Models\Client;
+use App\Models\Employe;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
@@ -139,6 +140,34 @@ class ConsultationContactsTest extends TestCase
                 ->where('personnes.data.0.fonctions.0.sous_categorie_libelle', 'Grossiste')
                 ->where('personnes.data.0.fonctions.1.id', $fournisseur->id)
                 ->where('personnes.data.0.fonctions.2.id', $proprietaire->id));
+    }
+
+    public function test_le_type_de_fiche_n_apparait_jamais_comme_precision_d_une_fonction(): void
+    {
+        Feature::for($this->org)->activate(ModuleFeature::VEHICULES);
+        Feature::for($this->org)->activate(ModuleFeature::RH);
+        $p = $this->personne(['nom_complet' => 'Kawou Hassane']);
+        $this->client($p);
+        Proprietaire::create(['organization_id' => $this->org->id, 'personne_id' => $p->id, 'type' => 'personne_physique', 'is_active' => true]);
+        Employe::create(['organization_id' => $this->org->id, 'personne_id' => $p->id, 'matricule' => 'EMP-0001', 'type_employe' => 'interne', 'statut' => 'actif']);
+        $user = $this->lecteur(['contacts.read', 'clients.read', 'proprietaires.read', 'rh-employes.read']);
+
+        $verifier = fn (string $cle) => fn (AssertableInertia $page) => $page
+            ->has($cle, 3)
+            ->where("{$cle}.0.libelle", 'Client')
+            ->where("{$cle}.0.sous_categorie_libelle", 'Externe')
+            ->where("{$cle}.1.libelle", 'Propriétaire')
+            ->where("{$cle}.1.sous_categorie", null)
+            ->where("{$cle}.1.sous_categorie_libelle", null)
+            ->where("{$cle}.2.libelle", 'Employé')
+            ->where("{$cle}.2.sous_categorie_libelle", 'Actif');
+
+        $this->actingAs($user)->get(route('contacts.personnes.index'))
+            ->assertOk()
+            ->assertInertia($verifier('personnes.data.0.fonctions'));
+        $this->actingAs($user)->get(route('contacts.personnes.show', $p))
+            ->assertOk()
+            ->assertInertia($verifier('fonctions'));
     }
 
     public function test_une_personne_sans_fonction_n_apparait_jamais(): void
