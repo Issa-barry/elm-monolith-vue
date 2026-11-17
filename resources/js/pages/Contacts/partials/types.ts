@@ -136,4 +136,7 @@ export interface InterlocuteurFiche {
     is_active: boolean;
     desactive_le: string | null;
     notes: string | null;
+    /** COMPTE-006 : consulte les commissions de l'entreprise par son compte relié. */
+    acces_commissions: boolean;
+    compte_relie: boolean;
 }

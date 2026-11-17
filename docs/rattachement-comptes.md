@@ -29,7 +29,9 @@ identifiants habituels, et le rattachement lui donne les données de la fiche.
   bénéficiaire : les commissions restent attribuées au prestataire de l'entreprise. L'accès exige
   `acces_commissions`, désactivé par défaut. Il se limite aux prestataires qualifiés Consultant
   (`Prestataire::qualifieConsultant()`, référentiel Contacts lot 6b), jamais aux
-  achats d'une société également fournisseur.
+  achats d'une société également fournisseur. L'autorisation se donne interlocuteur par interlocuteur,
+  dans l'onglet Interlocuteurs de la fiche Entreprise, avec `rattachements-comptes.gerer`
+  (CONTACT-026b de [contacts.md](contacts.md), 17/11/2026).
 - **COMPTE-007 — Historique.** Un parrain ou un consultant désactivé ou remplacé garde l'accès à son propre
   historique, sans les opérations de ses remplaçants.
 - **COMPTE-008 — Aucune fusion, aucun lot.** Aucune fiche `Personne` ni aucun compte n'est fusionné ou
@@ -143,4 +145,5 @@ déclenché par `RattachementAutomatiqueObserver`.
   visible pour les utilisateurs.
 - **Lot 2 — parrains au back-office, codé le 02/11/2026** : liste, fiche, rattachement et détachement.
 - **Lot 3 — espace parrain, codé le 02/11/2026** : API, `context.parrain_id` de `/me`, écrans Nuxt.
-- Lot 4 : interlocuteurs au back-office. Lot 5 : espace consultant.
+- Lot 4 : interlocuteurs au back-office (gestion par le référentiel Contacts ; accès aux commissions
+  par interlocuteur codé le 17/11/2026, CONTACT-026b). Lot 5 : espace consultant.

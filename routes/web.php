@@ -109,6 +109,7 @@ use App\Http\Controllers\Contacts\Fusions\CreateFusionController;
 use App\Http\Controllers\Contacts\Fusions\IndexFusionController;
 use App\Http\Controllers\Contacts\Fusions\ShowFusionController;
 use App\Http\Controllers\Contacts\Fusions\StoreFusionController;
+use App\Http\Controllers\Contacts\Interlocuteurs\AccesCommissionsInterlocuteurController;
 use App\Http\Controllers\Contacts\Interlocuteurs\DefinirPrincipalInterlocuteurController;
 use App\Http\Controllers\Contacts\Interlocuteurs\DesactiverInterlocuteurController;
 use App\Http\Controllers\Contacts\Interlocuteurs\ReactiverInterlocuteurController;
@@ -549,6 +550,8 @@ Route::prefix('backoffice')->group(function () {
             Route::post('{interlocuteur}/principal', DefinirPrincipalInterlocuteurController::class)->name('principal');
             Route::post('{interlocuteur}/desactiver', DesactiverInterlocuteurController::class)->name('desactiver');
             Route::post('{interlocuteur}/reactiver', ReactiverInterlocuteurController::class)->name('reactiver');
+            // COMPTE-006 : consultation des commissions de l'entreprise (rattachements-comptes.gerer).
+            Route::post('{interlocuteur}/acces-commissions', AccesCommissionsInterlocuteurController::class)->name('acces-commissions');
         });
 
         // Lot 6a — catégories de contacts (ADR 0060). Écran : contacts.gerer_categories ;

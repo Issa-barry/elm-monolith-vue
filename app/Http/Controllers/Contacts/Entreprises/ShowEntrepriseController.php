@@ -7,6 +7,7 @@ use App\Models\CategorieLibre;
 use App\Models\EntrepriseInterlocuteur;
 use App\Models\EntrepriseTierce;
 use App\Services\Contacts\FonctionsContactEcriture;
+use App\Services\Contacts\InterlocuteurService;
 use App\Services\Contacts\QualificationsPrestataire;
 use App\Services\Contacts\ReferentielCategories;
 use App\Services\Contacts\VisibiliteContacts;
@@ -54,6 +55,8 @@ class ShowEntrepriseController extends Controller
                 'is_active' => $i->is_active,
                 'desactive_le' => $i->desactive_le?->toDateString(),
                 'notes' => $i->notes,
+                'acces_commissions' => $i->acces_commissions,
+                'compte_relie' => $i->user_id !== null,
             ])
             ->values();
 
@@ -69,6 +72,9 @@ class ShowEntrepriseController extends Controller
             'sous_categories_fournisseur' => ReferentielCategories::optionsSousCategoriesFournisseur($entreprise->organization_id),
             // Lot 4 : gestion des interlocuteurs (l'entreprise est déjà vérifiée visible ci-dessus).
             'peut_gerer_interlocuteurs' => $user->can('gererInterlocuteurs', EntrepriseTierce::class),
+            // COMPTE-006 : consultation des commissions par un interlocuteur, seulement pour une entreprise consultante.
+            'commissions_consultables' => app(InterlocuteurService::class)->entrepriseConsultante($entreprise),
+            'peut_gerer_acces_commissions' => $user->can('gererAccesCommissions', EntrepriseTierce::class),
             // Lot 6a : catégories libres portées ; modifiables avec contacts.update (entreprise déjà vérifiée visible).
             'categories' => $portees = PresentationContacts::categoriesLibresDes('entreprise_contact_categories', 'entreprise_tierce_id', [$entreprise->id])[$entreprise->id],
             // Lot 7a : modifier l'identité de la fiche (contacts.update ; entreprise déjà vérifiée visible).

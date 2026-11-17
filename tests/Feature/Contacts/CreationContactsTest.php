@@ -420,7 +420,7 @@ class CreationContactsTest extends TestCase
             ->sort()->values()->all();
 
         // Lot 6a : catégories ; lot 7a : modification de l'identité d'une fiche ; lot 9b : fusion et
-        // annulation, par décision.
+        // annulation, par décision ; CONTACT-026b : accès d'un interlocuteur aux commissions.
         $this->assertSame([
             'contacts.categories.libres.store:POST',
             'contacts.categories.libres.update:PATCH',
@@ -429,6 +429,7 @@ class CreationContactsTest extends TestCase
             'contacts.categories.sous-categories.update:PATCH',
             'contacts.entreprises.categories.update:PUT',
             'contacts.entreprises.fonctions.store:POST',
+            'contacts.entreprises.interlocuteurs.acces-commissions:POST',
             'contacts.entreprises.interlocuteurs.desactiver:POST',
             'contacts.entreprises.interlocuteurs.principal:POST',
             'contacts.entreprises.interlocuteurs.reactiver:POST',

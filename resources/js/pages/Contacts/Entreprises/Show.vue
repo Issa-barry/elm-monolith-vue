@@ -8,6 +8,7 @@
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -64,6 +65,9 @@ const props = defineProps<{
     sous_categories_fournisseur: OptionFiltre[];
     /** Lot 4 : permission `contacts.gerer_interlocuteurs` (revérifiée côté serveur). */
     peut_gerer_interlocuteurs: boolean;
+    /** COMPTE-006 : entreprise consultante, et permission `rattachements-comptes.gerer` (revérifiée côté serveur). */
+    commissions_consultables: boolean;
+    peut_gerer_acces_commissions: boolean;
     /** Lot 6a : catégories libres et permission `contacts.update` (revérifiée côté serveur). */
     categories: CategorieFiche[];
     categories_options: OptionCategorie[];
@@ -91,12 +95,16 @@ const sansPrincipal = computed(
     () => !props.interlocuteurs.some((i) => i.is_active && i.est_principal),
 );
 
-function executer(i: InterlocuteurFiche, action: string) {
+function executer(
+    i: InterlocuteurFiche,
+    action: string,
+    donnees: Record<string, boolean> = {},
+) {
     if (actionEnCours.value) return;
     actionEnCours.value = i.id;
     router.post(
         `/backoffice/contacts/entreprises/${props.entreprise.id}/interlocuteurs/${i.id}/${action}`,
-        {},
+        donnees,
         {
             preserveScroll: true,
             onError: (erreurs) => {
@@ -133,6 +141,23 @@ function desactiver(i: InterlocuteurFiche) {
         acceptLabel: 'Désactiver',
         acceptClass: 'p-button-danger',
         accept: () => executer(i, 'desactiver'),
+    });
+}
+
+/** COMPTE-006 : ouvrir l'accès aux montants se confirme ; le retirer est immédiat. */
+function changerAccesCommissions(i: InterlocuteurFiche, acces: boolean) {
+    if (!acces) {
+        executer(i, 'acces-commissions', { acces_commissions: false });
+        return;
+    }
+    confirm.require({
+        message: `Autoriser « ${i.nom} » à consulter les commissions de ${props.entreprise.raison_sociale} depuis son espace client ?`,
+        header: 'Accès aux commissions',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Autoriser',
+        accept: () =>
+            executer(i, 'acces-commissions', { acces_commissions: true }),
     });
 }
 
@@ -381,6 +406,57 @@ function telephone(valeur: string | null, code: string | null): string {
                                     }}
                                     <span v-if="i.email"> · {{ i.email }}</span>
                                 </p>
+                                <div
+                                    v-if="
+                                        commissions_consultables &&
+                                        (peut_gerer_acces_commissions ||
+                                            i.acces_commissions)
+                                    "
+                                    class="mt-2 flex flex-wrap items-center gap-2 text-xs"
+                                >
+                                    <template
+                                        v-if="peut_gerer_acces_commissions"
+                                    >
+                                        <Checkbox
+                                            :id="`acces-commissions-${i.id}`"
+                                            :model-value="i.acces_commissions"
+                                            :disabled="
+                                                actionEnCours === i.id ||
+                                                (!i.is_active &&
+                                                    !i.acces_commissions)
+                                            "
+                                            data-testid="interlocuteur-acces-commissions"
+                                            @update:model-value="
+                                                (v) =>
+                                                    changerAccesCommissions(
+                                                        i,
+                                                        v === true,
+                                                    )
+                                            "
+                                        />
+                                        <label
+                                            :for="`acces-commissions-${i.id}`"
+                                            class="cursor-pointer"
+                                        >
+                                            Peut consulter les commissions de
+                                            l’entreprise
+                                        </label>
+                                    </template>
+                                    <span v-else class="text-muted-foreground">
+                                        Consulte les commissions de l’entreprise
+                                    </span>
+                                    <span
+                                        v-if="
+                                            i.acces_commissions &&
+                                            !i.compte_relie
+                                        "
+                                        class="text-amber-600 dark:text-amber-400"
+                                        data-testid="interlocuteur-sans-compte"
+                                    >
+                                        · aucun compte relié : l’accès s’ouvrira
+                                        quand son compte le sera
+                                    </span>
+                                </div>
                             </div>
                             <div class="flex shrink-0 items-center gap-3">
                                 <span
