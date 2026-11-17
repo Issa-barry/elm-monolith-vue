@@ -174,7 +174,17 @@ sur les ventes, commissions, comptabilité ou logistique.
   est inscrit au journal d'audit existant (`created`, `updated`, `status_changed`) avec des
   identifiants et des indicateurs seulement (entreprise, principal, personne existante, anciens
   principaux, noms des champs modifiés) : jamais de nom, de téléphone, d'e-mail ni le texte des
-  notes. L'accès aux commissions (`acces_commissions`) n'est ni affiché ni modifié par ces écrans.
+  notes. L'accès aux commissions (`acces_commissions`) ne se modifie que par sa case à cocher dédiée
+  (CONTACT-026b) ; désactiver ou réactiver un interlocuteur ne le change pas.
+- **CONTACT-026b** — Accès aux commissions (17/11/2026, COMPTE-006 de
+  [rattachement-comptes.md](rattachement-comptes.md)) : pour une entreprise qui porte un prestataire
+  qualifié Consultant, chaque interlocuteur a une case « Peut consulter les commissions de
+  l'entreprise », réservée à `rattachements-comptes.gerer` (entreprise visible vérifiée côté serveur,
+  `POST …/interlocuteurs/{interlocuteur}/acces-commissions`). Autoriser se confirme et exige un
+  interlocuteur actif ; retirer est immédiat et toujours possible. Sans cette permission, l'accès
+  accordé s'affiche en lecture seule. Un interlocuteur autorisé sans compte relié est signalé :
+  l'accès s'ouvre dès que son compte l'est. Chaque changement est journalisé (`updated`, ancienne et
+  nouvelle valeur).
 
 - **CONTACT-027** — Propriétaire entreprise (lot 5) : un propriétaire de type entreprise est relié à
   une fiche Entreprise (`proprietaires.entreprise_tierce_id`) ; `personne_id` reste son contact
@@ -406,6 +416,15 @@ sur les ventes, commissions, comptabilité ou logistique.
   A, même vides — le nom affiché peut venir d'une fonction ; les autres champs vides de A sont
   complétés par B. « Conserver plutôt B » inverse les rôles. Entreprises : contact principal
   arbitré comme un champ, interlocuteur principal choisi si A et B en ont chacune un (décision 8).
+  Écran en trois étapes (16/11/2026) : 1. choisir la fiche à fusionner, 2. choisir les informations
+  à garder (seuls les champs différents sont à arbitrer, valeur vide affichée « Non renseigné »,
+  champ qui restera vide signalé), 3. « Vérifier et fusionner » ouvre un **récapitulatif** construit
+  uniquement depuis la simulation : nom affiché après la fusion (`nom_final`, calculé par le serveur
+  sur une copie non enregistrée de A, désignation de fonction comprise), fiche finale, ce qui est
+  repris de B, ce qui n'est pas repris (valeurs écartées, numéros retirés), fonctions et liens,
+  conséquences ; « Confirmer la fusion » reste désactivé tant que la case de vérification et les
+  confirmations exigées ne sont pas remplies. L'interface dit « fiche conservée » et « fiche à
+  fusionner » plutôt que A et B.
 - **CONTACT-056** — Blocages : même fonction des deux côtés, **fonction archivée comprise** (F1) ;
   A et B interlocuteurs de la même entreprise (décision 4) ; un compte utilisateur de chaque côté
   (F2) ; une fonction ou un lien que l'utilisateur ne peut pas consulter (décision 6, message

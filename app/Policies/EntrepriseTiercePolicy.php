@@ -30,6 +30,16 @@ class EntrepriseTiercePolicy
         return $user->can('contacts.gerer_interlocuteurs');
     }
 
+    /**
+     * Autoriser un interlocuteur à consulter les commissions de l'entreprise (COMPTE-006) : même
+     * permission que le rattachement d'un compte, qui donne accès à ses commissions. La visibilité de
+     * l'entreprise est vérifiée en plus par le contrôleur.
+     */
+    public function gererAccesCommissions(User $user): bool
+    {
+        return $user->can('rattachements-comptes.gerer');
+    }
+
     /** Identité de la fiche (lot 7a) ; la visibilité est vérifiée en plus par le contrôleur. */
     public function modifierIdentite(User $user): bool
     {

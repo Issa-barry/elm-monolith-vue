@@ -189,6 +189,7 @@ final class FusionContacts
             'type' => $type,
             'a' => $this->resume($type, $a, $acteur),
             'b' => $this->resume($type, $b, $acteur),
+            'nom_final' => $this->nomFinal($type, $a, $b, $champs, $telephones, $acteur),
             'champs' => $champs,
             'telephones' => $telephones,
             'interlocuteur_principal' => $principal,
@@ -390,9 +391,9 @@ final class FusionContacts
     {
         $numeros = [];
         foreach ([
-            [$a, 'telephone', 'A — principal'], [$a, 'telephone_secondaire', 'A — secondaire'],
-            [$b, 'telephone', 'B — principal'], [$b, 'telephone_secondaire', 'B — secondaire'],
-        ] as [$fiche, $colonne, $origine]) {
+            [$a, 'telephone', 'A — principal', 'a', 'principal'], [$a, 'telephone_secondaire', 'A — secondaire', 'a', 'secondaire'],
+            [$b, 'telephone', 'B — principal', 'b', 'principal'], [$b, 'telephone_secondaire', 'B — secondaire', 'b', 'secondaire'],
+        ] as [$fiche, $colonne, $origine, $cote, $rang]) {
             $valeur = trim((string) $fiche->getRawOriginal($colonne));
             $normalise = Personne::normaliserTelephone($valeur);
             if ($normalise === '' || isset($numeros[$normalise])) {
@@ -403,6 +404,8 @@ final class FusionContacts
                 'valeur' => $valeur,
                 'code_phone_pays' => $colonne === 'telephone' ? $fiche->getRawOriginal('code_phone_pays') : null,
                 'origine' => $origine,
+                'fiche' => $cote,
+                'rang' => $rang,
             ];
         }
 
@@ -465,10 +468,11 @@ final class FusionContacts
         }
 
         $noms = Personne::withTrashed()->whereIn('id', [$principalA->personne_id, $principalB->personne_id])->get()->keyBy('id');
-        $options = [
-            ['id' => $principalA->id, 'libelle' => ($noms[$principalA->personne_id]?->nom_complet ?? '—').' (A)'],
-            ['id' => $principalB->id, 'libelle' => ($noms[$principalB->personne_id]?->nom_complet ?? '—').' (B)'],
-        ];
+        $options = [];
+        foreach (['a' => $principalA, 'b' => $principalB] as $cote => $principal) {
+            $nom = $noms[$principal->personne_id]?->nom_complet ?? '—';
+            $options[] = ['id' => $principal->id, 'nom' => $nom, 'fiche' => $cote, 'libelle' => $nom.' ('.strtoupper($cote).')'];
+        }
         $demande = $choix['interlocuteur_principal'] ?? null;
         if ($demande !== null && ! in_array($demande, [$principalA->id, $principalB->id], true)) {
             if ($strict) {
@@ -806,6 +810,25 @@ final class FusionContacts
             'lien' => "/backoffice/contacts/personnes/{$fiche->id}",
             'telephone' => $fiche->telephone,
         ];
+    }
+
+    /**
+     * Nom sous lequel la fiche conservée apparaîtra après la fusion, calculé sur une copie non
+     * enregistrée de A (choix appliqués) et ses fonctions plus celles de B, comme sur la fiche.
+     */
+    private function nomFinal(string $type, Personne|EntrepriseTierce $a, Personne|EntrepriseTierce $b, array $champs, array $telephones, User $lecteur): string
+    {
+        $copie = clone $a;
+        $this->appliquerChoix($type, $copie, $b, ['champs' => $champs, 'telephones' => $telephones]);
+
+        if ($copie instanceof EntrepriseTierce) {
+            return (string) $copie->raison_sociale;
+        }
+
+        $fonctions = $this->visibilite->fonctionsDesPersonnes(collect([$a, $b]), $lecteur);
+
+        return (new PresentationContacts($a->organization_id))
+            ->nomPersonne($copie, [...($fonctions[$a->id] ?? []), ...($fonctions[$b->id] ?? [])]);
     }
 
     /** @return list<array<string, mixed>> */
