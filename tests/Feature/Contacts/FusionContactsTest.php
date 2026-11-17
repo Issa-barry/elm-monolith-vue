@@ -152,6 +152,30 @@ class FusionContactsTest extends TestCase
         $this->assertSame('b', $choix['ville']);
     }
 
+    public function test_la_simulation_annonce_le_nom_final_et_l_origine_de_chaque_numero_sans_ecrire(): void
+    {
+        // Récapitulatif avant validation : le nom affiché après la fusion vient de la simulation,
+        // jamais d'un calcul de l'écran (nom vide sur A = désignation de sa fonction livreur).
+        $acteur = $this->acteur();
+        $a = $this->personne(['nom_complet' => null, 'nom' => null, 'prenom' => null, 'surnom' => null, 'telephone' => '+224624000001']);
+        $b = $this->personne(['nom_complet' => 'Mariama C.', 'telephone' => '+224624000002']);
+        $this->livreur($a, ['nom_complet' => 'Chauffeur-7']);
+        $this->client($b);
+
+        $parDefaut = $this->service()->simuler($acteur, 'personne', $a->id, $b->id);
+        $nomDeB = $this->service()->simuler($acteur, 'personne', $a->id, $b->id, ['nom_complet' => 'b']);
+
+        $this->assertSame('Chauffeur-7', $parDefaut['nom_final']);
+        $this->assertSame('Mariama C.', $nomDeB['nom_final']);
+        $this->assertNull($a->fresh()->getRawOriginal('nom_complet'));
+        $this->assertSame(
+            [['a', 'principal', '224624000001'], ['b', 'principal', '224624000002']],
+            array_map(fn ($n) => [$n['fiche'], $n['rang'], $n['normalise']], $parDefaut['telephones']['numeros']),
+        );
+        // L'empreinte ne dépend pas du calcul du nom final (copie non enregistrée de A).
+        $this->assertSame($parDefaut['empreinte'], $nomDeB['empreinte']);
+    }
+
     public function test_une_fiche_d_une_autre_organisation_est_introuvable(): void
     {
         $autre = Organization::factory()->create();
@@ -395,6 +419,9 @@ class FusionContactsTest extends TestCase
         $simulation = $this->service()->simuler($acteur, 'entreprise', $a->id, $b->id);
         $this->assertSame([], $simulation['blocages']);
         $this->assertSame($principalA->id, $simulation['interlocuteur_principal']['choix']);
+        $this->assertSame(['a', 'b'], array_column($simulation['interlocuteur_principal']['options'], 'fiche'));
+        $this->assertSame('SARL Kaloum', $simulation['nom_final']);
+        $this->assertSame('Kaloum SARL', $this->service()->simuler($acteur, 'entreprise', $a->id, $b->id, ['raison_sociale' => 'b'])['nom_final']);
 
         $this->fusionner($acteur, $a, $b, ['interlocuteur_principal' => $principalB->id]);
 

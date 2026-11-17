@@ -89,11 +89,16 @@ test.describe('Fusion manuelle de deux fiches Personne', () => {
         await expect(page.getByTestId('fusion-simulation')).toBeVisible();
         await expect(page.getByTestId('fusion-blocages')).toHaveCount(0);
 
-        // Arbitrage : la ville de B ; le bouton reste bloqué sans confirmation explicite
+        // Arbitrage : la ville de B ; le récapitulatif la reprend et reste bloqué sans confirmation explicite
         await page.getByTestId('fusion-champ-ville-b').click();
-        await expect(page.getByTestId('fusion-fusionner')).toBeDisabled();
-        await page.getByTestId('fusion-confirmer').click();
         await page.getByTestId('fusion-fusionner').click();
+        await expect(page.getByTestId('fusion-recap-repris')).toContainText(
+            'Dubreka',
+        );
+        await expect(
+            page.getByTestId('fusion-confirmer-dialogue'),
+        ).toBeDisabled();
+        await page.getByTestId('fusion-confirmer').click();
         await page.getByTestId('fusion-confirmer-dialogue').click();
 
         // Retour sur A, qui porte la ville de B ; l'adresse de B mène à A
