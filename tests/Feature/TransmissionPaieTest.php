@@ -592,6 +592,79 @@ class TransmissionPaieTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->has('salaries', 2)->where('transmission.total_verse_organisation', 3000000));
     }
 
+    /**
+     * ADR 0067 : « Primes et avantages » = tout ce qui est accordé au-delà du salaire de base, payé
+     * (prime) ou non (avantage en nature). Affichage seulement : total versé, total valorisé stocké,
+     * lignes et empreinte d'une version figée restent identiques.
+     */
+    public function test_primes_et_avantages_affiches_sans_modifier_la_version_figee(): void
+    {
+        $super = $this->superAdmin();
+        $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kindia', 'type' => 'depot']);
+        $moussa = $this->salarie(1000000);
+        $this->affectation($moussa, $this->type(['libelle' => 'vacance']), ['montant' => 200000]);
+        $this->affectation($moussa, $this->type(['libelle' => 'TRANSPORT']), ['montant' => 500000]);
+        $loge = $this->salarie(1000000, [], [], $autreSite);
+        $this->affectation($loge, $this->type(['categorie' => 'avantage_nature']), ['montant' => 150000]);
+        $sansPrime = $this->salarie(800000);
+
+        $transmission = $this->brouillon();
+        $this->actingAs($super)->post(route('transmissions-paie.valider', $transmission))->assertSessionHasNoErrors();
+        $transmission->refresh();
+        $this->assertTrue($transmission->statut->estFigee());
+        $avant = $transmission->getAttributes();
+        $lignesAvant = $transmission->lignes()->orderBy('id')->get()->map->getAttributes()->all();
+
+        // Total versé = salaires + primes payées ; l'avantage en nature n'y est pas.
+        $this->assertSame('3500000.00', $transmission->total_verse);
+        $this->assertSame('150000.00', $transmission->total_valorise);
+
+        $this->actingAs($this->user)->get(route('transmissions-paie.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('transmissions.0.total_verse', 3500000)
+                ->where('transmissions.0.total_primes_avantages', 850000)
+                ->missing('transmissions.0.total_valorise'));
+
+        $parSalarie = fn (Employe $e) => fn ($salaries) => collect($salaries)->firstWhere('employe_id', $e->id);
+        $this->actingAs($this->user)->get(route('transmissions-paie.show', $transmission))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('transmission.total_verse_organisation', 3500000)
+                ->where('transmission.total_primes_avantages_organisation', 850000)
+                ->where('totaux_visibles.verse', 3500000)
+                ->where('totaux_visibles.primes_avantages', 850000)
+                ->where('salaries', function ($salaries) use ($parSalarie, $moussa, $loge, $sansPrime) {
+                    $m = $parSalarie($moussa)($salaries);
+                    $l = $parSalarie($loge)($salaries);
+                    $s = $parSalarie($sansPrime)($salaries);
+
+                    return (float) $m['total_verse'] === 1700000.0 && (float) $m['total_primes_avantages'] === 700000.0
+                        && (float) $l['total_verse'] === 1000000.0 && (float) $l['total_primes_avantages'] === 150000.0
+                        && (float) $s['total_primes_avantages'] === 0.0;
+                }));
+
+        // Résultats filtrés : seulement les salariés retenus.
+        $this->actingAs($this->user)->get(route('transmissions-paie.show', [$transmission, 'site_ids' => [$autreSite->id]]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('totaux_visibles.verse', 1000000)
+                ->where('totaux_visibles.primes_avantages', 150000)
+                ->where('transmission.total_primes_avantages_organisation', 850000));
+
+        // Utilisateur limité à son agence : pas de total de l'organisation.
+        $lecteur = $this->managerAgence($this->site, ['rh-transmissions-paie.read']);
+        $this->actingAs($lecteur)->get(route('transmissions-paie.index'))
+            ->assertInertia(fn (Assert $page) => $page->where('transmissions.0.total_primes_avantages', null));
+        $this->actingAs($lecteur)->get(route('transmissions-paie.show', $transmission))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('transmission.total_primes_avantages_organisation', null)
+                ->where('totaux_visibles.primes_avantages', 700000));
+
+        // La version figée est strictement inchangée : montants, empreinte, lignes.
+        $transmission->refresh();
+        $this->assertSame($avant, $transmission->getAttributes());
+        $this->assertSame($lignesAvant, $transmission->lignes()->orderBy('id')->get()->map->getAttributes()->all());
+        $this->assertTrue(app(TransmissionPaieService::class)->estIntegre($transmission));
+    }
+
     public function test_preparer_exige_d_agir_sur_toutes_les_agences(): void
     {
         $this->salarie();

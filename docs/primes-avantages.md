@@ -26,7 +26,7 @@ Le **salaire de base reste porté par le contrat** : il n'est jamais une affecta
 | Libellé | Obligatoire, 100 caractères, unique dans l'organisation (sans tenir compte de la casse) |
 | Code | Unique dans l'organisation, types inactifs compris. Proposé depuis le libellé (« Prime de transport » → `PRIME_DE_TRANSPORT`, suffixe `_2`… si pris) ; saisi, il est normalisé (majuscules, chiffres, `_`, 30 caractères) |
 | Description | Facultative (conditions d'attribution, observations) |
-| Catégorie | **Plus saisie depuis le 31/10/2026 (ADR 0046)** : tout type créé est une **prime**, versée en argent. La catégorie d'un type existant (indemnité, allocation, avantage en nature) est conservée et ne change jamais ; un **avantage en nature reste valorisé** (valeur estimée, jamais versée dans le net à payer), indemnités et allocations sont versées comme une prime |
+| Catégorie | **Plus saisie depuis le 31/10/2026 (ADR 0046)** : tout type créé est une **prime**, versée en argent. La catégorie d'un type existant (indemnité, allocation, avantage en nature) est conservée et ne change jamais ; un **avantage en nature reste valorisé** (valeur estimée, jamais versée dans le net à payer), indemnités et allocations sont versées comme une prime. Dans la transmission de paie, primes et avantages en nature sont totalisés ensemble dans « Primes et avantages » (TRANS-008, ADR 0067) |
 | Mode de calcul | Montant fixe, ou pourcentage du salaire de base |
 | Valeur par défaut | Facultative : montant (> 0) pour un montant fixe, taux (> 0, ≤ 100 %) pour un pourcentage. Proposée à l'attribution, jamais imposée |
 | Périodicité | Mensuelle ou ponctuelle (un seul mois) |

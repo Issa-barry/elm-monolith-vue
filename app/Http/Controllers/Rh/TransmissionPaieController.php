@@ -41,13 +41,22 @@ class TransmissionPaieController extends Controller
             ->where('annee', $annee)
             ->with(['preparateur.personne', 'valideur.personne', 'transmetteur.personne'])
             ->orderByDesc('mois')->orderByDesc('version')
-            ->get()
-            ->map(fn (TransmissionPaie $t) => [
-                ...$this->resume($t),
-                // Totaux de l'organisation : seulement pour qui voit toutes les agences.
-                'total_verse' => $toutes ? (float) $t->total_verse : null,
-                'total_valorise' => $toutes ? (float) $t->total_valorise : null,
-            ]);
+            ->get();
+
+        $primesEtAvantages = $toutes
+            ? TransmissionPaieLigne::whereIn('transmission_paie_id', $transmissions->pluck('id'))
+                ->where('origine', TransmissionPaieLigne::ORIGINE_AFFECTATION)
+                ->groupBy('transmission_paie_id')
+                ->selectRaw('transmission_paie_id, SUM(montant) as total')
+                ->pluck('total', 'transmission_paie_id')
+            : collect();
+
+        $transmissions = $transmissions->map(fn (TransmissionPaie $t) => [
+            ...$this->resume($t),
+            // Totaux de l'organisation : seulement pour qui voit toutes les agences.
+            'total_verse' => $toutes ? (float) $t->total_verse : null,
+            'total_primes_avantages' => $toutes ? round((float) $primesEtAvantages->get($t->id, 0), 2) : null,
+        ]);
 
         $annees = TransmissionPaie::where('organization_id', $user->organization_id)
             ->distinct()->orderByDesc('annee')->pluck('annee')
@@ -86,9 +95,10 @@ class TransmissionPaieController extends Controller
         $texte = trim((string) $request->input('salarie', ''));
         $visible = $this->filtreVisibilite($user);
 
-        $lignes = TransmissionPaieLigne::where('transmission_paie_id', $transmission->id)
+        $toutesLignes = TransmissionPaieLigne::where('transmission_paie_id', $transmission->id)
             ->orderBy('nom_salarie')->orderBy('ordre')
-            ->get()
+            ->get();
+        $lignes = $toutesLignes
             ->filter(fn (TransmissionPaieLigne $l) => $visible($l->site_id))
             ->filter(fn (TransmissionPaieLigne $l) => $siteIds === [] || in_array($l->site_id, $siteIds, true))
             ->filter(fn (TransmissionPaieLigne $l) => $texte === '' || str_contains(mb_strtolower($l->nom_salarie.' '.$l->matricule), mb_strtolower($texte)))
@@ -108,7 +118,7 @@ class TransmissionPaieController extends Controller
         $ecartsPrecedente = [];
         if ($transmission->version_precedente_id !== null) {
             $precedente = TransmissionPaieLigne::where('transmission_paie_id', $transmission->version_precedente_id)->get();
-            $ecartsPrecedente = $this->visibles($this->service->differences($precedente, TransmissionPaieLigne::where('transmission_paie_id', $transmission->id)->get()), $visible);
+            $ecartsPrecedente = $this->visibles($this->service->differences($precedente, $toutesLignes), $visible);
         }
 
         // Changements intervenus depuis cette version figée (la plus récente du mois) : une nouvelle version les reprendrait.
@@ -126,7 +136,9 @@ class TransmissionPaieController extends Controller
                 'empreinte' => $transmission->empreinte,
                 'organisation_complete' => $user->voitToutesLesAgences(),
                 'total_verse_organisation' => $user->voitToutesLesAgences() ? (float) $transmission->total_verse : null,
-                'total_valorise_organisation' => $user->voitToutesLesAgences() ? (float) $transmission->total_valorise : null,
+                'total_primes_avantages_organisation' => $user->voitToutesLesAgences()
+                    ? self::primesEtAvantages($toutesLignes)
+                    : null,
                 // Brouillon seulement : reflète-t-il les données RH du moment ?
                 'a_jour' => $aJour,
                 // « Annuler la validation » : affiché seulement si le serveur l'accepterait.
@@ -136,7 +148,7 @@ class TransmissionPaieController extends Controller
             'recapitulatif' => $this->recapitulatif($lignes),
             'totaux_visibles' => [
                 'verse' => round((float) $lignes->where('versement', TransmissionPaieLigne::VERSEMENT_VERSE)->sum('montant'), 2),
-                'valorise' => round((float) $lignes->where('versement', TransmissionPaieLigne::VERSEMENT_VALORISE)->sum('montant'), 2),
+                'primes_avantages' => self::primesEtAvantages($lignes),
                 'nb_salaries' => $lignes->pluck('employe_id')->unique()->count(),
             ],
             'anomalies' => $anomalies,
@@ -300,7 +312,7 @@ class TransmissionPaieController extends Controller
                     'site' => $premiere->site_nom,
                     'fonction' => $premiere->fonction_libelle,
                     'total_verse' => round((float) $groupe->where('versement', TransmissionPaieLigne::VERSEMENT_VERSE)->sum('montant'), 2),
-                    'total_valorise' => round((float) $groupe->where('versement', TransmissionPaieLigne::VERSEMENT_VALORISE)->sum('montant'), 2),
+                    'total_primes_avantages' => self::primesEtAvantages($groupe),
                     'lignes' => $groupe->map(fn (TransmissionPaieLigne $l) => [
                         'id' => $l->id,
                         'origine' => $l->origine,
@@ -324,6 +336,19 @@ class TransmissionPaieController extends Controller
             ->sortBy('salarie')
             ->values()
             ->all();
+    }
+
+    /**
+     * « Primes et avantages » (ADR 0067) : tout ce qui est accordé au-delà du salaire de base, payé
+     * (prime) ou non (avantage en nature). Affichage seulement : les primes payées sont déjà dans le
+     * total versé, les deux totaux ne s'additionnent pas. Le total valorisé stocké, le net et la
+     * reprise comptable n'en dépendent pas.
+     *
+     * @param  Collection<int, TransmissionPaieLigne>  $lignes
+     */
+    private static function primesEtAvantages(Collection $lignes): float
+    {
+        return round((float) $lignes->where('origine', TransmissionPaieLigne::ORIGINE_AFFECTATION)->sum('montant'), 2);
     }
 
     /**
