@@ -397,7 +397,7 @@ const TOTAL_ENCAISSE = 'border-x bg-muted/40';
                                 <th
                                     scope="colgroup"
                                     :colspan="colonnesEncaissements"
-                                    class="border-l px-3 pt-2.5 text-left font-medium"
+                                    class="border-l px-3 pt-2.5 text-left font-semibold text-foreground"
                                     data-testid="groupe-encaissements"
                                 >
                                     Encaissements de la période

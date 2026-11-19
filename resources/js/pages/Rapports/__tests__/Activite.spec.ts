@@ -325,19 +325,19 @@ describe('Rapports/Activite', () => {
             .get('#rapport-tab-encaissements')
             .trigger('keydown', { key: 'End' });
         expect(
+            wrapper.get('#rapport-tab-charges').attributes('aria-selected'),
+        ).toBe('true');
+        await wrapper
+            .get('#rapport-tab-charges')
+            .trigger('keydown', { key: 'Home' });
+        expect(
             wrapper.get('#rapport-tab-synthese').attributes('aria-selected'),
         ).toBe('true');
         await wrapper
             .get('#rapport-tab-synthese')
-            .trigger('keydown', { key: 'Home' });
-        expect(
-            wrapper.get('#rapport-tab-ventes').attributes('aria-selected'),
-        ).toBe('true');
-        await wrapper
-            .get('#rapport-tab-ventes')
             .trigger('keydown', { key: 'ArrowLeft' });
         expect(
-            wrapper.get('#rapport-tab-synthese').attributes('aria-selected'),
+            wrapper.get('#rapport-tab-charges').attributes('aria-selected'),
         ).toBe('true');
     });
 
@@ -414,13 +414,13 @@ describe('Rapports/Activite', () => {
         const cartes = wrapper.findAll('[role="tab"]');
 
         expect(cartes.map((c) => c.attributes('data-testid'))).toEqual([
+            'rapport-tab-synthese',
             'rapport-tab-ventes',
             'rapport-tab-encaissements',
             'rapport-tab-creances',
             'rapport-tab-mobile_money',
             'rapport-tab-caisse',
             'rapport-tab-charges',
-            'rapport-tab-synthese',
         ]);
         const actives = cartes.filter(
             (c) => c.attributes('aria-selected') === 'true',
@@ -800,6 +800,28 @@ describe('Rapports/Activite — cartes Charges et Détail (ADR 0064)', () => {
         expect(
             wrapper
                 .get('[data-testid="rapport-tab-ventes"]')
+                .attributes('aria-selected'),
+        ).toBe('true');
+    });
+
+    it("rapport d'activité : la carte Détail est la première et s'ouvre à l'arrivée", () => {
+        url.valeur = '/backoffice/rapports/activite';
+        const rapport = monter('rapport', avecSynthese());
+
+        expect(
+            rapport.findAll('[role="tab"]')[0].attributes('data-testid'),
+        ).toBe('rapport-tab-synthese');
+        expect(
+            rapport.get('#rapport-tab-synthese').attributes('aria-selected'),
+        ).toBe('true');
+        expect(
+            rapport.find('[data-testid="rapport-agents-tableau"]').exists(),
+        ).toBe(true);
+
+        url.valeur = '/backoffice/ma-situation';
+        expect(
+            monter('ma_situation', avecSynthese())
+                .get('#rapport-tab-ventes')
                 .attributes('aria-selected'),
         ).toBe('true');
     });
