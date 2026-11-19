@@ -31,3 +31,7 @@ dans le net à payer : `CategorieTypeRemuneration::estValorise()`, lu par la tra
   versé en argent) » dans les options avancées, qui fixe le traitement sans réintroduire de
   catégorie à choisir — à valider avant toute modification des règles.
 - Aucune migration, aucun changement de paie ni de comptabilité.
+- Complété le 17/11/2026 par l'[ADR 0067](0067-colonne-primes-et-avantages-transmission-paie.md) :
+  dans la transmission de paie, la colonne « Avantages valorisés », restée à 0 GNF depuis cette
+  décision, devient « Primes et avantages » et totalise toutes les primes et tous les avantages
+  accordés (affichage seulement, le traitement des primes ne change pas).

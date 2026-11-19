@@ -35,12 +35,12 @@ const DataTable = defineComponent({
         '<div><Ligne v-for="l in value" :key="l.id" :ligne="l"><slot /></Ligne></div>',
 });
 const Column = defineComponent({
-    props: ['header', 'bodyClass', 'bodyStyle'],
+    props: ['header', 'columnKey', 'bodyClass', 'bodyStyle'],
     setup() {
         return { ligne: inject('ligne') };
     },
     template:
-        '<div :data-colonne="header" :class="bodyClass" :style="bodyStyle"><slot name="body" :data="ligne" /></div>',
+        '<div :data-colonne="header ?? columnKey" :class="bodyClass" :style="bodyStyle"><header><slot name="header" /></header><p data-testid="montant"><slot name="body" :data="ligne" /></p></div>',
 });
 const InfoTooltip = defineComponent({
     props: ['label'],
@@ -63,7 +63,7 @@ const transmission = (surcharge: Record<string, unknown> = {}) => ({
     nb_bloquantes: 0,
     nb_avertissements: 0,
     total_verse: 3950013,
-    total_valorise: 0,
+    total_primes_avantages: 0,
     preparee_par: 'Issa BARRY',
     preparee_le: '01/11/2026 20:45',
     validee_par: null,
@@ -92,12 +92,16 @@ const monter = (surcharge: Record<string, unknown> = {}) =>
 const cellule = (wrapper: ReturnType<typeof monter>, colonne: string) =>
     wrapper.find(`[data-colonne="${colonne}"]`);
 
+// Montant de la cellule seul, sans l'en-tête rendu par le stub de colonne.
+const montantDe = (wrapper: ReturnType<typeof monter>, colonne: string) =>
+    cellule(wrapper, colonne).find('[data-testid="montant"]').text();
+
 const normaliser = (texte: string) => texte.replace(/\s+/g, ' ').trim();
 
 describe('Transmission de paie — liste', () => {
     it('garde le texte explicatif intact, dans l’info-bulle du titre', () => {
         const wrapper = monter();
-        const info = wrapper.find('[data-testid="info"]');
+        const info = wrapper.findAll('[data-testid="info"]')[0];
 
         expect(normaliser(info.text())).toBe(EXPLICATION);
 
@@ -117,20 +121,23 @@ describe('Transmission de paie — liste', () => {
         const wrapper = monter({ total_verse: montant });
 
         // toBe en égalité stricte : une espace fine (U+202F, quasi invisible) ferait échouer le test.
-        expect(cellule(wrapper, 'Total versé').text()).toBe(attendu);
+        expect(montantDe(wrapper, 'Total versé')).toBe(attendu);
     });
 
     it('distingue un montant masqué (—) d’un montant nul (0 GNF)', () => {
-        const wrapper = monter({ total_verse: null, total_valorise: 0 });
+        const wrapper = monter({
+            total_verse: null,
+            total_primes_avantages: 0,
+        });
 
-        expect(cellule(wrapper, 'Total versé').text()).toBe('—');
-        expect(cellule(wrapper, 'Avantages valorisés').text()).toBe('0 GNF');
+        expect(montantDe(wrapper, 'Total versé')).toBe('—');
+        expect(montantDe(wrapper, 'primes_avantages')).toBe('0 GNF');
     });
 
     it('aligne les montants à droite, sans retour à la ligne', () => {
         const wrapper = monter();
 
-        for (const colonne of ['Total versé', 'Avantages valorisés']) {
+        for (const colonne of ['Total versé', 'primes_avantages']) {
             const montant = cellule(wrapper, colonne);
 
             expect(montant.attributes('style')).toContain('text-align: right');
@@ -142,5 +149,24 @@ describe('Transmission de paie — liste', () => {
         const wrapper = monter({ version: 3 });
 
         expect(cellule(wrapper, 'Mois').text()).toContain('Version 3');
+    });
+
+    it('affiche les primes et avantages accordés sous l’intitulé « Primes et avantages » (ADR 0067)', () => {
+        const wrapper = monter({
+            total_verse: 1700000,
+            total_primes_avantages: 700000,
+        });
+        const colonne = cellule(wrapper, 'primes_avantages');
+
+        expect(montantDe(wrapper, 'primes_avantages')).toBe('700 000 GNF');
+        expect(colonne.find('header').text()).toContain('Primes et avantages');
+        expect(wrapper.text()).not.toContain('Avantages valorisés');
+        // Le total versé n'est pas augmenté des primes : les deux colonnes ne s'additionnent pas.
+        expect(montantDe(wrapper, 'Total versé')).toBe('1 700 000 GNF');
+        expect(
+            normaliser(colonne.find('[data-testid="info"]').text()),
+        ).toContain(
+            'Les primes payées sont déjà comprises dans le total versé : les deux colonnes ne s’additionnent pas.',
+        );
     });
 });

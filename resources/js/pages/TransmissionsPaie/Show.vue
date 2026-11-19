@@ -60,7 +60,7 @@ interface Transmission extends Resume {
     empreinte: string | null;
     organisation_complete: boolean;
     total_verse_organisation: number | null;
-    total_valorise_organisation: number | null;
+    total_primes_avantages_organisation: number | null;
     // Brouillon : reflète-t-il les données RH du moment ? (null pour une version validée)
     a_jour: boolean | null;
     // « Annuler la validation » : calculé par le serveur (ADR 0047).
@@ -93,7 +93,7 @@ interface Salarie {
     site: string | null;
     fonction: string | null;
     total_verse: number;
-    total_valorise: number;
+    total_primes_avantages: number;
     lignes: Ligne[];
 }
 
@@ -125,7 +125,11 @@ const props = defineProps<{
         nb_salaries: number;
         total: number;
     }[];
-    totaux_visibles: { verse: number; valorise: number; nb_salaries: number };
+    totaux_visibles: {
+        verse: number;
+        primes_avantages: number;
+        nb_salaries: number;
+    };
     anomalies: Anomalie[];
     versions: Resume[];
     ecarts_precedente: Ecart[];
@@ -594,16 +598,27 @@ function periodeLigne(l: Ligne): string {
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 sm:p-5">
-                    <p class="text-sm text-muted-foreground">
-                        Avantages en nature
-                    </p>
+                    <div class="flex items-center gap-1.5">
+                        <p class="text-sm text-muted-foreground">
+                            Primes et avantages
+                        </p>
+                        <InfoTooltip
+                            label="À propos du total Primes et avantages"
+                        >
+                            Toutes les primes et tous les avantages accordés aux
+                            salariés sur le mois, payés en argent ou en nature.
+                            Les primes payées sont déjà comprises dans le total
+                            à verser : les deux totaux ne s’additionnent pas.
+                        </InfoTooltip>
+                    </div>
                     <p
                         class="mt-1 text-2xl font-semibold whitespace-nowrap text-muted-foreground tabular-nums"
+                        data-testid="total-primes-avantages"
                     >
-                        {{ gnf(totaux_visibles.valorise) }}
+                        {{ gnf(totaux_visibles.primes_avantages) }}
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">
-                        Valorisation hors net à payer
+                        Déjà compris dans le total à verser pour la part payée
                     </p>
                 </div>
             </div>
@@ -980,10 +995,12 @@ function periodeLigne(l: Ligne): string {
                                         {{ gnf(s.total_verse) }}
                                     </p>
                                     <p
-                                        v-if="s.total_valorise > 0"
+                                        v-if="s.total_primes_avantages > 0"
                                         class="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+                                        data-testid="primes-avantages-salarie"
                                     >
-                                        + {{ gnf(s.total_valorise) }} valorisés
+                                        Primes et avantages :
+                                        {{ gnf(s.total_primes_avantages) }}
                                     </p>
                                 </td>
                             </tr>

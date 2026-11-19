@@ -251,9 +251,11 @@ final class VisibiliteContacts
         }
         if ($this->peutLire($lecteur, 'proprietaire')) {
             // D10 (lot 5) : le contact d'un propriétaire entreprise garde la fonction, « au nom de »
-            // l'entreprise — visible du même lecteur, puisqu'elle porte cette fonction.
+            // l'entreprise — visible du même lecteur, puisqu'elle porte cette fonction. Le `type` du
+            // propriétaire (personne physique / entreprise) est le type de la fiche, pas une précision
+            // de la fonction : il n'est jamais transmis comme sous-catégorie.
             $ajouter('proprietaire', Proprietaire::with('entrepriseTierce:id,raison_sociale')->whereIn('personne_id', $ids)->where('organization_id', $lecteur->organization_id)->orderBy('created_at')->get(),
-                fn (Proprietaire $p) => ['id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => $p->type?->value, 'reference' => null,
+                fn (Proprietaire $p) => ['id' => $p->id, 'actif' => $p->is_active, 'sous_categorie' => null, 'reference' => null,
                     ...($p->entreprise_tierce_id !== null ? ['entreprise_tierce_id' => $p->entreprise_tierce_id, 'au_nom_de' => $p->entrepriseTierce?->raison_sociale] : [])]);
         }
         if ($this->peutLire($lecteur, 'parrain')) {

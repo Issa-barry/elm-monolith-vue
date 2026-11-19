@@ -394,6 +394,39 @@ class FusionContactsTest extends TestCase
         $this->assertTrue($fusion->operations()->where('nature', ContactsFusionOperation::LAISSE)->where('valeur_avant', '+224624000022')->exists());
     }
 
+    public function test_le_pays_suit_le_numero_principal_retenu_et_n_est_jamais_choisi_a_part(): void
+    {
+        // CONTACT-058 : fiche guinéenne conservée, numéro français retenu en principal. Le pays,
+        // son code et l'indicatif suivent ce numéro, comme à la création d'une fiche ; un choix
+        // « pays » envoyé à part est ignoré.
+        $acteur = $this->acteur();
+        $a = $this->personne(['telephone' => '+224624000031', 'pays' => 'Guinée', 'code_pays' => 'GN', 'code_phone_pays' => '+224', 'ville' => 'Conakry']);
+        $b = $this->personne(['telephone' => '+33612345678', 'pays' => 'France', 'code_pays' => 'FR', 'code_phone_pays' => '+33', 'ville' => null]);
+        $this->client($a);
+        $this->livreur($b);
+
+        $parDefaut = $this->service()->simuler($acteur, 'personne', $a->id, $b->id);
+        $this->assertNotContains('pays', array_column($parDefaut['champs'], 'cle'));
+        $this->assertSame(['pays' => 'Guinée', 'code_pays' => 'GN', 'code_phone_pays' => '+224', 'deduit' => true], $parDefaut['pays']);
+
+        $choix = ['telephone' => '33612345678', 'telephone_secondaire' => '224624000031', 'pays' => 'a'];
+        $simulation = $this->service()->simuler($acteur, 'personne', $a->id, $b->id, $choix);
+        $this->assertSame(['pays' => 'France', 'code_pays' => 'FR', 'code_phone_pays' => '+33', 'deduit' => true], $simulation['pays']);
+
+        $fusion = $this->fusionner($acteur, $a, $b, $choix);
+
+        $apres = $a->fresh();
+        $this->assertSame('+33612345678', $apres->telephone);
+        $this->assertSame('+224624000031', $apres->telephone_secondaire);
+        $this->assertSame(['France', 'FR', '+33', 'Conakry'], [$apres->pays, $apres->code_pays, $apres->code_phone_pays, $apres->ville]);
+        $this->assertTrue($fusion->operations()->where('champ', 'pays')->where('valeur_avant', 'Guinée')->where('valeur_apres', 'France')->exists());
+
+        // L'annulation rend à la fiche conservée son pays d'origine.
+        app(AnnulationFusionContacts::class)->annuler($fusion, $acteur);
+        $restauree = $a->fresh();
+        $this->assertSame(['Guinée', 'GN', '+224', '+224624000031'], [$restauree->pays, $restauree->code_pays, $restauree->code_phone_pays, $restauree->telephone]);
+    }
+
     // ── Entreprises ─────────────────────────────────────────────────────────
 
     public function test_fusion_d_entreprises_interlocuteurs_et_principal_arbitre(): void

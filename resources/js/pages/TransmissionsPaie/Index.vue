@@ -3,6 +3,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import InfoTooltip from '@/components/InfoTooltip.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +33,7 @@ interface Transmission {
     nb_bloquantes: number;
     nb_avertissements: number;
     total_verse: number | null;
-    total_valorise: number | null;
+    total_primes_avantages: number | null;
     preparee_par: string | null;
     preparee_le: string | null;
     validee_par: string | null;
@@ -64,7 +65,6 @@ const filterFields = computed((): FilterField[] => [
         label: 'Année',
         type: 'select',
         options: props.annees,
-        inline: true,
     },
 ]);
 
@@ -134,24 +134,29 @@ function ouvrir(t: Transmission) {
                         restent consultables.
                     </InfoTooltip>
                 </div>
-                <Button
-                    v-if="peutPreparer"
-                    size="sm"
-                    data-testid="transmission-preparer"
-                    @click="showPreparer = true"
-                >
-                    <Plus class="mr-1.5 h-3.5 w-3.5" />
-                    Préparer un mois
-                </Button>
+                <ListPageActions>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            url="/backoffice/transmissions-paie"
+                            :values="filters"
+                            :fields="filterFields"
+                            :result-count="transmissions.length"
+                            :hide-agence-selector="true"
+                        />
+                    </template>
+                    <template v-if="peutPreparer" #primary>
+                        <Button
+                            size="sm"
+                            data-testid="transmission-preparer"
+                            @click="showPreparer = true"
+                        >
+                            <Plus class="mr-1.5 h-3.5 w-3.5" />
+                            Préparer un mois
+                        </Button>
+                    </template>
+                </ListPageActions>
             </div>
-
-            <DataFilters
-                url="/backoffice/transmissions-paie"
-                :values="filters"
-                :fields="filterFields"
-                :result-count="transmissions.length"
-                :hide-agence-selector="true"
-            />
 
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
@@ -215,14 +220,32 @@ function ouvrir(t: Transmission) {
                         }}</template>
                     </Column>
                     <Column
-                        header="Avantages valorisés"
-                        style="min-width: 170px"
+                        column-key="primes_avantages"
+                        style="min-width: 190px"
                         body-class="whitespace-nowrap text-muted-foreground tabular-nums"
                         body-style="text-align: right"
-                        :pt="{ columnHeaderContent: { class: 'justify-end' } }"
+                        :pt="{
+                            columnHeaderContent: {
+                                class: 'justify-end gap-1.5',
+                            },
+                        }"
                     >
+                        <template #header>
+                            <span class="font-semibold"
+                                >Primes et avantages</span
+                            >
+                            <InfoTooltip
+                                label="À propos de la colonne Primes et avantages"
+                            >
+                                Toutes les primes et tous les avantages accordés
+                                aux salariés sur le mois, payés en argent ou en
+                                nature. Les primes payées sont déjà comprises
+                                dans le total versé : les deux colonnes ne
+                                s’additionnent pas.
+                            </InfoTooltip>
+                        </template>
                         <template #body="{ data }">{{
-                            gnf(data.total_valorise)
+                            gnf(data.total_primes_avantages)
                         }}</template>
                     </Column>
                     <Column header="Anomalies" style="min-width: 110px">

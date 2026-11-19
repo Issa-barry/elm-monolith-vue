@@ -116,8 +116,8 @@ Tout **statut d'entité** (commande, facture, dépense, transfert, période, pai
   serveur. Ne pas l'étendre à une autre liste sans demande explicite
   ([filters.md](../filters.md#barre-rapide-du-tableau-quickfiltersvue--quick-bar)).
 
-**Pages pas encore migrées.** Au 15/11/2026, sur 58 fichiers qui utilisent `<DataFilters>`, 23 sont
-en `trigger-only` et **35** gardent l'ancienne barre de filtres. Pour ces 35 pages, l'ancienne règle reste valable tant qu'elles ne
+**Pages pas encore migrées.** Au 17/11/2026, sur 58 fichiers qui utilisent `<DataFilters>`, 24 sont
+en `trigger-only` et **34** gardent l'ancienne barre de filtres. Pour ces 34 pages, l'ancienne règle reste valable tant qu'elles ne
 sont pas modifiées : barre **[Agence] → [Statut] → [autres champs `inline: true`] → [bouton
 Filtres]**, champs avancés dans le tiroir. **Aucune migration en masse.** Une page modifiée passe au
 standard `trigger-only` et son chemin est ajouté à `LIST_PAGE_ACTIONS_REQUIRED` dans

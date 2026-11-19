@@ -52,7 +52,7 @@ const SALARIES: Salaries = [
         site: 'Matoto',
         fonction: null,
         total_verse: 3950013,
-        total_valorise: 250000,
+        total_primes_avantages: 250000,
         lignes: [ligne],
     },
 ];
@@ -87,7 +87,7 @@ const monter = (salaries: Salaries = SALARIES) =>
                 empreinte: 'abc',
                 organisation_complete: true,
                 total_verse_organisation: 3950013,
-                total_valorise_organisation: 0,
+                total_primes_avantages_organisation: 0,
                 a_jour: null,
                 peut_annuler_validation: false,
             },
@@ -103,7 +103,11 @@ const monter = (salaries: Salaries = SALARIES) =>
                     total: 100000000,
                 },
             ],
-            totaux_visibles: { verse: 3950013, valorise: 0, nb_salaries: 1 },
+            totaux_visibles: {
+                verse: 3950013,
+                primes_avantages: 0,
+                nb_salaries: 1,
+            },
             anomalies: [],
             versions: [],
             ecarts_precedente: [
@@ -132,7 +136,7 @@ describe('Transmission de paie — détail', () => {
             '2 500 000 GNF',
             '2 248 400 GNF',
             '100 000 000 GNF',
-            '+ 250 000 GNF valorisés',
+            'Primes et avantages : 250 000 GNF',
             '0 GNF',
         ]) {
             expect(texte).toContain(attendu);
@@ -173,7 +177,7 @@ describe('Transmission de paie — détail', () => {
             {
                 ...SALARIES[0],
                 total_verse: 750013,
-                total_valorise: 0,
+                total_primes_avantages: 0,
                 lignes: [ligne, prime],
             },
             {
@@ -181,7 +185,7 @@ describe('Transmission de paie — détail', () => {
                 employe_id: '01JAUTRE',
                 salarie: 'Fatoumata SIDIBÉ',
                 total_verse: 700000,
-                total_valorise: 0,
+                total_primes_avantages: 0,
                 lignes: [{ ...ligne, id: 'ligne-3' }],
             },
         ]);
@@ -209,5 +213,37 @@ describe('Transmission de paie — détail', () => {
         expect(wrapper.findAll('[data-testid="total-salarie"]')).toHaveLength(
             2,
         );
+    });
+
+    it('affiche le total « Primes et avantages » sans l’ajouter au total à verser (ADR 0067)', () => {
+        const wrapper = monter();
+        const props = wrapper.props();
+        wrapper.setProps({
+            totaux_visibles: {
+                ...props.totaux_visibles,
+                primes_avantages: 700000,
+            },
+        });
+
+        return wrapper.vm.$nextTick().then(() => {
+            expect(
+                wrapper.find('[data-testid="total-primes-avantages"]').text(),
+            ).toBe('700 000 GNF');
+            expect(wrapper.text()).toContain('Primes et avantages');
+            expect(wrapper.text()).not.toContain('Avantages en nature');
+            expect(wrapper.text()).toContain(
+                'les deux totaux ne s’additionnent pas',
+            );
+            // Le total à verser reste celui du serveur, inchangé.
+            expect(wrapper.text()).toContain('3 950 013 GNF');
+        });
+    });
+
+    it('n’affiche pas la mention par salarié quand il n’a ni prime ni avantage', () => {
+        const wrapper = monter([{ ...SALARIES[0], total_primes_avantages: 0 }]);
+
+        expect(
+            wrapper.find('[data-testid="primes-avantages-salarie"]').exists(),
+        ).toBe(false);
     });
 });

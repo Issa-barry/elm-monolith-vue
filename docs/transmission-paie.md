@@ -56,11 +56,31 @@ type se recouvrent, avant la date de désactivation du type.
   ou `taux × salaire mensuel du contrat en vigueur au dernier jour de droit` (non proratisable).
 - **TRANS-004** — Saisi chaque mois : le montant (ou le taux) **validé** du mois, sans prorata.
 - **TRANS-005** — Ponctuel : montant entier, une seule fois, dans son mois.
-- **TRANS-006** — Avantage en nature : calculé de même, **valorisé** : totalisé à part, hors total
-  versé (hors net à payer).
+- **TRANS-006** — Avantage en nature : calculé de même, **valorisé** : hors total versé (hors net à
+  payer). Il compte dans le total « Primes et avantages » (TRANS-008).
 - **TRANS-007** — Double garantie : un type désactivé ne produit plus rien à partir de sa date de
   désactivation, même si une affectation était restée ouverte.
 - Arrondi à 2 décimales.
+
+## Totaux affichés
+
+- **TRANS-008 (17/11/2026, [ADR 0067](adr/0067-colonne-primes-et-avantages-transmission-paie.md))**
+  — Deux totaux, qui **ne s'additionnent pas** :
+
+  | Total | Contenu |
+  |---|---|
+  | **Total versé** | Ce qui est réellement payé : salaires de base + primes, indemnités, allocations (lignes *versées*) |
+  | **Primes et avantages** | Tout ce qui est accordé au-delà du salaire de base : primes payées et avantages en nature (toutes les lignes d'origine *affectation*) |
+
+  Les primes payées figurent dans les deux totaux. Exemple : salaire de base 1 000 000 GNF, primes
+  200 000 GNF et 500 000 GNF → total versé 1 700 000 GNF, primes et avantages 700 000 GNF.
+
+  « Primes et avantages » est calculé à l'affichage, à partir des lignes de la version : dans la
+  liste (colonne, organisation entière), dans le détail (total de l'organisation, total des salariés
+  visibles ou filtrés, total de chaque salarié). Il ne modifie ni les lignes, ni le total versé, ni
+  le total valorisé enregistré (`total_valorise`, avantages en nature seuls, contrôlé à la reprise
+  comptable), ni l'empreinte. Une version figée affiche donc ses primes sans être modifiée. Comme le
+  total versé, le total de l'organisation n'est montré qu'à qui voit toutes les agences.
 
 ## Anomalies
 

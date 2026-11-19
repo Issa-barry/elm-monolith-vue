@@ -77,13 +77,15 @@ test.describe('Fusion manuelle de deux fiches Personne', () => {
         // Fiche A → Fusionner
         await page.goto(`/backoffice/contacts/personnes/${idA}`);
         await page.getByTestId('fiche-fusionner').click();
-        await expect(page.getByTestId('fusion-recherche')).toBeVisible();
+        await expect(
+            page.getByTestId('fusion-recherche-telephone'),
+        ).toBeVisible();
         await expect(
             page.getByRole('heading', { name: new RegExp(nomA) }),
         ).toBeVisible();
 
-        // Recherche et choix de B
-        await page.getByTestId('fusion-recherche').fill(nomB);
+        // Recherche de B par téléphone : pays Guinée par défaut, indicatif jamais saisi
+        await page.locator('#fusion-telephone').fill(telB.replace('+224', ''));
         await page.getByTestId('fusion-rechercher').click();
         await page.getByTestId(`fusion-choisir-${idB}`).click();
         await expect(page.getByTestId('fusion-simulation')).toBeVisible();

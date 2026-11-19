@@ -100,6 +100,13 @@ sur les ventes, commissions, comptabilité ou logistique.
   que si son entreprise est visible. Une fonction non lisible n'apparaît ni dans les badges, ni dans
   les filtres, ni dans les données transmises au navigateur ; un filtre sur une fonction non lisible
   est refusé.
+- **CONTACT-013b** — Le type de fiche (Personne physique, Entreprise) n'est jamais une fonction ni la
+  précision d'une fonction (17/11/2026). Un badge de fonction porte le nom de la fonction métier,
+  suivi seulement d'une précision propre à cette fonction : nature du client (« Client · Grossiste »),
+  qualification du prestataire, statut de l'employé (« Employé · Actif »). La nature juridique d'un
+  propriétaire (`proprietaires.type`) n'est donc pas affichée sur son badge : le badge est
+  « Propriétaire », et la fiche qui le porte dit déjà s'il s'agit d'une personne ou d'une entreprise.
+  Affichage seulement : `proprietaires.type` et les rattachements ne changent pas.
 - **CONTACT-014** — Une personne ou une entreprise n'est visible que si au moins une de ses fonctions
   l'est (parrain : dans le périmètre d'agences du lecteur). Sinon elle n'apparaît nulle part dans le
   module : listes, fiches (404), recherche, compteurs. Une personne sans aucune fonction (compte seul)
@@ -424,7 +431,12 @@ sur les ventes, commissions, comptabilité ou logistique.
   repris de B, ce qui n'est pas repris (valeurs écartées, numéros retirés), fonctions et liens,
   conséquences ; « Confirmer la fusion » reste désactivé tant que la case de vérification et les
   confirmations exigées ne sont pas remplies. L'interface dit « fiche conservée » et « fiche à
-  fusionner » plutôt que A et B.
+  fusionner » plutôt que A et B. Depuis le 17/11/2026 : l'étape 1 recherche **par téléphone** par
+  défaut, avec la même saisie que la création d'un contact (`PhoneCountryInput` : pays choisi,
+  numéro national, indicatif ajouté automatiquement) ; « Par nom ou e-mail » garde la recherche
+  texte, où un numéro collé reste reconnu. L'étape 2 rappelle que chaque ligne se choisit
+  séparément et indique la provenance d'un numéro (« Vient de la fiche conservée (principal
+  actuel) »), jamais son rang après la fusion.
 - **CONTACT-056** — Blocages : même fonction des deux côtés, **fonction archivée comprise** (F1) ;
   A et B interlocuteurs de la même entreprise (décision 4) ; un compte utilisateur de chaque côté
   (F2) ; une fonction ou un lien que l'utilisateur ne peut pas consulter (décision 6, message
@@ -442,6 +454,13 @@ sur les ventes, commissions, comptabilité ou logistique.
   parmi les numéros des deux fiches (par défaut : principal de A ; secondaire de A, sinon numéro de
   B). Les autres quittent la fiche avec confirmation et restent au journal. Le numéro principal de
   B est libéré à l'archivage, son numéro secondaire aussi (il peut devenir un numéro de A).
+  **Pays (17/11/2026)** : il n'est plus arbitré comme un champ. Comme à la création et à la
+  modification d'une fiche, le pays, son code et l'indicatif **suivent le numéro principal
+  retenu** (un numéro +33 en principal donne France, même si la fiche conservée était en Guinée) ;
+  le numéro secondaire peut être d'un autre pays. Un ancien numéro non reconnu garde le pays de la
+  fiche dont il était le principal ; une entreprise sans numéro garde le pays de A, complété par
+  celui de B. Le changement de pays est écrit au journal et défait par l'annulation. La ville reste
+  un choix libre : aucun référentiel ne relie une ville à un pays.
   Décision 3 : un numéro secondaire est reconnu par la recherche
   « téléphone d'abord » (statut `secondaire`, lien vers la fiche) mais n'ouvre ni création ni
   rattachement automatique ; la création Contacts avec ce numéro est refusée.
