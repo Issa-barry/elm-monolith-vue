@@ -89,10 +89,15 @@ const ONGLETS = [
     'synthese',
 ] as const;
 type Onglet = (typeof ONGLETS)[number];
-const { onglet, choisir } = useUrlTab<Onglet>(ONGLETS, 'ventes');
+// Rapport d'activité : la carte « Détail des situations des agents » est la première et s'ouvre
+// d'office ; Ma situation s'ouvre sur les ventes.
+const { onglet, choisir } = useUrlTab<Onglet>(
+    ONGLETS,
+    maSituation.value ? 'ventes' : 'synthese',
+);
 
-// La carte « Détail… » se replie au second clic (retour à la première carte) ; les autres cartes
-// restent des onglets classiques, toujours une section affichée.
+// La carte « Détail… » se replie au second clic (retour aux ventes) ; les autres cartes restent des
+// onglets classiques, toujours une section affichée.
 function choisirCarte(cle: Onglet) {
     choisir(cle === 'synthese' && onglet.value === 'synthese' ? 'ventes' : cle);
 }
@@ -235,7 +240,8 @@ const cartes = computed((): Carte[] => {
         avertissement: null,
     });
 
-    // Tableau financier consolidé, affiché à la demande (même tableau que le Rapport par agence).
+    // Tableau financier consolidé (même tableau que le Rapport par agence) : première carte et
+    // section ouverte par défaut du rapport d'activité, dernière carte de Ma situation.
     const remise = r.remise;
     const action =
         onglet.value === 'synthese'
@@ -247,7 +253,7 @@ const cartes = computed((): Carte[] => {
     if (!maSituation.value) {
         contenu.push(pluriel(r.agents?.lignes.length ?? 0, 'agent'));
     }
-    liste.push({
+    const detail: Carte = {
         cle: 'synthese',
         libelle: maSituation.value
             ? 'Détail de ma situation'
@@ -255,9 +261,9 @@ const cartes = computed((): Carte[] => {
         valeur: remise ? formatGNF(remise.reste_a_remettre) : '—',
         detail: [...contenu, action].join(' · '),
         avertissement: null,
-    });
+    };
 
-    return liste;
+    return maSituation.value ? [...liste, detail] : [detail, ...liste];
 });
 
 function hrefAgent(agentId: string): string {
