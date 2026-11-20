@@ -1,3 +1,4 @@
+import { ENTETE_CLE_OPERATION, useCleOperation } from '@/lib/cleOperation';
 import { traiterParLots } from '@/lib/traiterParLots';
 import { formatGNF } from '@/lib/utils';
 import type { FicheAPayer } from '@/types/commission';
@@ -20,6 +21,8 @@ interface ReponseLot {
     payees: number;
     montant_total: number;
     deja_payees: string[];
+    /** Vrai quand le serveur restitue un lot déjà enregistré par cette opération. */
+    rejeu?: boolean;
 }
 
 /** Lots courts (plafond serveur : PaiementFicheLotController::LOT_MAX = 50). */
@@ -34,6 +37,7 @@ function xsrf(): string {
 async function envoyerLot(
     fiches: FicheAPayer[],
     payload: PaiementGroupePayload,
+    cle: string,
 ): Promise<ReponseLot> {
     const response = await fetch(
         '/backoffice/comptabilite/fiches/paiements/lot',
@@ -44,6 +48,7 @@ async function envoyerLot(
                 Accept: 'application/json',
                 'Content-Type': 'application/json',
                 'X-XSRF-TOKEN': xsrf(),
+                [ENTETE_CLE_OPERATION]: cle,
             },
             body: JSON.stringify({
                 mode_paiement: payload.mode_paiement,
@@ -79,8 +84,13 @@ export function usePaiementGroupe(surTermine: () => void) {
     const progression = ref(0);
     const erreur = ref<string | null>(null);
 
+    // Idempotence (ADR 0069) : une clé par lot (« <opération>.<n° du lot> »), la même tant que les
+    // choix de la fenêtre ne changent pas. Renvoyer après une coupure restitue le lot déjà passé.
+    const cleOperation = useCleOperation();
+
     function open(cibles: FicheAPayer[]) {
         if (cibles.length === 0) return;
+        cleOperation.reinitialiser();
         fiches.value = cibles;
         erreur.value = null;
         progression.value = 0;
@@ -97,12 +107,21 @@ export function usePaiementGroupe(surTermine: () => void) {
         let payees = 0;
         let total = 0;
         const dejaPayees: string[] = [];
+        const operation = cleOperation.pour({
+            payload,
+            fiches: cibles.map((f) => [f.id, f.montant_restant]),
+        });
+        let numeroLot = 0;
 
         const resultat = await traiterParLots(
             cibles,
             LOT_PAIEMENT_GROUPE,
             async (lot) => {
-                const reponse = await envoyerLot(lot, payload);
+                const reponse = await envoyerLot(
+                    lot,
+                    payload,
+                    `${operation}.${numeroLot++}`,
+                );
                 payees += reponse.payees;
                 total += reponse.montant_total;
                 dejaPayees.push(...reponse.deja_payees);

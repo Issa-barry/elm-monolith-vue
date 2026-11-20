@@ -23,8 +23,9 @@ de livreurs par quinzaine, c'est long et propice aux oublis.
    `PaiementFichePaiementController::store()`). Il n'y a pas de type de paiement « groupé ».
 3. **Reste entier** : chaque fiche est payée pour la totalité de son reste. Un paiement partiel se
    fait toujours fiche par fiche, avec le bouton Payer.
-4. **Un seul support, une seule agence payeuse** : le groupe sort d'un seul compte (le compte
-   Orange Money de l'agence, par exemple). Une sélection payée par plusieurs agences est refusée ;
+4. **Un seul support, une seule agence payeuse** : le groupe sort d'un seul compte, choisi parmi les
+   moyens du bouton Payer. Ce peut être la caisse dédiée du payeur (espèces), un compte Mobile Money
+   de l'agence (tout opérateur), ou un compte bancaire de l'agence (virement, chèque). Une sélection payée par plusieurs agences est refusée ;
    l'utilisateur filtre par agence et paie agence par agence.
 5. **Référence** : une référence commune, appliquée à chaque ligne sans référence propre, et une
    référence par ligne si chaque dépôt a la sienne. Si le moyen exige une référence, chaque fiche

@@ -165,6 +165,69 @@ describe('PaiementGroupeDialog', () => {
         expect(confirmer(wrapper).attributes('disabled')).toBeDefined();
     });
 
+    it('propose tous les moyens du bouton Payer, avec la référence propre à chacun', async () => {
+        const banque = {
+            operateur_mobile_money: null,
+            compte_tresorerie_id: 's-banque',
+            reference_requise: false,
+            solde_disponible: 5_000_000,
+        };
+        const t: TresorerieFiche = {
+            ...tresorerie('matoto'),
+            moyens: [
+                ...tresorerie('matoto').moyens,
+                {
+                    key: 'mobile_money:s-momo',
+                    label: 'MoMo',
+                    mode_paiement: 'mobile_money',
+                    operateur_mobile_money: 'momo',
+                    compte_tresorerie_id: 's-momo',
+                    reference_requise: true,
+                    solde_disponible: 5_000_000,
+                },
+                {
+                    ...banque,
+                    key: 'virement:s-banque',
+                    label: 'Virement bancaire — BICIGUI',
+                    mode_paiement: 'virement',
+                },
+                {
+                    ...banque,
+                    key: 'cheque:s-banque',
+                    label: 'Chèque — BICIGUI',
+                    mode_paiement: 'cheque',
+                },
+            ],
+            especes_disponibles: true,
+            solde_especes: 5_000_000,
+        };
+        const wrapper = monter([fiche('a', 'Saa Fodé', 100_000, t)]);
+        await wrapper.setProps({ visible: true });
+        await nextTick();
+
+        const select = wrapper.findComponent(SelectFactice);
+        expect(
+            (select.props('options') as { key: string }[]).map((o) => o.key),
+        ).toEqual([
+            'especes',
+            'mobile_money:s-orange',
+            'mobile_money:s-momo',
+            'virement:s-banque',
+            'cheque:s-banque',
+        ]);
+
+        // Virement : aucune référence demandée, le compte bancaire choisi est envoyé.
+        select.vm.$emit('update:modelValue', 'virement:s-banque');
+        await nextTick();
+        expect(wrapper.find('#paiement-groupe-reference').exists()).toBe(false);
+        await confirmer(wrapper).trigger('click');
+        expect(wrapper.emitted('submit')![0][0]).toMatchObject({
+            mode_paiement: 'virement',
+            compte_tresorerie_id: 's-banque',
+            references: {},
+        });
+    });
+
     it('verrouille les boutons pendant l’envoi', async () => {
         const wrapper = monter([fiche('a', 'Saa Fodé', 100_000)]);
         await ouvrir(wrapper);

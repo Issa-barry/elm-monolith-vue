@@ -104,6 +104,12 @@ Ce document distingue deux couches, volontairement séparées :
 - **Rôle** : compteur de numérotation séquentielle sans trou, verrouillé en transaction
   (`SELECT ... FOR UPDATE`) par `PieceNumerotationService`. Volontairement séparé de
   `compta_pieces` pour ne jamais dépendre d'un `MAX(numero)+1` sur une table qui grossit.
+- **Concurrence** (20/11/2026, prouvé sous MySQL par `SoldeSupportConcurrenceTest`) : la ligne est
+  verrouillée **avant** toute insertion. Avant, un `INSERT IGNORE` systématique y posait un verrou
+  partagé : deux pièces simultanées du même journal s'interbloquaient, et MySQL annulait l'une des
+  deux opérations (« comptabilisation impossible »). La ligne n'est plus créée qu'à la première
+  pièce du journal dans l'exercice. **Limite** : deux premières pièces simultanées d'un même
+  journal dans un exercice peuvent encore s'interbloquer, soit une fois par journal et par an.
 - **PK composite** : `['organization_id', 'journal_comptable_id', 'exercice_comptable_id']`.
 - **FK** : `organization_id`, `journal_comptable_id` → `compta_journaux`,
   `exercice_comptable_id` → `compta_exercices`.
@@ -780,6 +786,7 @@ le versement de cashback, désormais comptabilisé via `CashbackComptabilisation
 |---|---|---|---|
 | `depenses` | Dépenses (interne ou imputée à un tiers) | `DepenseComptabilisationService` | `depense_interne_validee`, `depense_avance_tiers_validee` |
 | `paiement_fiches` + `paiement_fiche_lignes` + `paiement_fiche_paiements` | Fiches de paiement propriétaires/livreurs/sites/consultants (commissions à régler) | `FicheComptabilisationService` | `fiche_proprietaire_validee`, `fiche_livreur_validee`, `fiche_site_validee`, `fiche_consultant_validee`, `paiement_proprietaire`, `paiement_livreur`, `paiement_site`, `paiement_consultant`, `regularisation_cloture_fiche` |
+| `paiement_fiche_paiements_annules` | Paiement de fiche supprimé (ADR 0069) : même identifiant que le paiement d'origine, donc `source_id` de sa pièce et de sa contrepassation ; clé d'opération, détail, `annule_par`, `annule_le`. Sa clé ne recrée jamais de paiement | — (la contrepassation est faite à la suppression) | — |
 | `commissions_ventes` / `commissions_logistiques` + tables de parts/ajustements | Calcul des commissions par vehicule/livreur/site/consultant | Indirectement, via les fiches de paiement qui les agrègent | — |
 | `factures_ventes` | Facturation client | `VenteComptabilisationService` | `vente_facturee` |
 | `encaissements_ventes` | Encaissement client. `site_encaissement_id` = agence qui a réellement reçu l'argent (celle de la facture, sauf encaissement dans une autre agence — ADR 0012 ; historique repris avec le site de la facture) | `VenteComptabilisationService` | `encaissement_vente_recu`, `encaissement_vente_pour_compte` |

@@ -16,10 +16,13 @@ use App\Models\PaiementFichePaiement;
 use App\Models\PaiementPeriode;
 use App\Models\PieceComptable;
 use App\Models\Site;
+use App\Services\Comptabilite\EcritureComptableService;
+use App\Services\Comptabilite\FicheComptabilisationService;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Pennant\Feature;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
@@ -76,7 +79,7 @@ class PaiementFicheLotTest extends TestCase
     /** @param  list<PaiementFiche>  $fiches */
     private function payerLot(array $fiches, array $donnees, array $references = [])
     {
-        return $this->actingAs($this->user)->postJson(route('comptabilite.fiches.paiements.lot'), array_merge([
+        return $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->postJson(route('comptabilite.fiches.paiements.lot'), array_merge([
             'fiches' => array_map(fn (PaiementFiche $f) => array_filter([
                 'id' => $f->id,
                 'montant' => $f->montant_restant,
@@ -155,6 +158,122 @@ class PaiementFicheLotTest extends TestCase
         $this->assertSame(700_000.0, $this->solde($caisse));
     }
 
+    // ── Miroir du bouton Payer, mode par mode ─────────────────────────────────
+
+    /** Moyens réellement proposés au paiement d'une fiche (MoyensEncaissementResolver, DecaissementSupportResolver). */
+    public static function modesDePaiement(): array
+    {
+        return [
+            'Espèces (caisse dédiée du payeur)' => ['especes', null, null, null],
+            'Mobile Money Orange Money' => ['mobile_money', 'mobile_money', '561100', 'orange_money'],
+            'Mobile Money MoMo' => ['mobile_money', 'mobile_money', '561200', 'momo'],
+            'Virement (banque de l\'agence)' => ['virement', 'banque', '521000', null],
+            'Chèque (banque de l\'agence)' => ['cheque', 'banque', '521000', null],
+        ];
+    }
+
+    #[DataProvider('modesDePaiement')]
+    public function test_chaque_mode_paye_comme_le_bouton_payer(string $mode, ?string $typeSupport, ?string $compte, ?string $operateur): void
+    {
+        $support = $typeSupport === null
+            ? $this->equiperPayeurEspeces($this->user, $this->agence->id, 2_000_000)
+            : $this->creerSupportAgence($this->agence->id, $typeSupport, $compte, $operateur);
+        if ($typeSupport !== null) {
+            $this->alimenterCaisse($support, 2_000_000);
+        }
+        $referenceRequise = $mode === 'mobile_money';
+        $donnees = array_filter([
+            'mode_paiement' => $mode,
+            'compte_tresorerie_id' => $typeSupport === null ? null : $support->id,
+            'reference_paiement' => $referenceRequise ? 'REF-0001' : null,
+        ]);
+
+        $unitaire = $this->fiche($this->agence->id, 300_000);
+        $groupe = $this->fiche($this->agence->id, 300_000);
+
+        $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $unitaire), [
+            ...$donnees,
+            'montant' => 300_000,
+            'date_paiement' => now()->toDateString(),
+        ])->assertSessionHasNoErrors();
+        $this->payerLot([$groupe], $donnees)->assertOk()->assertJson(['payees' => 1]);
+
+        $this->assertSame(1_400_000.0, $this->solde($support));
+        [$attendu, $obtenu] = array_map(fn (PaiementFiche $f) => $this->traceDuPaiement($f), [$unitaire, $groupe]);
+        $this->assertSame($attendu, $obtenu);
+        $this->assertSame($support->id, $obtenu['compte_tresorerie_id']);
+        $this->assertSame($mode, $obtenu['mode_paiement']);
+        $this->assertSame($operateur, $obtenu['moyen_paiement_detail']);
+        $this->assertSame($referenceRequise ? 'REF-0001' : null, $obtenu['reference_paiement']);
+    }
+
+    #[DataProvider('modesDePaiement')]
+    public function test_reference_exigee_seulement_quand_le_bouton_payer_lexige(string $mode, ?string $typeSupport, ?string $compte, ?string $operateur): void
+    {
+        $support = $typeSupport === null
+            ? $this->equiperPayeurEspeces($this->user, $this->agence->id, 2_000_000)
+            : $this->creerSupportAgence($this->agence->id, $typeSupport, $compte, $operateur);
+        if ($typeSupport !== null) {
+            $this->alimenterCaisse($support, 2_000_000);
+        }
+        $sansReference = array_filter([
+            'mode_paiement' => $mode,
+            'compte_tresorerie_id' => $typeSupport === null ? null : $support->id,
+        ]);
+
+        $reponse = $this->payerLot([$this->fiche($this->agence->id)], $sansReference);
+
+        if ($mode === 'mobile_money') {
+            $reponse->assertUnprocessable()->assertJsonValidationErrors('reference_paiement');
+            $this->assertDatabaseCount('paiement_fiche_paiements', 0);
+        } else {
+            $reponse->assertOk()->assertJson(['payees' => 1]);
+        }
+    }
+
+    public function test_compte_qui_ne_correspond_pas_au_mode_refuse(): void
+    {
+        $orange = $this->orange();
+        $banque = $this->creerSupportAgence($this->agence->id, 'banque', '521000');
+        $this->alimenterCaisse($banque, 2_000_000);
+        $fiche = $this->fiche($this->agence->id);
+
+        // Virement depuis le compte Orange Money, Mobile Money depuis la banque : aucun des deux n'existe.
+        $this->payerLot([$fiche], ['mode_paiement' => 'virement', 'compte_tresorerie_id' => $orange->id])
+            ->assertUnprocessable()->assertJsonValidationErrors('compte_tresorerie_id');
+        $this->payerLot([$fiche], $this->mobileMoney($banque))
+            ->assertUnprocessable()->assertJsonValidationErrors('compte_tresorerie_id');
+
+        $this->assertDatabaseCount('paiement_fiche_paiements', 0);
+        $this->assertSame(2_000_000.0, $this->solde($orange));
+        $this->assertSame(2_000_000.0, $this->solde($banque));
+    }
+
+    /** Ce qu'un paiement laisse derrière lui : la ligne de paiement et son écriture comptable. */
+    private function traceDuPaiement(PaiementFiche $fiche): array
+    {
+        $paiement = PaiementFichePaiement::where('fiche_id', $fiche->id)->sole();
+        $piece = app(EcritureComptableService::class)->pieceExistantePour(
+            $this->org->id,
+            $paiement,
+            FicheComptabilisationService::evenementPaiementPour($fiche->beneficiaire_type),
+        );
+        $this->assertNotNull($piece, 'Le paiement doit être comptabilisé.');
+
+        return [
+            'site_id' => $paiement->site_id,
+            'montant' => (float) $paiement->montant,
+            'mode_paiement' => $paiement->mode_paiement,
+            'moyen_paiement_detail' => $paiement->moyen_paiement_detail,
+            'compte_tresorerie_id' => $paiement->compte_tresorerie_id,
+            'reference_paiement' => $paiement->reference_paiement,
+            'statut_fiche' => $fiche->fresh()->statut,
+            'ecritures' => $piece->lignes()->orderByDesc('debit')->get()
+                ->map(fn ($l) => [$l->compte_comptable_id, $l->site_id, (float) $l->debit, (float) $l->credit])
+                ->all(),
+        ];
+    }
+
     public function test_fiche_deja_soldee_ignoree_pour_un_lot_renvoye(): void
     {
         $orange = $this->orange();
@@ -165,7 +284,7 @@ class PaiementFicheLotTest extends TestCase
         $this->payerLot([$a], $this->mobileMoney($orange))->assertOk();
 
         // Lot renvoyé après une coupure : la fiche déjà soldée n'est pas payée deux fois.
-        $this->actingAs($this->user)->postJson(route('comptabilite.fiches.paiements.lot'), [
+        $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->postJson(route('comptabilite.fiches.paiements.lot'), [
             'fiches' => [['id' => $a->id, 'montant' => $montantA], ['id' => $b->id, 'montant' => 100_000]],
             'date_paiement' => now()->toDateString(),
             ...$this->mobileMoney($orange),
@@ -199,7 +318,7 @@ class PaiementFicheLotTest extends TestCase
         $a = $this->fiche($this->agence->id, 300_000);
         $b = $this->fiche($this->agence->id, 200_000);
 
-        $this->actingAs($this->user)->postJson(route('comptabilite.fiches.paiements.lot'), [
+        $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->postJson(route('comptabilite.fiches.paiements.lot'), [
             'fiches' => [['id' => $a->id, 'montant' => 300_000], ['id' => $b->id, 'montant' => 250_000]],
             'date_paiement' => now()->toDateString(),
             ...$this->mobileMoney($orange),
@@ -337,7 +456,7 @@ class PaiementFicheLotTest extends TestCase
     {
         $orange = $this->orange();
 
-        $this->actingAs($this->user)->postJson(route('comptabilite.fiches.paiements.lot'), [
+        $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->postJson(route('comptabilite.fiches.paiements.lot'), [
             'fiches' => array_map(fn (int $i) => ['id' => (string) Str::uuid(), 'montant' => 1000], range(1, PaiementFicheLotController::LOT_MAX + 1)),
             'date_paiement' => now()->toDateString(),
             ...$this->mobileMoney($orange),

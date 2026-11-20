@@ -1451,8 +1451,13 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
   du moyen choisi affiché ; « Confirmer » désactivé s'il est insuffisant.
 - **Solde insuffisant = refus serveur** sous verrou (`TresorerieDisponibiliteService::garantirSoldeSuffisant()`),
   message « Solde insuffisant : X GNF disponible dans « … » pour un paiement de Y GNF. » — aucun
-  effet (ni paiement, ni allocation, ni écriture, ni notification).
-- **Référence de transaction** obligatoire pour Mobile Money et virement (mêmes règles que l'encaissement).
+  effet (ni paiement, ni allocation, ni écriture, ni notification). Depuis le 20/11/2026, le solde
+  est relu hors de la transaction, après le verrou du support (ADR 0069, point 9) : deux sorties
+  simultanées d'un même support ne peuvent plus passer toutes les deux sur un solde qui n'en couvre
+  qu'une, et deux agences qui paient en même temps depuis le même compte comptable ne se bloquent
+  pas.
+- **Référence de transaction** obligatoire pour le Mobile Money seulement ; aucune référence en
+  espèces, virement ou chèque (mêmes règles que l'encaissement, décision du 17/10/2026).
 - **Comptabilité** : crédit du compte du support débité ; paiements antérieurs non reclassés.
 - Code : `DecaissementFicheResolver`, `PaiementFichePaiementController::store()`,
   `FicheComptabilisationService::comptabiliserPaiementFiche()`, `usePaiementFiche`.
@@ -1462,26 +1467,39 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
 
 ### Paiement groupé — « Marquer comme payés » (19/11/2026, ADR 0068)
 
-Voir [ADR 0068](adr/0068-paiement-groupe-des-fiches-de-commission.md). Pour les livreurs payés par
-dépôt Orange Money : la comptabilité fait les dépôts, puis marque tous les bénéficiaires payés en une
-fois au lieu de les payer un par un.
+Voir [ADR 0068](adr/0068-paiement-groupe-des-fiches-de-commission.md). Pour les bénéficiaires payés
+hors de l'application (dépôts Orange Money le plus souvent) : la comptabilité fait les paiements, puis
+marque tous les bénéficiaires payés en une fois au lieu de les payer un par un. Le paiement groupé est
+le miroir du bouton Payer : mêmes moyens, mêmes contrôles, même enregistrement et même écriture
+comptable pour chaque fiche.
 
 - **Écran** : Commissions des livreurs. Une ligne se coche si elle a des parts à valider **ou** une
   fiche due que l'utilisateur peut payer (mêmes conditions que le bouton Payer). La barre de
   sélection affiche **Marquer comme payés (n)** pour les lignes payables et **Valider la sélection**
   pour les lignes à valider.
-- **Fenêtre** : nombre de bénéficiaires et total, mode de paiement (moyens de l'agence qui paie, avec
-  le solde disponible), date de paiement (aujourd'hui par défaut, jamais dans le futur), référence
+- **Fenêtre** : nombre de bénéficiaires et total, mode de paiement, date de paiement (aujourd'hui par défaut, jamais dans le futur), référence
   commune, puis une ligne par bénéficiaire (période, reste à payer, référence propre facultative).
   Confirmer est désactivé si le solde ne couvre pas le total ou s'il manque une référence exigée.
+- **Modes de paiement** : la même liste que le bouton Payer, avec le solde disponible de chaque
+  compte :
+  - **Espèces** : la caisse dédiée de l'utilisateur dans l'agence qui paie ; indisponible sans caisse
+    active.
+  - **Mobile Money** : chaque compte Mobile Money actif de l'agence, quel que soit l'opérateur
+    (Orange Money, MoMo, Kulu, Soutra Money, PayCard).
+  - **Virement** et **Chèque** : chaque compte bancaire actif de l'agence.
+
+  Le compte débité est celui du moyen choisi. Le serveur refuse un compte qui ne correspond pas au
+  mode, par exemple un virement depuis un compte Orange Money.
 - **Ce qui est payé** : pour chaque ligne, la fiche proposée par le bouton Payer (la plus ancienne
   fiche due, `FichePayableResolver`), pour **son reste entier**. Un paiement partiel reste un
   paiement unitaire.
 - **Un seul compte** : toutes les fiches doivent être payées par la même agence. Sinon, message
   « La sélection est payée par plusieurs agences… » : filtrer par agence, puis payer agence par
   agence.
-- **Référence** : la référence propre d'une ligne prime sur la référence commune. Si le moyen exige
-  une référence (Mobile Money, virement), chaque fiche doit en avoir une.
+- **Référence** : la règle du bouton Payer. Elle est obligatoire en Mobile Money, et chaque fiche doit
+  alors en avoir une. Elle n'est demandée ni en espèces ni en virement ou chèque (décision du
+  17/10/2026 : aucune référence bancaire saisie). La référence propre d'une ligne prime sur la
+  référence commune.
 - **Contrôles serveur** (`POST /comptabilite/fiches/paiements/lot`, `PaiementFicheLotController`) :
   organisation, droit de payer chaque fiche (`PaiementFichePolicy::payer`), période validée, fiche
   salarié refusée, une seule agence payeuse, support de cette agence, référence, reste affiché égal au
@@ -1494,6 +1512,43 @@ fois au lieu de les payer un par un.
   comptable, statut de la fiche), avec notification du bénéficiaire et ligne d'historique « (paiement
   groupé) » après validation. Le code partagé est dans `PaiementFicheService`.
 - Tests : `PaiementFicheLotTest`, `PaiementGroupeDialog.spec.ts`, `usePaiementGroupe.spec.ts`.
+
+### Idempotence des paiements (20/11/2026, ADR 0069)
+
+Voir [ADR 0069](adr/0069-idempotence-des-paiements-de-fiche.md). Un même paiement voulu n'est
+enregistré qu'une fois, quel que soit le nombre d'envois (double clic, coupure réseau, nouvelle
+tentative, deux onglets). La règle vaut pour le bouton Payer, paiements partiels compris, et pour le
+paiement groupé, sur toutes les fiches (livreurs, propriétaires, sites, consultants).
+
+- **Clé d'opération** : l'écran génère une clé à l'ouverture de la fenêtre et l'envoie dans l'en-tête
+  `Idempotency-Key`. Il garde la même tant que les choix ne changent pas, et en crée une nouvelle à
+  chaque correction et à chaque ouverture. En paiement groupé, chaque lot a la sienne. Sans clé, le
+  serveur refuse le paiement : « Clé d'opération absente ou invalide : rechargez la page… ».
+- **Même clé, mêmes paramètres** : le serveur restitue le paiement ou le lot d'origine. Rien n'est
+  enregistré une seconde fois : ni paiement, ni écriture comptable, ni sortie de trésorerie, ni
+  historique, ni notification. Le rejeu réussit même si la fiche est désormais soldée.
+- **Même clé, autres paramètres** (montant, fiche donc bénéficiaire, mode, compte, référence, date,
+  note, ou fiches d'un lot) : refus, « Cette opération a déjà servi pour un paiement différent… ».
+- **Deux clés différentes** : ce sont deux paiements voulus. Ils passent l'un après l'autre sous
+  verrou, et le second est refusé s'il dépasse le reste à payer ou le solde du compte.
+- **Stockage** : colonnes `operation_id` et `operation_empreinte` de `paiement_fiche_paiements`, avec
+  une contrainte unique `(fiche_id, operation_id)`. Les paiements antérieurs n'ont pas de clé et
+  restent inchangés.
+- **Coupure après l'enregistrement** (délai dépassé, réponse perdue) : la nouvelle tentative porte
+  la même clé et restitue le paiement déjà enregistré.
+- **Suppression d'un paiement** : tout ou rien, sous le verrou de la fiche. La contrepassation de la
+  pièce, la suppression, la désallocation des parts et l'historique « Paiement annulé » sont écrits
+  ensemble. Si la contrepassation échoue, rien n'est supprimé : « Paiement non supprimé : … ». Deux
+  suppressions simultanées du même paiement ne contrepassent et n'historisent qu'une fois.
+- **Paiement annulé** : la suppression archive le paiement dans `paiement_fiche_paiements_annules`
+  (même identifiant, donc même `source_id` que sa pièce contrepassée) avec sa clé, son empreinte,
+  son détail, l'auteur et la date d'annulation. Sa clé ne recrée jamais de paiement : un renvoi,
+  avec les mêmes paramètres ou d'autres, est refusé (« Le paiement de cette opération a été annulé
+  depuis… »), et un lot dont l'un des paiements a été annulé n'est pas rejoué non plus. Un nouveau
+  paiement de la fiche reste possible : c'est une nouvelle opération, avec une nouvelle clé.
+- Tests : `PaiementFicheIdempotenceTest` (SQLite), `PaiementFicheConcurrenceTest` (MySQL réel,
+  requêtes simultanées), `cleOperation.spec.ts`, `useDecaissement.spec.ts`,
+  `usePaiementGroupe.spec.ts`.
 
 ## Validation automatique des commissions et des périodes (27/09/2026, ADR 0008)
 

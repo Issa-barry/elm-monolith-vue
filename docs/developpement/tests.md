@@ -47,8 +47,8 @@ php artisan test --parallel --processes=4
 
 ### Tests de concurrence (MySQL)
 
-Quatre fichiers `*ConcurrenceTest.php` (stock, factures fournisseur, compte Mobile Money…) prouvent
-le comportement avec deux connexions MySQL réelles. Ils utilisent les connexions `mysql_testing` et
+Cinq fichiers `*ConcurrenceTest.php` (stock, factures fournisseur, compte Mobile Money, paiements
+de fiche, solde des supports de trésorerie) prouvent le comportement avec plusieurs connexions MySQL réelles. Ils utilisent les connexions `mysql_testing` et
 `mysql_testing_2` (`config/database.php`) sur une base dédiée, **`elm_monolithe_concurrency_test`**
 par défaut (variables `DB_TESTING_*`, [configuration.md](../installation/configuration.md#base-de-données)),
 jamais la base de développement.
@@ -56,6 +56,36 @@ jamais la base de développement.
 Sans MySQL accessible ou sans cette base migrée, ils sont **ignorés** (`skipped`), pas en échec :
 c'est le cas en CI. Pour les lancer en local, créer la base puis la migrer, par exemple avec
 `php artisan migrate --database=mysql_testing` (commande non rejouée pour ce document).
+
+Si cette base contient des restes d'anciens tests qui bloquent une migration, en utiliser une neuve
+plutôt que de la vider : `DB_TESTING_CONCURRENCY_DATABASE=<nouvelle base>` (créée vide), puis
+`migrate --database=mysql_testing` et le test, avec la même variable. Pour la remettre en état :
+sauvegarde complète (`mysqldump`), vérification de la sauvegarde par restauration dans une base
+temporaire, puis recréation de cette seule base et `migrate --database=mysql_testing`. Fait le
+20/11/2026 : `FactureFournisseurConcurrenceTest` ne nettoie pas ses données, et ses commandes d'achat
+orphelines bloquaient une migration.
+
+Les tests de paiement préparent l'organisation comme en production avant les requêtes
+simultanées : compteurs de numérotation des journaux (`AmorceNumerotationComptable`) et modules
+enregistrés (`Feature::for($org)->loadAll()`). Sans cela, ils mesureraient le tout premier accès
+d'une organisation neuve, et non le paiement.
+
+`PaiementFicheConcurrenceTest` (ADR 0069) passe par le noyau HTTP, comme un navigateur : chaque
+requête tourne dans un processus (`tests/Support/concurrence_paiement_fiche.php`) qui la retient
+1,5 s juste avant d'écrire ou de supprimer le paiement. Sans verrou, l'autre requête agirait sur un
+état périmé. `SoldeSupportConcurrenceTest` prouve de la même façon la garde de solde commune à
+toutes les sorties d'argent (`garantirSoldeSuffisant()`), sans passer par un écran.
+
+Deux limites d'attente distinctes, avec deux messages :
+
+- **démarrage** (180 s) : chaque processus amorce tout le framework avant de se dire prêt. Un
+  dépassement signale une machine trop chargée, pas un défaut : relancer ;
+- **réponse** (90 s après le départ commun) : au-delà du délai d'attente de verrou de MySQL (50 s).
+  Un verrou bloqué ou un interblocage remonte avant, comme une erreur de la requête (1205, 1213). Un
+  dépassement signale donc un blocage réel.
+
+`CONCURRENCE_TRACE=1` affiche, pour chaque scénario de `PaiementFicheConcurrenceTest`, la durée de
+démarrage des processus et la durée de chaque requête.
 
 ## Vitest
 

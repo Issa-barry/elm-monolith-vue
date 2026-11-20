@@ -374,7 +374,7 @@ class RegularisationVenteTest extends TestCase
     /** Paiement d'une fiche par la route réelle (plafond, allocation, trésorerie). */
     private function payerFiche(PaiementFiche $fiche, float $montant): TestResponse
     {
-        return $this->actingAs($this->user)->post(route('comptabilite.fiches.paiements.store', $fiche), [
+        return $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
             'montant' => $montant,
             'mode_paiement' => 'especes',
             'date_paiement' => now()->toDateString(),

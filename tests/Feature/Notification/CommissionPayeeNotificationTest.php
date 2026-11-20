@@ -38,6 +38,7 @@ use App\Services\Tresorerie\DecaissementFicheResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
@@ -284,7 +285,7 @@ class CommissionPayeeNotificationTest extends TestCase
         $this->equiperPayeurEspeces($this->user, app(DecaissementFicheResolver::class)->siteTresorerie($fiche));
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 10000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => now()->toDateString(),

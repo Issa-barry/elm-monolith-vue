@@ -1,4 +1,5 @@
 import type { EncaissementPayload } from '@/components/payment/moyensEncaissement';
+import { ENTETE_CLE_OPERATION, useCleOperation } from '@/lib/cleOperation';
 import type { TresorerieFiche } from '@/types/commission';
 import { router } from '@inertiajs/vue3';
 import { useToast } from 'primevue/usetoast';
@@ -14,6 +15,9 @@ export function useDecaissement() {
     const visible = ref(false);
     const processing = ref(false);
     const errors = ref<Record<string, string>>({});
+    // Idempotence (ADR 0069) : un double envoi ou une nouvelle tentative du même paiement réutilise
+    // la même clé ; le serveur ne l'enregistre qu'une fois.
+    const cleOperation = useCleOperation();
 
     /** Prépare l'ouverture ; faux si le paiement est impossible (la raison s'affiche en toast). */
     function peutOuvrir(tresorerie: TresorerieFiche): boolean {
@@ -27,55 +31,53 @@ export function useDecaissement() {
             return false;
         }
         errors.value = {};
+        cleOperation.reinitialiser();
         return true;
     }
 
     function envoyer(url: string, payload: EncaissementPayload) {
         processing.value = true;
         errors.value = {};
-        router.post(
-            url,
-            {
-                ...payload,
-                date_paiement: dateDuJour(),
+        const donnees = { ...payload, date_paiement: dateDuJour() };
+        router.post(url, donnees, {
+            headers: {
+                [ENTETE_CLE_OPERATION]: cleOperation.pour({ url, donnees }),
             },
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    visible.value = false;
+            preserveScroll: true,
+            onSuccess: () => {
+                visible.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Paiement enregistré',
+                    life: 3000,
+                });
+            },
+            onError: (e) => {
+                errors.value = e as Record<string, string>;
+                // PaymentCard affiche montant/mode/support/référence sous leurs champs :
+                // les autres erreurs (comptabilisation, date...) ne restent pas silencieuses.
+                const affichees = [
+                    'montant',
+                    'mode_paiement',
+                    'compte_tresorerie_id',
+                    'reference_paiement',
+                ];
+                const autres = Object.entries(errors.value)
+                    .filter(([key]) => !affichees.includes(key))
+                    .map(([, message]) => message);
+                if (autres.length > 0) {
                     toast.add({
-                        severity: 'success',
-                        summary: 'Paiement enregistré',
-                        life: 3000,
+                        severity: 'error',
+                        summary: 'Paiement non enregistré',
+                        detail: autres.join(' '),
+                        life: 6000,
                     });
-                },
-                onError: (e) => {
-                    errors.value = e as Record<string, string>;
-                    // PaymentCard affiche montant/mode/support/référence sous leurs champs :
-                    // les autres erreurs (comptabilisation, date...) ne restent pas silencieuses.
-                    const affichees = [
-                        'montant',
-                        'mode_paiement',
-                        'compte_tresorerie_id',
-                        'reference_paiement',
-                    ];
-                    const autres = Object.entries(errors.value)
-                        .filter(([key]) => !affichees.includes(key))
-                        .map(([, message]) => message);
-                    if (autres.length > 0) {
-                        toast.add({
-                            severity: 'error',
-                            summary: 'Paiement non enregistré',
-                            detail: autres.join(' '),
-                            life: 6000,
-                        });
-                    }
-                },
-                onFinish: () => {
-                    processing.value = false;
-                },
+                }
             },
-        );
+            onFinish: () => {
+                processing.value = false;
+            },
+        });
     }
 
     return { visible, processing, errors, peutOuvrir, envoyer };
