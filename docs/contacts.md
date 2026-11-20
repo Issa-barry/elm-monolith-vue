@@ -512,9 +512,9 @@ sur les ventes, commissions, comptabilité ou logistique.
 
 | Route | Écran |
 | --- | --- |
-| `GET /backoffice/contacts/personnes` | Liste Personnes physiques : nom (repli sur la désignation du livreur, puis le téléphone), téléphone, localisation, badges de fonctions ; filtres fonction, recherche, sous-catégorie, ville ; 25 par page |
+| `GET /backoffice/contacts/personnes` | Liste Personnes physiques : nom (repli sur la désignation du livreur, puis le téléphone), téléphone, localisation, badges de fonctions ; barre de filtres « Catégorie » (la fonction : client, fournisseur, prestataire…), « Sous-catégorie », recherche ; dans le tiroir, catégorie libre et ville ; 25 par page |
 | `GET /backoffice/contacts/personnes/{personne}` | Fiche : Informations, Fonctions (lien vers l'écran existant de la fonction), Entreprises représentées |
-| `GET /backoffice/contacts/entreprises` | Liste Entreprises : raison sociale, téléphone, ville, fonctions, interlocuteur principal, statut ; filtres statut, fonction, recherche, sous-catégorie, ville |
+| `GET /backoffice/contacts/entreprises` | Liste Entreprises : raison sociale, téléphone, ville, fonctions, interlocuteur principal, statut ; barre de filtres statut, « Catégorie » (la fonction), « Sous-catégorie », recherche ; dans le tiroir, catégorie libre et ville |
 | `GET /backoffice/contacts/entreprises/{entreprise}` | Fiche : Informations, Fonctions, Interlocuteurs (lecture) |
 
 Menu : « Entreprises » et « Personnes physiques » en tête de Contacts, visibles avec
@@ -621,7 +621,7 @@ multiple, `qualification_ids[]`) ; liste des prestataires — un badge par quali
 
 Menu Contacts : lien « Catégories de contacts » (avec `contacts.gerer_categories`). Fiches
 Personne et Entreprise : bloc « Catégories » dans l'onglet Informations. Listes : filtre
-« Catégorie ».
+« Catégorie libre » (dans le tiroir ; le filtre « Catégorie » de la barre est la fonction, ADR 0060).
 
 ## Permissions
 

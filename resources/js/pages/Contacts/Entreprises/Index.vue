@@ -58,10 +58,17 @@ const filterFields = computed<FilterField[]>(() => [
     },
     {
         key: 'fonction',
-        label: 'Fonction',
+        label: 'Catégorie',
         type: 'select',
         inline: true,
         options: props.options.fonctions,
+    },
+    {
+        key: 'sous_categorie',
+        label: 'Sous-catégorie',
+        type: 'select',
+        inline: true,
+        options: props.options.sous_categories,
     },
     {
         key: 'recherche',
@@ -71,14 +78,8 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'Raison sociale, téléphone, NIF...',
     },
     {
-        key: 'sous_categorie',
-        label: 'Sous-catégorie',
-        type: 'select',
-        options: props.options.sous_categories,
-    },
-    {
         key: 'categorie',
-        label: 'Catégorie',
+        label: 'Catégorie libre',
         type: 'select',
         options: props.options.categories,
     },
