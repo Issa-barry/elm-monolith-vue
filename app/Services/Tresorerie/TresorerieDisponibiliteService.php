@@ -262,7 +262,7 @@ class TresorerieDisponibiliteService
     public function garantirSoldeSuffisant(string $supportId, float $montant, ?Carbon $date = null, string $operation = 'un envoi'): CompteTresorerie
     {
         $support = CompteTresorerie::whereKey($supportId)->lockForUpdate()->firstOrFail();
-        $solde = $this->soldePourSupport($support, $date ?? now());
+        $solde = $this->soldeVerrouille($support, $date ?? now());
 
         if ($montant > $solde + 0.004) {
             $disponible = number_format(max($solde, 0), 0, ',', ' ');
@@ -273,6 +273,29 @@ class TresorerieDisponibiliteService
         }
 
         return $support;
+    }
+
+    /**
+     * Même solde que soldePourSupport(), relu par une lecture verrouillante avec jointure. Sous
+     * InnoDB REPEATABLE READ, une lecture simple ou une sous-requête (whereHas) lit la vue de la
+     * transaction, figée à sa première lecture. Si l'appelant a déjà lu quoi que ce soit avant
+     * d'attendre le verrou du support, elle ignorerait la sortie que l'autre transaction vient de
+     * valider : deux lots simultanés passaient alors tous deux sur un compte qui n'en couvrait qu'un
+     * (preuve : PaiementFicheConcurrenceTest). Le FOR UPDATE lit la dernière version validée.
+     */
+    private function soldeVerrouille(CompteTresorerie $support, Carbon $date): float
+    {
+        $solde = EcritureComptable::query()
+            ->join('compta_pieces', 'compta_pieces.id', '=', 'compta_ecritures.piece_comptable_id')
+            ->where('compta_ecritures.compte_comptable_id', $support->compte_comptable_id)
+            ->where('compta_ecritures.site_id', $support->site_id)
+            ->where('compta_pieces.organization_id', $support->organization_id)
+            ->whereDate('compta_pieces.date_piece', '<=', $date->toDateString())
+            ->lockForUpdate()
+            ->selectRaw('COALESCE(SUM(compta_ecritures.debit), 0) - COALESCE(SUM(compta_ecritures.credit), 0) as solde')
+            ->value('solde');
+
+        return round((float) $solde, 2);
     }
 
     public function soldePourSupport(CompteTresorerie $support, ?Carbon $date = null): float

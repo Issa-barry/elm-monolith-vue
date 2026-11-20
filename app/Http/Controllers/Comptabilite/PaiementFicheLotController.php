@@ -5,12 +5,16 @@ namespace App\Http\Controllers\Comptabilite;
 use App\Enums\ModePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\PaiementFiche;
+use App\Models\PaiementFichePaiement;
 use App\Services\Commission\PaiementFicheService;
 use App\Services\PeriodePayabilityChecker;
 use App\Services\Tresorerie\DecaissementFicheResolver;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
+use App\Support\Paiements\OperationPaiement;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -62,7 +66,30 @@ class PaiementFicheLotController extends Controller
 
         foreach ($fiches as $fiche) {
             abort_unless($user->can('payer', $fiche), 403, "Vous n'avez pas le droit de payer la fiche de {$fiche->beneficiaire_nom}.");
+        }
 
+        // Idempotence (ADR 0069) : une clé par lot, liée à l'ensemble de ses paramètres. Le rejeu
+        // d'un lot déjà passé restitue son résultat, avant les contrôles qui dépendent de l'état
+        // actuel des fiches (reste à payer, période).
+        $operation = OperationPaiement::depuisRequete($request, [
+            'type' => 'paiement_fiches_lot',
+            'mode_paiement' => $data['mode_paiement'],
+            'compte_tresorerie_id' => $data['compte_tresorerie_id'] ?? null,
+            'reference_paiement' => $data['reference_paiement'] ?? null,
+            'date_paiement' => $data['date_paiement'],
+            'note' => $data['note'] ?? null,
+            'fiches' => $lignes->sortKeys()->map(fn (array $l) => [
+                'id' => $l['id'],
+                'montant' => OperationPaiement::montant($l['montant']),
+                'reference_paiement' => $l['reference_paiement'] ?? null,
+            ])->values()->all(),
+        ]);
+        $dejaEnregistres = $paiements->paiementsDeLOperation($user->organization_id, $operation);
+        if ($dejaEnregistres->isNotEmpty()) {
+            return $this->resultat($dejaEnregistres, $fiches, rejeu: true);
+        }
+
+        foreach ($fiches as $fiche) {
             if ($fiche->beneficiaire_type === 'salarie') {
                 throw ValidationException::withMessages(['fiches' => PaiementFichePaiementController::MESSAGE_SALARIE]);
             }
@@ -91,10 +118,16 @@ class PaiementFicheLotController extends Controller
         }
 
         try {
-            [$payes, $dejaPayees] = DB::transaction(function () use ($fiches, $lignes, $references, $support, $data, $paiements) {
+            [$payes, $dejaPayees] = DB::transaction(function () use ($fiches, $lignes, $references, $support, $data, $paiements, $operation) {
                 // Ordre fixe des verrous : deux lots concurrents ne s'interbloquent pas.
                 $restants = PaiementFiche::whereIn('id', $fiches->keys())->orderBy('id')->lockForUpdate()->get()
                     ->mapWithKeys(fn (PaiementFiche $f) => [$f->id => $f->montant_restant]);
+
+                // Relu sous les verrous : l'envoi jumeau de ce lot a pu passer pendant l'attente.
+                $jumeaux = $paiements->paiementsDeLOperation($fiches->first()->organization_id, $operation);
+                if ($jumeaux->isNotEmpty()) {
+                    return [$jumeaux->map(fn ($p) => [$fiches[$p->fiche_id], $p])->all(), null];
+                }
 
                 $aPayer = [];
                 $dejaPayees = [];
@@ -127,13 +160,25 @@ class PaiementFicheLotController extends Controller
                         'reference_paiement' => $references[$id],
                         'date_paiement' => $data['date_paiement'],
                         'note' => $data['note'] ?? null,
-                    ])];
+                    ], $operation)];
                 }
 
                 return [$payes, $dejaPayees];
             });
+        } catch (UniqueConstraintViolationException $e) {
+            // Dernier filet (contrainte pfp_fiche_operation_unique) : l'envoi jumeau est passé.
+            $jumeaux = $paiements->paiementsDeLOperation($user->organization_id, $operation);
+            if ($jumeaux->isEmpty()) {
+                throw $e;
+            }
+
+            return $this->resultat($jumeaux, $fiches, rejeu: true);
         } catch (\RuntimeException $e) {
             return response()->json(['message' => "Paiement non enregistré : {$e->getMessage()}"], 422);
+        }
+
+        if ($dejaPayees === null) {
+            return $this->resultat(collect($payes)->map(fn (array $p) => $p[1]), $fiches, rejeu: true);
         }
 
         foreach ($payes as [$fiche, $paiement]) {
@@ -144,6 +189,26 @@ class PaiementFicheLotController extends Controller
             'payees' => count($payes),
             'montant_total' => (float) collect($payes)->sum(fn (array $p) => (float) $p[1]->montant),
             'deja_payees' => $dejaPayees,
+            'rejeu' => false,
+        ]);
+    }
+
+    /**
+     * Résultat d'un lot déjà enregistré par cette opération : ses paiements d'origine, et comme
+     * « déjà payées » les fiches du lot qu'elle n'a pas payées (elles l'étaient déjà).
+     *
+     * @param  Collection<int, PaiementFichePaiement>  $paiements
+     * @param  Collection<string, PaiementFiche>  $fiches
+     */
+    private function resultat(Collection $paiements, Collection $fiches, bool $rejeu): JsonResponse
+    {
+        $payees = $paiements->pluck('fiche_id')->all();
+
+        return response()->json([
+            'payees' => $paiements->count(),
+            'montant_total' => (float) $paiements->sum(fn (PaiementFichePaiement $p) => (float) $p->montant),
+            'deja_payees' => $fiches->reject(fn (PaiementFiche $f) => in_array($f->id, $payees, true))->pluck('beneficiaire_nom')->values()->all(),
+            'rejeu' => $rejeu,
         ]);
     }
 

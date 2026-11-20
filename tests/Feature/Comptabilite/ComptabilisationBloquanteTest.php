@@ -23,6 +23,7 @@ use App\Models\PaiementFiche;
 use App\Models\Personne;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -92,7 +93,7 @@ class ComptabilisationBloquanteTest extends TestCase
 
         $this->casserMapping('paiement_livreur');
 
-        $response = $this->actingAs($this->user)->post(route('comptabilite.fiches.paiements.store', $fiche), [
+        $response = $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
             'montant' => 50_000,
             'mode_paiement' => 'especes',
             'date_paiement' => '2026-08-05',

@@ -25,6 +25,8 @@ class PaiementFichePaiement extends Model
         'compte_tresorerie_id',
         'date_paiement',
         'note',
+        'operation_id',
+        'operation_empreinte',
         'created_by',
     ];
 

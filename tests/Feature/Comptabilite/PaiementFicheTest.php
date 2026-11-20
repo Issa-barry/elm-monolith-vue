@@ -13,6 +13,7 @@ use App\Models\PaiementFichePaiement;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
@@ -107,7 +108,7 @@ class PaiementFicheTest extends TestCase
         $fiche = $this->makeFiche();
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 100000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => '2026-06-15',
@@ -126,7 +127,7 @@ class PaiementFicheTest extends TestCase
         $fiche = $this->makeFiche();
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 100000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => '2026-06-15',
@@ -145,7 +146,7 @@ class PaiementFicheTest extends TestCase
         $this->alimenterCaisse($banque, 1_000_000);
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 300000,
                 'mode_paiement' => 'virement',
                 'compte_tresorerie_id' => $banque->id,
@@ -165,7 +166,7 @@ class PaiementFicheTest extends TestCase
         $fiche = $this->makeFiche();
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 999999,
                 'mode_paiement' => 'especes',
                 'date_paiement' => '2026-06-15',
@@ -178,7 +179,7 @@ class PaiementFicheTest extends TestCase
         $fiche = $this->makeFiche();
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'mode_paiement' => 'especes',
                 'date_paiement' => '2026-06-15',
             ])
@@ -234,7 +235,7 @@ class PaiementFicheTest extends TestCase
         $fiche = $this->makeFiche();
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 300000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => '2026-06-15',
@@ -260,7 +261,7 @@ class PaiementFicheTest extends TestCase
         $fiche = $this->makeFiche(statutPeriode: StatutPeriodePaiement::BROUILLON);
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 100000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => '2026-06-15',
@@ -275,7 +276,7 @@ class PaiementFicheTest extends TestCase
         $fiche = $this->makeFiche(statutPeriode: StatutPeriodePaiement::CALCULEE);
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 100000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => '2026-06-15',
@@ -290,7 +291,7 @@ class PaiementFicheTest extends TestCase
         $fiche = $this->makeFiche(statutPeriode: StatutPeriodePaiement::CLOTUREE);
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 100000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => '2026-06-15',
@@ -305,7 +306,7 @@ class PaiementFicheTest extends TestCase
         $fiche = $this->makeFiche();
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 300000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => '2026-06-15',
