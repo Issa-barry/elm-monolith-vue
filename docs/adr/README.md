@@ -90,5 +90,6 @@ amende ou remplace.
 | [0066](0066-qualification-commerciale-des-clients-crees-a-l-inscription.md) | Qualification commerciale des clients créés à l'inscription | 2026-11-16 | Accepté |
 | [0067](0067-colonne-primes-et-avantages-transmission-paie.md) | Colonne « Primes et avantages » de la transmission de paie | 2026-11-17 | Accepté |
 | [0068](0068-paiement-groupe-des-fiches-de-commission.md) | Paiement groupé des fiches de commission | 2026-11-19 | Accepté |
+| [0069](0069-idempotence-des-paiements-de-fiche.md) | Idempotence des paiements de fiche | 2026-11-20 | Accepté |
 
-Dernier numéro attribué : **0068**. Le prochain ADR sera le **0069**.
+Dernier numéro attribué : **0069**. Le prochain ADR sera le **0070**.

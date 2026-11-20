@@ -325,7 +325,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         $fiche = PaiementFiche::where('periode_id', $periode->id)->where('beneficiaire_id', $livreur->id)->firstOrFail();
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 4000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => now()->toDateString(),
@@ -344,7 +344,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
 
         // Paiement complémentaire jusqu'au solde restant.
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 6000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => now()->toDateString(),
@@ -366,7 +366,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
 
         $fiche = PaiementFiche::where('periode_id', $periode->id)->where('beneficiaire_id', $livreur->id)->firstOrFail();
 
-        $this->actingAs($this->user)->post(route('comptabilite.fiches.paiements.store', $fiche), [
+        $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
             'montant' => 10000,
             'mode_paiement' => 'especes',
             'date_paiement' => now()->toDateString(),
@@ -420,7 +420,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         // Le bouton Payer de la ligne poste sur la fiche : même chaîne que l'écran fiche,
         // la part est allouée et la ligne n'est plus payable une fois soldée.
         $this->actingAs($this->user)
-            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            ->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
                 'montant' => 10_000,
                 'mode_paiement' => 'especes',
                 'date_paiement' => now()->toDateString(),

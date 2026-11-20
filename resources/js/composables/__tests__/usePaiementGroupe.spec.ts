@@ -122,6 +122,44 @@ describe('usePaiementGroupe', () => {
         expect(reload).toHaveBeenCalled();
     });
 
+    it('envoie une clé par lot, reprise telle quelle pour un renvoi identique', async () => {
+        let echec = true;
+        const fetchMock = vi.fn((_url: string, init: RequestInit) => {
+            const n = JSON.parse(init.body as string).fiches.length;
+            return echec
+                ? Promise.reject(new TypeError('Failed to fetch'))
+                : reponse(true, {
+                      payees: n,
+                      montant_total: n * 1000,
+                      deja_payees: [],
+                  });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const groupe = usePaiementGroupe(vi.fn());
+        const fiches = Array.from({ length: LOT_PAIEMENT_GROUPE + 1 }, (_, i) =>
+            fiche(i),
+        );
+        const cle = (appel: number) =>
+            (fetchMock.mock.calls[appel][1].headers as Record<string, string>)[
+                'Idempotency-Key'
+            ];
+
+        groupe.open(fiches);
+        // Coupure réseau : la réponse du 1er lot est perdue, l'utilisateur relance à l'identique.
+        await groupe.submit(payload);
+        echec = false;
+        await groupe.submit(payload);
+
+        expect(cle(0)).toMatch(/^[0-9a-f-]{36}\.0$/);
+        expect(cle(1)).toBe(cle(0));
+        expect(cle(2)).toBe(cle(0).replace(/\.0$/, '.1'));
+
+        // Paramètres changés : nouvelle opération.
+        groupe.open(fiches);
+        await groupe.submit({ ...payload, date_paiement: '2026-11-18' });
+        expect(cle(3)).not.toBe(cle(0));
+    });
+
     it('n’envoie aucun lot après un lot refusé', async () => {
         const fetchMock = vi.fn((_url: string, init: RequestInit) => {
             const n = JSON.parse(init.body as string).fiches.length;

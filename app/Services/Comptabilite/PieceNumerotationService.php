@@ -24,12 +24,19 @@ class PieceNumerotationService
             'exercice_comptable_id' => $exercice->id,
         ];
 
-        DB::table('compta_piece_sequences')->insertOrIgnore($cle + ['dernier_numero' => 0]);
-
-        $sequence = DB::table('compta_piece_sequences')
-            ->where($cle)
-            ->lockForUpdate()
-            ->first();
+        // Verrou exclusif d'abord. Un INSERT IGNORE sur une ligne existante y pose un verrou partagé
+        // gardé jusqu'à la fin de la transaction : deux numérotations simultanées du même journal
+        // tenaient chacune ce verrou puis réclamaient l'exclusif, et MySQL annulait l'une des deux
+        // (preuve : SoldeSupportConcurrenceTest). L'insertion ne sert plus qu'à la première pièce
+        // du journal dans l'exercice ; deux premières pièces simultanées peuvent encore
+        // s'interbloquer (verrou d'intervalle sur la ligne absente). Créer la ligne hors de la
+        // transaction n'est pas possible : sa clé étrangère attendrait le verrou que la transaction
+        // tient sur l'exercice.
+        $sequence = DB::table('compta_piece_sequences')->where($cle)->lockForUpdate()->first();
+        if ($sequence === null) {
+            DB::table('compta_piece_sequences')->insertOrIgnore($cle + ['dernier_numero' => 0]);
+            $sequence = DB::table('compta_piece_sequences')->where($cle)->lockForUpdate()->first();
+        }
 
         $numero = (int) $sequence->dernier_numero + 1;
 

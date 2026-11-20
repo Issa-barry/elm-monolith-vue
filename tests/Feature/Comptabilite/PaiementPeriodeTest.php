@@ -902,7 +902,7 @@ class PaiementPeriodeTest extends TestCase
         $siteTresorerie = app(DecaissementFicheResolver::class)->siteTresorerie($fiche);
         $this->assertNotNull($siteTresorerie, 'La fiche doit avoir une agence de trésorerie (agence ou site central de trésorerie).');
         $this->equiperPayeurEspeces($this->user, $siteTresorerie);
-        $this->actingAs($this->user)->post(route('comptabilite.fiches.paiements.store', $fiche), [
+        $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), [
             'montant' => 300000,
             'mode_paiement' => 'especes',
             'date_paiement' => '2026-06-15',

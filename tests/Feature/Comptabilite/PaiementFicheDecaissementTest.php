@@ -78,7 +78,7 @@ class PaiementFicheDecaissementTest extends TestCase
 
     private function payer(PaiementFiche $fiche, array $donnees)
     {
-        return $this->actingAs($this->user)->post(route('comptabilite.fiches.paiements.store', $fiche), array_merge([
+        return $this->actingAs($this->user)->withHeader('Idempotency-Key', (string) Str::ulid())->post(route('comptabilite.fiches.paiements.store', $fiche), array_merge([
             'date_paiement' => now()->toDateString(),
         ], $donnees));
     }
