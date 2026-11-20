@@ -83,6 +83,10 @@ class PaiementFicheConcurrenceTest extends TestCase
         $this->agence = $this->user->sites()->wherePivot('is_default', true)->firstOrFail();
         $this->orange = $this->creerSupportAgence($this->agence->id, 'mobile_money', '561100', 'orange_money');
         $this->amorcerNumerotation($this->org->id);
+        // Modules de l'organisation enregistrés d'avance : sinon les deux premières requêtes d'une
+        // organisation neuve les enregistrent en même temps et s'interbloquent sur `features`
+        // (vu le 20/11/2026), cas sans rapport avec le paiement prouvé ici.
+        Feature::for($this->org)->loadAll();
     }
 
     protected function tearDown(): void

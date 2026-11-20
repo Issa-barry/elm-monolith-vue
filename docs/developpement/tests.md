@@ -59,8 +59,16 @@ c'est le cas en CI. Pour les lancer en local, créer la base puis la migrer, par
 
 Si cette base contient des restes d'anciens tests qui bloquent une migration, en utiliser une neuve
 plutôt que de la vider : `DB_TESTING_CONCURRENCY_DATABASE=<nouvelle base>` (créée vide), puis
-`migrate --database=mysql_testing` et le test, avec la même variable (vérifié le 20/11/2026 pour
-`PaiementFicheConcurrenceTest`).
+`migrate --database=mysql_testing` et le test, avec la même variable. Pour la remettre en état :
+sauvegarde complète (`mysqldump`), vérification de la sauvegarde par restauration dans une base
+temporaire, puis recréation de cette seule base et `migrate --database=mysql_testing`. Fait le
+20/11/2026 : `FactureFournisseurConcurrenceTest` ne nettoie pas ses données, et ses commandes d'achat
+orphelines bloquaient une migration.
+
+Les tests de paiement préparent l'organisation comme en production avant les requêtes
+simultanées : compteurs de numérotation des journaux (`AmorceNumerotationComptable`) et modules
+enregistrés (`Feature::for($org)->loadAll()`). Sans cela, ils mesureraient le tout premier accès
+d'une organisation neuve, et non le paiement.
 
 `PaiementFicheConcurrenceTest` (ADR 0069) passe par le noyau HTTP, comme un navigateur : chaque
 requête tourne dans un processus (`tests/Support/concurrence_paiement_fiche.php`) qui la retient
