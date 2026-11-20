@@ -80,6 +80,7 @@ use App\Http\Controllers\Comptabilite\InterAgencesController;
 use App\Http\Controllers\Comptabilite\JournalFinancierController;
 use App\Http\Controllers\Comptabilite\MouvementFondsController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
+use App\Http\Controllers\Comptabilite\PaiementFicheLotController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
 use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
 use App\Http\Controllers\Comptabilite\RemisesAgencesController;
@@ -1163,6 +1164,8 @@ Route::prefix('backoffice')->group(function () {
             Route::get('fiches/{fiche}', [PaiementFicheController::class, 'show'])->name('fiches.show');
             Route::get('fiches/{fiche}/pdf', [PaiementFicheController::class, 'exportPdf'])->name('fiches.pdf');
 
+            // Paiement groupé (ADR 0068) : plusieurs fiches réglées hors application, marquées payées en une fois.
+            Route::post('fiches/paiements/lot', PaiementFicheLotController::class)->name('fiches.paiements.lot');
             Route::post('fiches/{fiche}/paiements', [PaiementFichePaiementController::class, 'store'])->name('fiches.paiements.store');
             Route::delete('fiches-paiements/{paiement}', [PaiementFichePaiementController::class, 'destroy'])->name('fiches.paiements.destroy');
 
