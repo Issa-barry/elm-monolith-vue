@@ -2,14 +2,11 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
-use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
-use App\Services\AuditLogService;
 use App\Services\Commission\PaiementFicheService;
-use App\Services\CommissionEnveloppePartAllocationService;
 use App\Services\PeriodePayabilityChecker;
 use App\Services\Tresorerie\DecaissementFicheResolver;
 use App\Support\Paiements\OperationPaiement;
@@ -108,7 +105,7 @@ class PaiementFichePaiementController extends Controller
         return back()->with('success', self::MESSAGE_SUCCES);
     }
 
-    public function destroy(PaiementFichePaiement $paiement): RedirectResponse
+    public function destroy(PaiementFichePaiement $paiement, PaiementFicheService $paiements): RedirectResponse
     {
         $fiche = $paiement->fiche;
         $this->authorize('payer', $fiche);
@@ -119,17 +116,13 @@ class PaiementFichePaiementController extends Controller
             abort(422, $e->getMessage());
         }
 
-        $montantFmt = number_format((float) $paiement->montant, 0, ',', "\u{202F}");
-        app(AuditLogService::class)->record($fiche, AuditEvent::PAYMENT_CANCELLED, auth()->user(), null, null, [
-            'module' => 'fiches_paiement',
-            'site_id' => $fiche->site_id,
-            'montant' => (float) $paiement->montant,
-            'description' => "Paiement de {$montantFmt} GNF annulé pour {$fiche->beneficiaire_nom}",
-        ]);
-
-        CommissionEnveloppePartAllocationService::desallouer($paiement);
-
-        $paiement->delete();
+        // Tout ou rien : sans contrepassation de la pièce, ni suppression, ni historique, ni
+        // désallocation. Un second envoi simultané trouve le paiement déjà supprimé et n'écrit rien.
+        try {
+            DB::transaction(fn () => $paiements->supprimer($paiement, auth()->user()));
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Paiement non supprimé : {$e->getMessage()}"]);
+        }
 
         return back()->with('success', 'Paiement supprimé.');
     }

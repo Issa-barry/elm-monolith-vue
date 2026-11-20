@@ -11,19 +11,23 @@ use App\Models\CompteTresorerie;
 use App\Models\Livreur;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
+use App\Models\PaiementFichePaiementAnnule;
 use App\Models\PaiementPeriode;
 use App\Models\PieceComptable;
 use App\Models\Site;
 use App\Models\User;
 use App\Notifications\CommissionPayeeNotification;
+use App\Services\Commission\PaiementFicheService;
 use App\Services\Tresorerie\TresorerieDisponibiliteService;
 use App\Support\Paiements\OperationPaiement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Laravel\Pennant\Feature;
+use RuntimeException;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -34,7 +38,7 @@ use Tests\TestCase;
  * opération (en-tête Idempotency-Key) n'enregistre jamais deux paiements, ni deux écritures, ni
  * deux mouvements de trésorerie, ni deux notifications ; rejouée, elle restitue son résultat ;
  * réutilisée avec d'autres paramètres, elle est refusée. La concurrence réelle (verrous MySQL) est
- * vérifiée à part : tests/Concurrence.
+ * vérifiée à part : PaiementFicheConcurrenceTest.
  */
 class PaiementFicheIdempotenceTest extends TestCase
 {
@@ -335,5 +339,149 @@ class PaiementFicheIdempotenceTest extends TestCase
         $this->payerLot([$a], $cle)->assertOk()->assertJson(['payees' => 1, 'rejeu' => false]);
 
         $this->assertUnSeulPaiement($a, 300_000);
+    }
+
+    // ── Suppression d'un paiement ─────────────────────────────────────────────
+
+    private function supprimer(PaiementFichePaiement $paiement): TestResponse
+    {
+        return $this->actingAs($this->user)->delete(route('comptabilite.fiches.paiements.destroy', $paiement));
+    }
+
+    private function contrepassations(PaiementFichePaiement $paiement): int
+    {
+        return PieceComptable::where('source_id', $paiement->id)->whereNotNull('piece_origine_id')->count();
+    }
+
+    private function annulations(PaiementFiche $fiche): int
+    {
+        return AuditLog::where('auditable_id', $fiche->id)->where('event_code', AuditEvent::PAYMENT_CANCELLED->value)->count();
+    }
+
+    public function test_suppression_contrepasse_une_fois_et_rend_le_solde(): void
+    {
+        $fiche = $this->fiche();
+        $this->payer($fiche, (string) Str::uuid())->assertSessionHasNoErrors();
+        $paiement = PaiementFichePaiement::where('fiche_id', $fiche->id)->firstOrFail();
+
+        $this->supprimer($paiement)->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $this->assertModelMissing($paiement);
+        $this->assertSame(1, $this->contrepassations($paiement));
+        $this->assertSame(1, $this->annulations($fiche));
+        $this->assertSame(0.0, (float) $fiche->fresh()->montant_paye);
+        $this->assertSame(2_000_000.0, $this->solde());
+    }
+
+    public function test_suppression_dont_la_contrepassation_echoue_nannule_rien(): void
+    {
+        $fiche = $this->fiche();
+        $this->payer($fiche, (string) Str::uuid())->assertSessionHasNoErrors();
+        $paiement = PaiementFichePaiement::where('fiche_id', $fiche->id)->firstOrFail();
+        // Échec après la contrepassation et la suppression : tout doit être annulé, historique compris.
+        PaiementFichePaiement::deleted(fn () => throw new RuntimeException('journal indisponible'));
+
+        $this->supprimer($paiement)->assertSessionHasErrors(['comptabilisation' => 'Paiement non supprimé : journal indisponible']);
+
+        $this->assertModelExists($paiement);
+        $this->assertSame(0, $this->contrepassations($paiement));
+        $this->assertSame(0, $this->annulations($fiche));
+        $this->assertSame(50_000.0, (float) $fiche->fresh()->montant_paye);
+        $this->assertSame(1_950_000.0, $this->solde());
+    }
+
+    public function test_suppression_deja_faite_par_un_envoi_concurrent_nest_pas_rejouee(): void
+    {
+        $fiche = $this->fiche();
+        $this->payer($fiche, (string) Str::uuid())->assertSessionHasNoErrors();
+        // Deux envois chargent le même paiement avant que le premier ne le supprime.
+        $premier = PaiementFichePaiement::where('fiche_id', $fiche->id)->firstOrFail();
+        $second = PaiementFichePaiement::findOrFail($premier->id);
+        $service = app(PaiementFicheService::class);
+
+        $this->assertTrue(DB::transaction(fn () => $service->supprimer($premier, $this->user)));
+        $this->assertFalse(DB::transaction(fn () => $service->supprimer($second, $this->user)));
+
+        $this->assertSame(1, $this->contrepassations($premier));
+        $this->assertSame(1, $this->annulations($fiche));
+        $this->assertSame(2_000_000.0, $this->solde());
+    }
+
+    public function test_paiement_annule_ne_peut_pas_etre_recree_par_sa_cle(): void
+    {
+        $fiche = $this->fiche();
+        $cle = (string) Str::uuid();
+        $this->payer($fiche, $cle)->assertSessionHasNoErrors();
+        $this->supprimer(PaiementFichePaiement::where('fiche_id', $fiche->id)->firstOrFail())->assertSessionHasNoErrors();
+
+        // Ancienne requête rejouée (onglet resté ouvert, nouvelle tentative tardive) : jamais recréée.
+        $this->payer($fiche, $cle)->assertSessionHasErrors(['operation' => OperationPaiement::MESSAGE_OPERATION_ANNULEE]);
+        // Même clé avec d'autres paramètres : refusée aussi.
+        $this->payer($fiche, $cle, ['montant' => 20_000])->assertSessionHasErrors(['operation' => OperationPaiement::MESSAGE_OPERATION_ANNULEE]);
+
+        $this->assertSame(0, PaiementFichePaiement::where('fiche_id', $fiche->id)->count());
+        $this->assertSame(2_000_000.0, $this->solde());
+        // Une nouvelle opération (nouvelle clé) reste possible : c'est un nouveau paiement voulu.
+        $this->payer($fiche, (string) Str::uuid())->assertSessionHasNoErrors();
+        $this->assertSame(1_950_000.0, $this->solde());
+    }
+
+    public function test_paiement_annule_garde_son_identite_et_son_detail(): void
+    {
+        $fiche = $this->fiche();
+        $cle = (string) Str::uuid();
+        $this->payer($fiche, $cle)->assertSessionHasNoErrors();
+        $paiement = PaiementFichePaiement::where('fiche_id', $fiche->id)->firstOrFail();
+
+        $this->supprimer($paiement)->assertSessionHasNoErrors();
+
+        $archive = PaiementFichePaiementAnnule::findOrFail($paiement->id);
+        $this->assertSame($fiche->id, $archive->fiche_id);
+        $this->assertSame($this->org->id, $archive->organization_id);
+        $this->assertSame(50_000.0, (float) $archive->montant);
+        $this->assertSame('mobile_money', $archive->mode_paiement);
+        $this->assertSame('orange_money', $archive->moyen_paiement_detail);
+        $this->assertSame('OM-1001', $archive->reference_paiement);
+        $this->assertSame($this->orange->id, $archive->compte_tresorerie_id);
+        $this->assertSame($cle, $archive->operation_id);
+        $this->assertSame($paiement->operation_empreinte, $archive->operation_empreinte);
+        $this->assertSame($this->user->id, $archive->created_by);
+        $this->assertSame($this->user->id, $archive->annule_par);
+        $this->assertNotNull($archive->paye_le);
+        $this->assertNotNull($archive->annule_le);
+        // Même identifiant que la pièce contrepassée : le lien comptable reste lisible.
+        $this->assertSame(2, PieceComptable::where('source_id', $archive->id)->count());
+    }
+
+    public function test_suppression_echouee_ne_laisse_aucune_archive(): void
+    {
+        $fiche = $this->fiche();
+        $cle = (string) Str::uuid();
+        $this->payer($fiche, $cle)->assertSessionHasNoErrors();
+        PaiementFichePaiement::deleted(fn () => throw new RuntimeException('journal indisponible'));
+
+        $this->supprimer(PaiementFichePaiement::where('fiche_id', $fiche->id)->firstOrFail())->assertSessionHasErrors('comptabilisation');
+
+        $this->assertDatabaseCount('paiement_fiche_paiements_annules', 0);
+        // Le paiement existe toujours : son rejeu restitue le résultat initial.
+        $this->payer($fiche, $cle)->assertSessionHasNoErrors()->assertSessionHas('success');
+        $this->assertSame(1, PaiementFichePaiement::where('fiche_id', $fiche->id)->count());
+    }
+
+    public function test_lot_dont_un_paiement_a_ete_annule_nest_jamais_rejoue(): void
+    {
+        $a = $this->fiche(300_000);
+        $b = $this->fiche(200_000);
+        $cle = (string) Str::uuid().'.0';
+        $this->payerLot([$a, $b], $cle)->assertOk()->assertJson(['payees' => 2]);
+        $this->supprimer(PaiementFichePaiement::where('fiche_id', $a->id)->firstOrFail())->assertSessionHasNoErrors();
+
+        $this->payerLot([$a, $b], $cle)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['operation' => OperationPaiement::MESSAGE_OPERATION_ANNULEE]);
+
+        $this->assertSame(0, PaiementFichePaiement::where('fiche_id', $a->id)->count());
+        $this->assertSame(1, PaiementFichePaiement::where('fiche_id', $b->id)->count());
+        $this->assertSame(1_800_000.0, $this->solde());
     }
 }

@@ -18,6 +18,8 @@ final class OperationPaiement
 
     public const MESSAGE_CLE_REUTILISEE = "Cette opération a déjà servi pour un paiement différent : rechargez la page puis recommencez. Aucun paiement n'a été enregistré.";
 
+    public const MESSAGE_OPERATION_ANNULEE = "Le paiement de cette opération a été annulé depuis : rechargez la page pour voir l'état de la fiche. Aucun paiement n'a été enregistré.";
+
     private function __construct(
         public readonly string $cle,
         public readonly string $empreinte,

@@ -7,6 +7,7 @@ use App\Enums\StatutMouvementFonds;
 use App\Models\CompteTresorerie;
 use App\Models\EcritureComptable;
 use App\Models\MouvementFonds;
+use App\Support\Database\ConnexionHorsTransaction;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -242,14 +243,6 @@ class TresorerieDisponibiliteService
     }
 
     /**
-     * Solde d'UN support (débit - crédit de son compte sur son site), source de
-     * vérité = grand livre. Sans $date, toutes les pièces sont comptées, y
-     * compris postdatées : sert à vérifier qu'une caisse est réellement vide
-     * avant de la désactiver. Pour une caisse dédiée à un agent, le compte est
-     * propre à cette caisse ; pour un support d'agence, même limite que
-     * situationParSupport() si deux supports d'un site partagent leur compte.
-     */
-    /**
      * Toute sortie d'argent d'un support (mouvement de fonds, paiement de fiche) passe ici : le
      * support est verrouillé (`lockForUpdate()`) et son solde relu depuis le grand livre, jamais
      * transmis par l'appelant — deux sorties successives ou concurrentes relisent chacune le solde
@@ -262,7 +255,7 @@ class TresorerieDisponibiliteService
     public function garantirSoldeSuffisant(string $supportId, float $montant, ?Carbon $date = null, string $operation = 'un envoi'): CompteTresorerie
     {
         $support = CompteTresorerie::whereKey($supportId)->lockForUpdate()->firstOrFail();
-        $solde = $this->soldeVerrouille($support, $date ?? now());
+        $solde = $this->soldeValide($support, $date ?? now());
 
         if ($montant > $solde + 0.004) {
             $disponible = number_format(max($solde, 0), 0, ',', ' ');
@@ -276,31 +269,45 @@ class TresorerieDisponibiliteService
     }
 
     /**
-     * Même solde que soldePourSupport(), relu par une lecture verrouillante avec jointure. Sous
-     * InnoDB REPEATABLE READ, une lecture simple ou une sous-requête (whereHas) lit la vue de la
-     * transaction, figée à sa première lecture. Si l'appelant a déjà lu quoi que ce soit avant
-     * d'attendre le verrou du support, elle ignorerait la sortie que l'autre transaction vient de
-     * valider : deux lots simultanés passaient alors tous deux sur un compte qui n'en couvrait qu'un
-     * (preuve : PaiementFicheConcurrenceTest). Le FOR UPDATE lit la dernière version validée.
+     * Même solde que soldePourSupport(), lu hors de la transaction en cours, sur une connexion
+     * distincte (ConnexionHorsTransaction) : il compte tout ce qui est validé à cet instant.
+     *
+     * - Sous InnoDB REPEATABLE READ, une lecture dans la transaction lit sa vue, figée à sa première
+     *   lecture : si l'appelant a lu quoi que ce soit avant d'attendre le verrou du support, elle
+     *   ignore la sortie que l'autre transaction vient de valider (deux lots simultanés passaient
+     *   tous deux sur un compte qui n'en couvrait qu'un).
+     * - Une lecture verrouillante (FOR UPDATE) du grand livre, essayée d'abord, pose des verrous
+     *   d'intervalle sur ses index : deux sorties simultanées de deux supports du même compte
+     *   comptable (Orange Money de deux agences) s'interbloquaient et l'une était refusée.
+     *
+     * Le verrou du support, pris juste avant, garantit qu'aucune sortie de ce support n'est en cours
+     * ailleurs : toutes les précédentes sont validées, donc comptées. Les sorties non encore validées
+     * de la transaction appelante ne le sont pas : chaque appelant contrôle le total avant d'écrire
+     * (preuve des deux cas : PaiementFicheConcurrenceTest). Sous SQLite (tests), une seule
+     * transaction écrit à la fois et la base en mémoire n'existe que sur sa connexion : lecture
+     * directe.
      */
-    private function soldeVerrouille(CompteTresorerie $support, Carbon $date): float
+    private function soldeValide(CompteTresorerie $support, Carbon $date): float
     {
-        $solde = EcritureComptable::query()
-            ->join('compta_pieces', 'compta_pieces.id', '=', 'compta_ecritures.piece_comptable_id')
-            ->where('compta_ecritures.compte_comptable_id', $support->compte_comptable_id)
-            ->where('compta_ecritures.site_id', $support->site_id)
-            ->where('compta_pieces.organization_id', $support->organization_id)
-            ->whereDate('compta_pieces.date_piece', '<=', $date->toDateString())
-            ->lockForUpdate()
-            ->selectRaw('COALESCE(SUM(compta_ecritures.debit), 0) - COALESCE(SUM(compta_ecritures.credit), 0) as solde')
-            ->value('solde');
-
-        return round((float) $solde, 2);
+        return $this->solde($support, $date, ConnexionHorsTransaction::pour($support->getConnection())->getName());
     }
 
+    /**
+     * Solde d'UN support (débit - crédit de son compte sur son site), source de
+     * vérité = grand livre. Sans $date, toutes les pièces sont comptées, y
+     * compris postdatées : sert à vérifier qu'une caisse est réellement vide
+     * avant de la désactiver. Pour une caisse dédiée à un agent, le compte est
+     * propre à cette caisse ; pour un support d'agence, même limite que
+     * situationParSupport() si deux supports d'un site partagent leur compte.
+     */
     public function soldePourSupport(CompteTresorerie $support, ?Carbon $date = null): float
     {
-        $solde = EcritureComptable::query()
+        return $this->solde($support, $date, $support->getConnectionName());
+    }
+
+    private function solde(CompteTresorerie $support, ?Carbon $date, ?string $connexion): float
+    {
+        $solde = EcritureComptable::on($connexion)
             ->where('compte_comptable_id', $support->compte_comptable_id)
             ->where('site_id', $support->site_id)
             ->whereHas('piece', function ($q) use ($support, $date) {

@@ -2,7 +2,7 @@
 
 /**
  * Sous-processus de Tests\Feature\Comptabilite\PaiementFicheConcurrenceTest : UNE requête de paiement
- * (bouton Payer ou paiement groupé) passée par le noyau HTTP, comme depuis un navigateur, sur SA
+ * (bouton Payer, paiement groupé ou suppression) passée par le noyau HTTP, comme depuis un navigateur, sur SA
  * propre connexion MySQL, déclenchée au même instant que les autres (fichier « go »). Jamais lancé à
  * la main : il écrit dans la base `mysql_testing`.
  *
@@ -17,8 +17,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 [, $dossier, $nom] = $argv;
+$lancement = microtime(true);
 
 require __DIR__.'/../../vendor/autoload.php';
 
@@ -39,14 +41,16 @@ try {
     // Allonge la transaction juste avant l'écriture du paiement, contrôles déjà faits : sans verrou,
     // l'autre processus passerait ses propres contrôles sur un état périmé et paierait aussi.
     PaiementFichePaiement::creating(fn () => usleep($ordre['delai_ms'] * 1000));
+    PaiementFichePaiement::deleting(fn () => usleep($ordre['delai_ms'] * 1000));
 
     $serveur = ['HTTP_ACCEPT' => $ordre['json'] ? 'application/json' : 'text/html', 'CONTENT_TYPE' => 'application/json'];
     foreach ($ordre['entetes'] as $entete => $valeur) {
         $serveur['HTTP_'.strtoupper(str_replace('-', '_', $entete))] = $valeur;
     }
-    $request = Request::create($ordre['uri'], 'POST', [], [], [], $serveur, json_encode($ordre['corps']));
+    $request = Request::create($ordre['uri'], $ordre['methode'] ?? 'POST', [], [], [], $serveur, json_encode($ordre['corps']));
 
-    file_put_contents("{$dossier}/{$nom}_pret", '1');
+    // Durée d'amorçage du framework : distingue une machine lente d'un blocage fonctionnel.
+    file_put_contents("{$dossier}/{$nom}_pret", json_encode(['demarrage' => microtime(true) - $lancement]));
     $limite = microtime(true) + 180;
     while (! file_exists("{$dossier}/go") && microtime(true) < $limite) {
         usleep(1000);
@@ -63,8 +67,10 @@ try {
         'json' => json_decode($contenu, true),
         'erreurs' => $session?->get('errors')?->getBag('default')->toArray() ?? [],
         'succes' => $session?->get('success'),
-        // Un refus métier (ValidationException) est une réponse normale, pas une erreur du processus.
-        'exception' => $response->exception !== null && ! $response->exception instanceof ValidationException
+        // Un refus métier (validation, 404 d'un paiement déjà supprimé) est une réponse normale.
+        'exception' => $response->exception !== null
+            && ! $response->exception instanceof ValidationException
+            && ! $response->exception instanceof HttpExceptionInterface
             ? $response->exception::class.' : '.$response->exception->getMessage()
             : ($response->getStatusCode() >= 500 ? 'Erreur '.$response->getStatusCode() : null),
         'debut' => $debut,

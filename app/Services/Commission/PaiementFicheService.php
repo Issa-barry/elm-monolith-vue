@@ -6,6 +6,7 @@ use App\Enums\AuditEvent;
 use App\Models\CompteTresorerie;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
+use App\Models\PaiementFichePaiementAnnule;
 use App\Models\User;
 use App\Notifications\CommissionPayeeNotification;
 use App\Services\AuditLogService;
@@ -30,8 +31,8 @@ final class PaiementFicheService
 
     /**
      * Paiements déjà créés par cette opération (rejeu : double envoi, nouvelle tentative après une
-     * coupure). Vide pour une opération nouvelle. Une clé déjà utilisée avec d'autres paramètres est
-     * refusée (ADR 0069).
+     * coupure). Vide pour une opération nouvelle. Refusée (ADR 0069) : une clé déjà utilisée avec
+     * d'autres paramètres, et une opération dont un paiement a été annulé depuis (jamais recréé).
      *
      * @return Collection<int, PaiementFichePaiement>
      *
@@ -39,6 +40,13 @@ final class PaiementFicheService
      */
     public function paiementsDeLOperation(string $organizationId, OperationPaiement $operation): Collection
     {
+        $annulee = PaiementFichePaiementAnnule::where('organization_id', $organizationId)
+            ->where('operation_id', $operation->cle)
+            ->exists();
+        if ($annulee) {
+            throw ValidationException::withMessages(['operation' => OperationPaiement::MESSAGE_OPERATION_ANNULEE]);
+        }
+
         $paiements = PaiementFichePaiement::where('organization_id', $organizationId)
             ->where('operation_id', $operation->cle)
             ->get();
@@ -104,6 +112,38 @@ final class PaiementFicheService
         CommissionEnveloppePartAllocationService::allouer($fiche, $paiement);
 
         return $paiement;
+    }
+
+    /**
+     * Supprime un paiement : archive (identité de l'opération et détail du paiement), historique,
+     * désallocation des parts et contrepassation de la pièce (hook `deleted` du modèle), dans la
+     * transaction de l'appelant, sous le même verrou de fiche que `enregistrer`. Retourne false si
+     * le paiement a déjà été supprimé par un envoi concurrent.
+     */
+    public function supprimer(PaiementFichePaiement $paiement, ?User $auteur): bool
+    {
+        $fiche = PaiementFiche::whereKey($paiement->fiche_id)->lockForUpdate()->firstOrFail();
+
+        // Lecture verrouillante : voit la suppression déjà validée par l'envoi jumeau.
+        $paiement = PaiementFichePaiement::whereKey($paiement->id)->lockForUpdate()->first();
+        if ($paiement === null) {
+            return false;
+        }
+
+        $montantFmt = number_format((float) $paiement->montant, 0, ',', "\u{202F}");
+        app(AuditLogService::class)->record($fiche, AuditEvent::PAYMENT_CANCELLED, $auteur, null, null, [
+            'module' => 'fiches_paiement',
+            'site_id' => $fiche->site_id,
+            'montant' => (float) $paiement->montant,
+            'description' => "Paiement de {$montantFmt} GNF annulé pour {$fiche->beneficiaire_nom}",
+        ]);
+
+        CommissionEnveloppePartAllocationService::desallouer($paiement);
+
+        PaiementFichePaiementAnnule::archiver($paiement, $auteur);
+        $paiement->delete();
+
+        return true;
     }
 
     /** Après validation de la transaction : jamais de notification pour un paiement annulé. */

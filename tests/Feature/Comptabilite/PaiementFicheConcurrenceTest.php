@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Laravel\Pennant\Feature;
+use Tests\Feature\Concerns\AmorceNumerotationComptable;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasCaissesDediees;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -38,12 +39,21 @@ use Tests\TestCase;
  */
 class PaiementFicheConcurrenceTest extends TestCase
 {
-    use HasAdminSetup, HasCaissesDediees, HasOrgAndUser;
+    use AmorceNumerotationComptable, HasAdminSetup, HasCaissesDediees, HasOrgAndUser;
 
     private const CONNECTION = 'mysql_testing';
 
     /** Paiement en cours d'écriture, verrous tenus, assez longtemps pour que l'autre envoi arrive. */
     private const DELAI_MS = 1500;
+
+    /** Amorçage du framework par chaque sous-processus : long sur une machine locale chargée. */
+    private const ATTENTE_DEMARRAGE_S = 180;
+
+    /**
+     * Réponse après le départ commun. Au-delà du délai d'attente de verrou MySQL (50 s par défaut) :
+     * un verrou bloqué ou un interblocage remonte avant, en erreur 1205 ou 1213 de la requête.
+     */
+    private const ATTENTE_REPONSE_S = 90;
 
     private ?string $dossier = null;
 
@@ -72,6 +82,7 @@ class PaiementFicheConcurrenceTest extends TestCase
         Feature::for($this->org)->activate(ModuleFeature::COMPTABILITE);
         $this->agence = $this->user->sites()->wherePivot('is_default', true)->firstOrFail();
         $this->orange = $this->creerSupportAgence($this->agence->id, 'mobile_money', '561100', 'orange_money');
+        $this->amorcerNumerotation($this->org->id);
     }
 
     protected function tearDown(): void
@@ -98,7 +109,7 @@ class PaiementFicheConcurrenceTest extends TestCase
     private function baseDisponible(): bool
     {
         try {
-            return Schema::connection(self::CONNECTION)->hasColumn('paiement_fiche_paiements', 'operation_id');
+            return Schema::connection(self::CONNECTION)->hasTable('paiement_fiche_paiements_annules');
         } catch (\Throwable) {
             return false;
         }
@@ -121,7 +132,7 @@ class PaiementFicheConcurrenceTest extends TestCase
         $connexion->statement('SET FOREIGN_KEY_CHECKS=1');
     }
 
-    private function fiche(float $net = 300_000): PaiementFiche
+    private function fiche(float $net = 300_000, ?Site $site = null): PaiementFiche
     {
         $periode = PaiementPeriode::create([
             'organization_id' => $this->org->id,
@@ -140,7 +151,7 @@ class PaiementFicheConcurrenceTest extends TestCase
             'beneficiaire_type' => 'livreur',
             'beneficiaire_id' => Livreur::factory()->create(['organization_id' => $this->org->id])->id,
             'beneficiaire_nom' => 'Livreur '.Str::random(4),
-            'site_id' => $this->agence->id,
+            'site_id' => ($site ?? $this->agence)->id,
             'montant_brut' => $net,
             'total_deductions' => 0,
             'montant_net' => $net,
@@ -154,7 +165,7 @@ class PaiementFicheConcurrenceTest extends TestCase
         return $this->creerUtilisateurNonAdmin($this->agence, ['comptabilite.read', 'comptabilite.payer'], 'Fatou', 'Payeuse');
     }
 
-    private function unitaire(User $payeur, PaiementFiche $fiche, string $cle, float $montant): array
+    private function unitaire(User $payeur, PaiementFiche $fiche, string $cle, float $montant, ?CompteTresorerie $support = null): array
     {
         return [
             'user_id' => $payeur->id,
@@ -164,7 +175,7 @@ class PaiementFicheConcurrenceTest extends TestCase
             'corps' => [
                 'montant' => $montant,
                 'mode_paiement' => 'mobile_money',
-                'compte_tresorerie_id' => $this->orange->id,
+                'compte_tresorerie_id' => ($support ?? $this->orange)->id,
                 'reference_paiement' => 'OM-CONC',
                 'date_paiement' => now()->toDateString(),
             ],
@@ -216,15 +227,19 @@ class PaiementFicheConcurrenceTest extends TestCase
         }
 
         try {
+            $demarrages = [];
             foreach (array_keys($ordres) as $i) {
-                $this->attendre("{$this->dossier}/p{$i}_pret", "Le processus {$i} n'a jamais été prêt.");
+                $this->attendre("{$this->dossier}/p{$i}_pret", self::ATTENTE_DEMARRAGE_S,
+                    "DÉMARRAGE (pas une erreur fonctionnelle) : le processus {$i} n'a pas fini d'amorcer le framework en ".self::ATTENTE_DEMARRAGE_S.' s. Machine trop chargée : relancer.');
+                $demarrages[$i] = json_decode((string) file_get_contents("{$this->dossier}/p{$i}_pret"), true)['demarrage'] ?? null;
             }
 
             file_put_contents($this->dossier.'/go', '1');
 
             $resultats = [];
             foreach (array_keys($ordres) as $i) {
-                $this->attendre("{$this->dossier}/p{$i}_fini", "Le processus {$i} ne s'est jamais terminé.");
+                $this->attendre("{$this->dossier}/p{$i}_fini", self::ATTENTE_REPONSE_S,
+                    "FONCTIONNEL : la requête {$i} n'a pas répondu ".self::ATTENTE_REPONSE_S.' s après le départ commun, au-delà du délai d\'attente de verrou MySQL : blocage réel à analyser.');
                 $resultats[$i] = json_decode((string) file_get_contents("{$this->dossier}/p{$i}_fini"), true);
                 $this->assertNull($resultats[$i]['exception'] ?? null, "Processus {$i} : ".json_encode($resultats[$i], JSON_UNESCAPED_UNICODE));
             }
@@ -237,13 +252,21 @@ class PaiementFicheConcurrenceTest extends TestCase
         // Preuve que les envois se sont chevauchés : chacun a commencé avant la fin de l'autre.
         $this->assertLessThan(min(array_column($resultats, 'fin')), max(array_column($resultats, 'debut')), 'Les requêtes ne se sont pas chevauchées.');
 
+        if (getenv('CONCURRENCE_TRACE')) {
+            fwrite(STDERR, sprintf(
+                "\n[%s] démarrage %s s ; requêtes %s s\n",
+                $this->name(),
+                implode(' / ', array_map(fn ($d) => number_format((float) $d, 1), $demarrages)),
+                implode(' / ', array_map(fn (array $r) => number_format($r['fin'] - $r['debut'], 2), $resultats)),
+            ));
+        }
+
         return $resultats;
     }
 
-    /** 180 s : chaque sous-processus amorce tout le framework avant de signaler qu'il est prêt (machine locale lente). */
-    private function attendre(string $fichier, string $messageEchec): void
+    private function attendre(string $fichier, int $secondes, string $messageEchec): void
     {
-        $limite = microtime(true) + 180;
+        $limite = microtime(true) + $secondes;
         while (! file_exists($fichier) && microtime(true) < $limite) {
             usleep(20000);
         }
@@ -393,5 +416,95 @@ class PaiementFicheConcurrenceTest extends TestCase
         $this->assertSame(1, $this->nombrePaiements($fiche));
         $this->assertTraceUnique($fiche);
         $this->assertContains($this->solde(), [950_000.0, 700_000.0]);
+    }
+
+    public function test_deux_agences_payent_en_meme_temps_sur_le_meme_compte_comptable(): void
+    {
+        // Deux supports Orange Money de deux agences : même compte 561100, soldes distincts par agence.
+        $this->alimenterCaisse($this->orange, 1_000_000);
+        $kindia = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kindia', 'type' => 'depot', 'localisation' => 'Kindia']);
+        $this->user->sites()->attach($kindia->id);
+        $orangeKindia = $this->creerSupportAgence($kindia->id, 'mobile_money', '561100', 'orange_money');
+        $this->alimenterCaisse($orangeKindia, 1_000_000);
+        $a = $this->fiche(300_000);
+        $b = $this->fiche(300_000, $kindia);
+
+        $resultats = $this->enMemeTemps([
+            $this->unitaire($this->user, $a, (string) Str::uuid(), 100_000),
+            $this->unitaire($this->user, $b, (string) Str::uuid(), 100_000, $orangeKindia),
+        ]);
+
+        // La lecture verrouillante du solde porte sur le compte comptable : les deux envois peuvent
+        // s'attendre, mais aucun ne doit échouer (interblocage) ni lire le solde de l'autre agence.
+        foreach ($resultats as $i => $r) {
+            $this->assertSame([], $r['erreurs'], "Envoi {$i}");
+            $this->assertSame('Paiement enregistré avec succès.', $r['succes'], "Envoi {$i}");
+        }
+        $this->assertTraceUnique($a);
+        $this->assertTraceUnique($b);
+        $this->assertSame(900_000.0, $this->solde());
+        $this->assertSame(900_000.0, app(TresorerieDisponibiliteService::class)->soldePourSupport($orangeKindia->fresh(), now()));
+    }
+
+    public function test_suppression_et_rejeu_simultanes_ne_recreent_jamais_le_paiement(): void
+    {
+        $this->alimenterCaisse($this->orange, 1_000_000);
+        $fiche = $this->fiche(300_000);
+        $cle = (string) Str::uuid();
+        $ordrePaiement = $this->unitaire($this->user, $fiche, $cle, 100_000);
+        $this->actingAs($this->user)->withHeader(OperationPaiement::ENTETE, $cle)
+            ->post(route('comptabilite.fiches.paiements.store', $fiche), $ordrePaiement['corps'])
+            ->assertSessionHasNoErrors();
+        $paiement = PaiementFichePaiement::where('fiche_id', $fiche->id)->firstOrFail();
+
+        $this->enMemeTemps([
+            [
+                'user_id' => $this->user->id,
+                'methode' => 'DELETE',
+                'uri' => route('comptabilite.fiches.paiements.destroy', $paiement, false),
+                'json' => false,
+                'entetes' => [],
+                'corps' => [],
+            ],
+            $ordrePaiement,
+        ]);
+
+        // Suppression d'abord : le rejeu est refusé. Rejeu d'abord : il restitue le paiement, que la
+        // suppression retire ensuite. Dans les deux ordres, rien n'est recréé.
+        $this->assertSame(0, $this->nombrePaiements($fiche));
+        $this->assertSame(1, DB::table('paiement_fiche_paiements_annules')->where('operation_id', $cle)->count());
+        $this->assertSame(1, PieceComptable::where('source_id', $paiement->id)->whereNotNull('piece_origine_id')->count());
+        $this->assertSame(0.0, (float) $fiche->fresh()->montant_paye);
+        $this->assertSame(1_000_000.0, $this->solde());
+    }
+
+    public function test_deux_suppressions_simultanees_du_meme_paiement(): void
+    {
+        $this->alimenterCaisse($this->orange, 1_000_000);
+        $fiche = $this->fiche(300_000);
+        $this->actingAs($this->user)->withHeader(OperationPaiement::ENTETE, (string) Str::uuid())
+            ->post(route('comptabilite.fiches.paiements.store', $fiche), $this->unitaire($this->user, $fiche, 'inutile', 100_000)['corps'])
+            ->assertSessionHasNoErrors();
+        $paiement = PaiementFichePaiement::where('fiche_id', $fiche->id)->firstOrFail();
+        $suppression = fn (User $auteur) => [
+            'user_id' => $auteur->id,
+            'methode' => 'DELETE',
+            'uri' => route('comptabilite.fiches.paiements.destroy', $paiement, false),
+            'json' => false,
+            'entetes' => [],
+            'corps' => [],
+        ];
+
+        $resultats = $this->enMemeTemps([$suppression($this->user), $suppression($this->autrePayeur())]);
+
+        // Le second attend le verrou de la fiche, trouve le paiement supprimé et n'écrit rien.
+        foreach ($resultats as $i => $r) {
+            $this->assertTrue($r['succes'] === 'Paiement supprimé.' || $r['statut'] === 404, "Envoi {$i} : ".json_encode($r, JSON_UNESCAPED_UNICODE));
+        }
+        $this->assertModelMissing($paiement);
+        $this->assertSame(1, PieceComptable::where('source_id', $paiement->id)->whereNotNull('piece_origine_id')->count(), 'Une seule contrepassation.');
+        $this->assertSame(1, AuditLog::where('auditable_id', $fiche->id)->where('event_code', AuditEvent::PAYMENT_CANCELLED->value)->count(), 'Un seul historique « Paiement annulé ».');
+        $this->assertSame(0.0, (float) $fiche->fresh()->montant_paye);
+        $this->assertSame(1_000_000.0, $this->solde());
     }
 }

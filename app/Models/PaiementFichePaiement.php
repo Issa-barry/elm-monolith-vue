@@ -69,8 +69,8 @@ class PaiementFichePaiement extends Model
 
             // Jamais de suppression destructive d'écriture validée (règle #29) : on
             // contrepasse la pièce de règlement si elle existe, on ne la supprime
-            // jamais. PaiementFichePaiementController::destroy() englobe déjà cette
-            // suppression dans une transaction.
+            // jamais. PaiementFicheService::supprimer() est appelé dans une transaction :
+            // un échec de contrepassation annule aussi la suppression.
             $evenement = $fiche ? FicheComptabilisationService::evenementPaiementPour($fiche->beneficiaire_type) : null;
             if ($evenement) {
                 $ecritures = app(EcritureComptableService::class);

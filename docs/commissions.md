@@ -1452,8 +1452,10 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
 - **Solde insuffisant = refus serveur** sous verrou (`TresorerieDisponibiliteService::garantirSoldeSuffisant()`),
   message « Solde insuffisant : X GNF disponible dans « … » pour un paiement de Y GNF. » — aucun
   effet (ni paiement, ni allocation, ni écriture, ni notification). Depuis le 20/11/2026, le solde
-  est relu par une lecture verrouillante (ADR 0069, point 9) : deux sorties simultanées sur un même
-  compte ne peuvent plus passer toutes les deux sur un solde qui n'en couvre qu'une.
+  est relu hors de la transaction, après le verrou du support (ADR 0069, point 9) : deux sorties
+  simultanées d'un même support ne peuvent plus passer toutes les deux sur un solde qui n'en couvre
+  qu'une, et deux agences qui paient en même temps depuis le même compte comptable ne se bloquent
+  pas.
 - **Référence de transaction** obligatoire pour le Mobile Money seulement ; aucune référence en
   espèces, virement ou chèque (mêmes règles que l'encaissement, décision du 17/10/2026).
 - **Comptabilité** : crédit du compte du support débité ; paiements antérieurs non reclassés.
@@ -1532,8 +1534,18 @@ paiement groupé, sur toutes les fiches (livreurs, propriétaires, sites, consul
 - **Stockage** : colonnes `operation_id` et `operation_empreinte` de `paiement_fiche_paiements`, avec
   une contrainte unique `(fiche_id, operation_id)`. Les paiements antérieurs n'ont pas de clé et
   restent inchangés.
-- **Limite** : supprimer un paiement efface sa clé. Renvoyer ensuite la même requête le recréerait,
-  mais aucun écran ne renvoie une clé après un succès.
+- **Coupure après l'enregistrement** (délai dépassé, réponse perdue) : la nouvelle tentative porte
+  la même clé et restitue le paiement déjà enregistré.
+- **Suppression d'un paiement** : tout ou rien, sous le verrou de la fiche. La contrepassation de la
+  pièce, la suppression, la désallocation des parts et l'historique « Paiement annulé » sont écrits
+  ensemble. Si la contrepassation échoue, rien n'est supprimé : « Paiement non supprimé : … ». Deux
+  suppressions simultanées du même paiement ne contrepassent et n'historisent qu'une fois.
+- **Paiement annulé** : la suppression archive le paiement dans `paiement_fiche_paiements_annules`
+  (même identifiant, donc même `source_id` que sa pièce contrepassée) avec sa clé, son empreinte,
+  son détail, l'auteur et la date d'annulation. Sa clé ne recrée jamais de paiement : un renvoi,
+  avec les mêmes paramètres ou d'autres, est refusé (« Le paiement de cette opération a été annulé
+  depuis… »), et un lot dont l'un des paiements a été annulé n'est pas rejoué non plus. Un nouveau
+  paiement de la fiche reste possible : c'est une nouvelle opération, avec une nouvelle clé.
 - Tests : `PaiementFicheIdempotenceTest` (SQLite), `PaiementFicheConcurrenceTest` (MySQL réel,
   requêtes simultanées), `cleOperation.spec.ts`, `useDecaissement.spec.ts`,
   `usePaiementGroupe.spec.ts`.
