@@ -851,19 +851,19 @@ describe('Rapports/Activite — cartes Charges et Détail (ADR 0064)', () => {
         );
     });
 
-    it('les cartes actuelles restent en place, Charges et Détail ajoutées à la suite', () => {
+    it('Ma situation : la carte Détail est la première de la grille, sans ouvrir la section', () => {
         url.valeur = '/backoffice/ma-situation';
         const ids = monter('ma_situation', avecSynthese())
             .findAll('[role="tab"]')
             .map((c) => c.attributes('data-testid'));
 
         expect(ids).toEqual([
+            'rapport-tab-synthese',
             'rapport-tab-ventes',
             'rapport-tab-encaissements',
             'rapport-tab-creances',
             'rapport-tab-mobile_money',
             'rapport-tab-charges',
-            'rapport-tab-synthese',
         ]);
     });
 });

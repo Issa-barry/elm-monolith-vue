@@ -240,8 +240,8 @@ const cartes = computed((): Carte[] => {
         avertissement: null,
     });
 
-    // Tableau financier consolidé (même tableau que le Rapport par agence) : première carte et
-    // section ouverte par défaut du rapport d'activité, dernière carte de Ma situation.
+    // Tableau financier consolidé (même tableau que le Rapport par agence) : première carte de la
+    // grille ; section ouverte par défaut du rapport d'activité (Ma situation s'ouvre sur les ventes).
     const remise = r.remise;
     const action =
         onglet.value === 'synthese'
@@ -263,7 +263,7 @@ const cartes = computed((): Carte[] => {
         avertissement: null,
     };
 
-    return maSituation.value ? [...liste, detail] : [detail, ...liste];
+    return [detail, ...liste];
 });
 
 function hrefAgent(agentId: string): string {

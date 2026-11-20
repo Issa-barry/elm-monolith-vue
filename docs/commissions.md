@@ -1460,6 +1460,41 @@ fiche de commission (écrans Commissions et écran de la fiche, même point d'en
   effet, relecture du solde, autre agence, référence, espèces sans caisse, autre organisation, siège
   principal, absence de siège), `PaymentCard.spec.ts` (bloc « décaissement »).
 
+### Paiement groupé — « Marquer comme payés » (19/11/2026, ADR 0068)
+
+Voir [ADR 0068](adr/0068-paiement-groupe-des-fiches-de-commission.md). Pour les livreurs payés par
+dépôt Orange Money : la comptabilité fait les dépôts, puis marque tous les bénéficiaires payés en une
+fois au lieu de les payer un par un.
+
+- **Écran** : Commissions des livreurs. Une ligne se coche si elle a des parts à valider **ou** une
+  fiche due que l'utilisateur peut payer (mêmes conditions que le bouton Payer). La barre de
+  sélection affiche **Marquer comme payés (n)** pour les lignes payables et **Valider la sélection**
+  pour les lignes à valider.
+- **Fenêtre** : nombre de bénéficiaires et total, mode de paiement (moyens de l'agence qui paie, avec
+  le solde disponible), date de paiement (aujourd'hui par défaut, jamais dans le futur), référence
+  commune, puis une ligne par bénéficiaire (période, reste à payer, référence propre facultative).
+  Confirmer est désactivé si le solde ne couvre pas le total ou s'il manque une référence exigée.
+- **Ce qui est payé** : pour chaque ligne, la fiche proposée par le bouton Payer (la plus ancienne
+  fiche due, `FichePayableResolver`), pour **son reste entier**. Un paiement partiel reste un
+  paiement unitaire.
+- **Un seul compte** : toutes les fiches doivent être payées par la même agence. Sinon, message
+  « La sélection est payée par plusieurs agences… » : filtrer par agence, puis payer agence par
+  agence.
+- **Référence** : la référence propre d'une ligne prime sur la référence commune. Si le moyen exige
+  une référence (Mobile Money, virement), chaque fiche doit en avoir une.
+- **Contrôles serveur** (`POST /comptabilite/fiches/paiements/lot`, `PaiementFicheLotController`) :
+  organisation, droit de payer chaque fiche (`PaiementFichePolicy::payer`), période validée, fiche
+  salarié refusée, une seule agence payeuse, support de cette agence, référence, reste affiché égal au
+  reste réel, solde du support pour le total. Tout se vérifie sous verrou et **un refus annule tout le
+  lot**.
+- **Lots** : l'écran envoie des lots de 20 fiches, 50 au plus côté serveur. Un lot passé reste
+  enregistré. Si un lot échoue, le message indique le pourcentage atteint et ce qui est déjà payé.
+  Une fiche déjà soldée est ignorée (« déjà payée »), donc relancer est sans risque.
+- **Effets** : identiques au bouton Payer pour chaque fiche (paiement, allocation aux parts, écriture
+  comptable, statut de la fiche), avec notification du bénéficiaire et ligne d'historique « (paiement
+  groupé) » après validation. Le code partagé est dans `PaiementFicheService`.
+- Tests : `PaiementFicheLotTest`, `PaiementGroupeDialog.spec.ts`, `usePaiementGroupe.spec.ts`.
+
 ## Validation automatique des commissions et des périodes (27/09/2026, ADR 0008)
 
 - **Parts propriétaire, site, consultant** : validées d'office à la génération (`validated_at`,
