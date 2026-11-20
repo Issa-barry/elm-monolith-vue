@@ -2,6 +2,7 @@
 import AuditDrawer from '@/components/AuditDrawer.vue';
 import ClickableTableRow from '@/components/ClickableTableRow.vue';
 import CommissionIndexLayout from '@/components/commission/CommissionIndexLayout.vue';
+import PaiementGroupeDialog from '@/components/commission/PaiementGroupeDialog.vue';
 import type { FilterField } from '@/components/filters/DataFilters.vue';
 import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
 import { usePaiementFiche } from '@/composables/usePaiementFiche';
+import { usePaiementGroupe } from '@/composables/usePaiementGroupe';
 import AppLayout from '@/layouts/AppLayout.vue';
 import {
     ajouterStatutsEtPeriodes,
@@ -301,8 +303,26 @@ const page = usePage();
 
 const selected = ref<Set<string>>(new Set());
 
+// Une ligne se coche pour être validée (parts à valider) ou marquée payée (fiche due).
+function estSelectionnable(b: BeneficiaireRow): boolean {
+    return b.creee_parts.length > 0 || peutPayer(b);
+}
+
 const selectableRows = computed(() =>
-    lignesAffichees.value.filter((b) => b.creee_parts.length > 0),
+    lignesAffichees.value.filter(estSelectionnable),
+);
+
+const selectionAValider = computed(() =>
+    selectableRows.value.filter(
+        (b) =>
+            selected.value.has(b.beneficiaire_id) && b.creee_parts.length > 0,
+    ),
+);
+
+const selectionAPayer = computed(() =>
+    selectableRows.value.filter(
+        (b) => selected.value.has(b.beneficiaire_id) && peutPayer(b),
+    ),
 );
 
 // Une ligne masquée par la recherche ne reste jamais sélectionnée : « Valider la
@@ -447,9 +467,7 @@ function validerRow(b: BeneficiaireRow) {
 }
 
 function validerSelection() {
-    const rows = selectableRows.value.filter((b) =>
-        selected.value.has(b.beneficiaire_id),
-    );
+    const rows = selectionAValider.value;
     if (rows.length === 0) return;
 
     const parts = rows.flatMap((b) => b.creee_parts);
@@ -463,6 +481,24 @@ function validerSelection() {
         accept: () =>
             validerParts(parts, `${rows.length} commission(s) validée(s).`),
     });
+}
+
+const paiementGroupe = usePaiementGroupe(() => {
+    // Les lignes payées n'ont plus de fiche due : elles quittent la sélection d'elles-mêmes.
+    const restantes = new Set(
+        selectableRows.value.map((b) => b.beneficiaire_id),
+    );
+    selected.value = new Set(
+        [...selected.value].filter((id) => restantes.has(id)),
+    );
+});
+
+function payerSelection() {
+    paiementGroupe.open(
+        selectionAPayer.value.flatMap((b) =>
+            b.fiche_a_payer ? [b.fiche_a_payer] : [],
+        ),
+    );
 }
 
 const showAjusterDialog = ref(false);
@@ -593,14 +629,35 @@ function fmtTel(tel: string | null | undefined): string {
                         <Button
                             variant="ghost"
                             size="sm"
-                            :disabled="validationEnCours"
+                            :disabled="
+                                validationEnCours ||
+                                paiementGroupe.processing.value
+                            "
                             @click="selected = new Set()"
                         >
                             Annuler
                         </Button>
                         <Button
+                            v-if="selectionAPayer.length > 0"
                             size="sm"
-                            :disabled="validationEnCours"
+                            variant="outline"
+                            data-testid="marquer-payes"
+                            :disabled="
+                                validationEnCours ||
+                                paiementGroupe.processing.value
+                            "
+                            @click="payerSelection"
+                        >
+                            <HandCoins class="mr-1.5 h-4 w-4" />
+                            Marquer comme payés ({{ selectionAPayer.length }})
+                        </Button>
+                        <Button
+                            v-if="selectionAValider.length > 0"
+                            size="sm"
+                            :disabled="
+                                validationEnCours ||
+                                paiementGroupe.processing.value
+                            "
                             :aria-busy="validationEnCours"
                             @click="validerSelection"
                         >
@@ -739,7 +796,7 @@ function fmtTel(tel: string | null | undefined): string {
                                     :model-value="
                                         selected.has(b.beneficiaire_id)
                                     "
-                                    :disabled="b.creee_parts.length === 0"
+                                    :disabled="!estSelectionnable(b)"
                                     :aria-label="`Sélectionner ${b.beneficiaire_nom}`"
                                     @update:model-value="toggleRow(b)"
                                 />
@@ -1022,6 +1079,15 @@ function fmtTel(tel: string | null | undefined): string {
         :processing="paiement.processing.value"
         :errors="paiement.errors.value"
         @submit="paiement.submit"
+    />
+
+    <PaiementGroupeDialog
+        v-model:visible="paiementGroupe.visible.value"
+        :fiches="paiementGroupe.fiches.value"
+        :processing="paiementGroupe.processing.value"
+        :progression="paiementGroupe.progression.value"
+        :erreur="paiementGroupe.erreur.value"
+        @submit="paiementGroupe.submit"
     />
 
     <AuditDrawer

@@ -325,10 +325,13 @@ caisse, transferts Mobile Money) ; l'**agence** remet à la trésorerie principa
     tableau consolidé (même tableau que le rapport par agence, une ligne par agent : agent, agence
     de rattachement, ventes, Espèces, Orange Money, total encaissé, dettes clients, charges saisies,
     charges validées, puis « Remise à l'agence de rattachement » : net à remettre, déjà remis, en
-    transit, reste, statut ; ligne Total). Second clic : repli (retour à la carte Ventes). Rapport
-    d'activité : le nom de l'agent et « Opérations » filtrent la page sur cet agent. Ma situation :
-    la seule ligne de l'agent connecté, sans lien, suivie du calcul de sa remise ligne à ligne
-    (encaissé, approvisionnements, charges validées, net, déjà remis, reste, dont en transit).
+    transit, reste, statut ; ligne Total). Second clic : repli (retour à la carte Ventes). C'est la
+    **première carte** de la grille (rapport d'activité 18/11/2026, Ma situation 19/11/2026 ; dans
+    Ma situation, la carte « Ma caisse » reste au-dessus, pleine largeur). Rapport d'activité : section
+    ouverte à l'arrivée sur la page (sans `?tab=`) ; Ma situation s'ouvre toujours sur les ventes. Rapport d'activité : le nom de l'agent et « Opérations » filtrent la page sur cet
+    agent. Ma situation : la seule ligne de l'agent connecté, sans lien, suivie du calcul de sa
+    remise ligne à ligne (encaissé, approvisionnements, charges validées, net, déjà remis, reste,
+    dont en transit).
 - Même agent, mêmes chiffres dans Ma situation et dans le rapport d'activité filtré sur lui.
 
 ## Écran et exports
