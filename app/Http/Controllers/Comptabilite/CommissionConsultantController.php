@@ -297,7 +297,7 @@ class CommissionConsultantController extends Controller
         // et CommissionProcessusFilter).
         $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
-        $query = CommissionEnveloppePart::with(['enveloppe.source'])
+        $query = CommissionEnveloppePart::with(['enveloppe.source', 'enveloppe.processus'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
             ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {

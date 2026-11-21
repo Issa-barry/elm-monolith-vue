@@ -51,7 +51,7 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('viewAny', EquipeLivraison::class);
 
-        $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire', 'vehicule.typeVehicule', 'vehicule.capacites.categorie')
+        $equipes = EquipeLivraison::with('membres.livreur.personne', 'proprietaire.personne', 'vehicule.typeVehicule', 'vehicule.capacites.categorie')
             ->where('organization_id', auth()->user()->organization_id)
             ->get()
             ->sortBy(fn (EquipeLivraison $e) => $e->vehicule?->nom_vehicule)

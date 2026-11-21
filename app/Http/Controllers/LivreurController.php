@@ -23,7 +23,7 @@ class LivreurController extends Controller
     {
         $this->authorize('viewAny', Livreur::class);
 
-        $livreurs = Livreur::with(['equipes.vehicule:id,nom_vehicule'])
+        $livreurs = Livreur::with(['personne', 'equipes.vehicule:id,nom_vehicule'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderByRaw('is_active DESC, nom_complet')
             ->get()

@@ -66,7 +66,7 @@ class PaiementPeriodeController extends Controller
             $filters['quinzaine'] = $quinzaineCourante;
         }
 
-        $query = PaiementPeriode::forOrg($orgId)->with('site');
+        $query = PaiementPeriode::forOrg($orgId)->with('site')->avecTotauxFiches();
 
         if (! empty($filters['type'])) {
             $query->where('type', $filters['type']);

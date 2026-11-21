@@ -13,6 +13,7 @@ use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SavedFilterService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
 use App\Support\Periodes\Periode;
+use App\Support\Ventes\ListeVentes;
 use App\Support\Ventes\PrecommandeSuivi;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -36,6 +37,9 @@ class IndexCommandeVenteController extends Controller
         $request->validate([
             'saved_view' => ['nullable', 'ulid'],
             'recherche' => ['nullable', 'string', 'max:255'],
+            'tri' => ['nullable', 'in:'.implode(',', ListeVentes::TRIS)],
+            'sens' => ['nullable', 'in:asc,desc'],
+            'page' => ['nullable', 'integer', 'min:1'],
         ]);
         // « Mes vues » : un scope par liste ; Distribution n'en a pas encore.
         $scopeVues = match (true) {
@@ -237,22 +241,30 @@ class IndexCommandeVenteController extends Controller
             $query->enRetard();
         }
 
-        $commandes = $query->get();
-        $nonAnnulees = $commandes->filter(fn ($c) => ! $c->isAnnulee() && ! $c->isAnnuleeErreurSaisie());
-        $cloturees = $commandes->filter(fn ($c) => $c->isCloturee());
+        // Totaux sur toutes les ventes filtrées, jamais sur la page affichée.
+        ['totaux' => $totaux, 'nb_resultats' => $nbResultats] = ListeVentes::totaux($query);
 
-        $totaux = [
-            'total_montant' => (float) $nonAnnulees->sum('total_commande'),
-            'nb_total' => $nonAnnulees->count(),
-            'total_a_encaisser' => (float) $commandes
-                ->filter(fn ($c) => $c->facture && ! $c->facture->isAnnulee())
-                ->sum(fn ($c) => (float) $c->facture->montant_restant),
-            'deja_paye' => (float) $commandes
-                ->filter(fn ($c) => $c->facture && ! $c->facture->isAnnulee())
-                ->sum(fn ($c) => (float) $c->facture->montant_encaisse),
-            'nb_cloturees' => $cloturees->count(),
-            'montant_cloturees' => (float) $cloturees->sum('total_commande'),
-        ];
+        // Ventes : pagination et tri côté serveur. Distribution et Précommandes gardent leur liste
+        // complète, triée par la page.
+        $pagination = null;
+        if ($liste === 'ventes') {
+            $tri = $request->input('tri');
+            $sens = $request->input('sens') === 'asc' ? 'asc' : 'desc';
+            ListeVentes::trier($query, $tri, $sens);
+            // Nombre de résultats déjà compté avec les totaux : pas de second comptage.
+            $page = $query->paginate(ListeVentes::PAR_PAGE, total: $nbResultats)->withQueryString();
+            $commandes = $page->getCollection();
+            $pagination = [
+                'page' => $page->currentPage(),
+                'par_page' => $page->perPage(),
+                'total' => $page->total(),
+                'derniere_page' => $page->lastPage(),
+                'tri' => $tri,
+                'sens' => $tri !== null ? $sens : null,
+            ];
+        } else {
+            $commandes = $query->get();
+        }
 
         // Agences d'encaissement de l'utilisateur, moyens et caisses : une seule résolution pour la page.
         $encaissementParFacture = app(AgenceEncaissementResolver::class)->pourEcran($user, $commandes->map(fn (CommandeVente $c) => $c->facture));
@@ -300,6 +312,7 @@ class IndexCommandeVenteController extends Controller
         return Inertia::render('Ventes/Index', [
             'saved_view' => $savedView,
             'commandes' => $mapped->values(),
+            'pagination' => $pagination,
             'totaux' => $totaux,
             'indicateurs_precommandes' => $indicateursPrecommandes,
             'nature_filtree' => $natureFiltree->value,

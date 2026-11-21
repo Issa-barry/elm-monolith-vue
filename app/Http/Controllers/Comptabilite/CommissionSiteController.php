@@ -310,6 +310,7 @@ class CommissionSiteController extends Controller
         $query = CommissionEnveloppePart::with([
             'enveloppe.source.site:id,nom,code,type',
             'enveloppe.lignes.categorieSnapshot:id,nom',
+            'enveloppe.processus',
         ])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_SITE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
