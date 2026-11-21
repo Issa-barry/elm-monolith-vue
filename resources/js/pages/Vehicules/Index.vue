@@ -35,6 +35,7 @@ import {
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import Paginator from 'primevue/paginator';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
@@ -83,8 +84,19 @@ interface Vehicule {
     parrain_part: 'a_definir' | 'definie' | null;
 }
 
+/** Liste paginée et triée côté serveur (cf. App\Support\Vehicules\ListeVehicules). */
+interface PaginationServeur {
+    page: number;
+    par_page: number;
+    total: number;
+    derniere_page: number;
+    tri: string | null;
+    sens: 'asc' | 'desc' | null;
+}
+
 const props = defineProps<{
     vehicules: Vehicule[];
+    pagination: PaginationServeur;
     filters: Record<string, unknown>;
     types_options: { value: string; label: string }[];
     agences_proprietaires_options: { value: string; label: string }[];
@@ -200,6 +212,44 @@ const filterFields = computed<FilterField[]>(() => [
 ]);
 
 const filteredVehicules = computed(() => props.vehicules);
+const nombreResultats = computed(() => props.pagination.total);
+
+// ── Pagination et tri serveur ─────────────────────────────────────────────────
+// Les filtres de l'URL sont conservés ; changer de tri revient à la première page.
+function chargerPage(page: number, tri: string | null, sens: string | null) {
+    router.reload({
+        data: {
+            page: page > 1 ? page : undefined,
+            tri: tri ?? undefined,
+            sens: tri ? (sens ?? undefined) : undefined,
+        },
+    });
+}
+
+function changerPage(event: { page: number }) {
+    chargerPage(event.page + 1, props.pagination.tri, props.pagination.sens);
+}
+
+function changerTri(event: { sortField?: unknown; sortOrder?: number | null }) {
+    const champ =
+        typeof event.sortField === 'string' && event.sortOrder
+            ? event.sortField
+            : null;
+    chargerPage(1, champ, event.sortOrder === 1 ? 'asc' : 'desc');
+}
+
+const tableauServeur = computed(() => {
+    const p = props.pagination;
+    return {
+        lazy: true,
+        paginator: p.total > p.par_page,
+        rows: p.par_page,
+        totalRecords: p.total,
+        first: (p.page - 1) * p.par_page,
+        sortField: p.tri ?? undefined,
+        sortOrder: p.tri ? (p.sens === 'asc' ? 1 : -1) : undefined,
+    };
+});
 const vehiculeStats = computed(() => props.vehicule_stats);
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -279,7 +329,7 @@ function confirmDelete(v: Vehicule) {
                         url="/backoffice/vehicules"
                         :values="filters"
                         :fields="filterFields"
-                        :result-count="filteredVehicules.length"
+                        :result-count="nombreResultats"
                     />
                 </template>
             </ListPageActions>
@@ -351,6 +401,14 @@ function confirmDelete(v: Vehicule) {
                 </Link>
             </div>
 
+            <Paginator
+                v-if="pagination.total > pagination.par_page"
+                :rows="pagination.par_page"
+                :total-records="pagination.total"
+                :first="(pagination.page - 1) * pagination.par_page"
+                @page="changerPage"
+            />
+
             <!-- Empty state -->
             <div
                 v-if="filteredVehicules.length === 0"
@@ -370,8 +428,8 @@ function confirmDelete(v: Vehicule) {
                         Véhicules
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ vehicules.length }} véhicule{{
-                            vehicules.length !== 1 ? 's' : ''
+                        {{ nombreResultats }} véhicule{{
+                            nombreResultats !== 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -497,7 +555,7 @@ function confirmDelete(v: Vehicule) {
                             url="/backoffice/vehicules"
                             :values="filters"
                             :fields="filterFields"
-                            :result-count="filteredVehicules.length"
+                            :result-count="nombreResultats"
                         />
                     </template>
                 </ListPageActions>
@@ -592,8 +650,7 @@ function confirmDelete(v: Vehicule) {
             >
                 <DataTable
                     :value="filteredVehicules"
-                    :paginator="filteredVehicules.length > 20"
-                    :rows="20"
+                    v-bind="tableauServeur"
                     data-key="id"
                     striped-rows
                     removable-sort
@@ -613,6 +670,8 @@ function confirmDelete(v: Vehicule) {
                         bodyRow: bodyRowPt,
                     }"
                     @row-click="onRowClick"
+                    @page="changerPage"
+                    @sort="changerTri"
                 >
                     <!-- Photo -->
                     <Column header="Photo" style="width: 72px">

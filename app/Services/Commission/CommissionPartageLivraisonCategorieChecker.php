@@ -43,7 +43,8 @@ class CommissionPartageLivraisonCategorieChecker
      * si aucune règle active ne la couvre (décision AMOA #4 : absence de règle = 0, jamais une
      * erreur). $processusId peut être null (processus jamais configuré pour l'organisation) :
      * revient alors toujours à 0, aucune CommissionRegle ne pouvant référencer un processus
-     * inexistant.
+     * inexistant. $prechargees (facultatif) : règles déjà chargées en groupe, utilisées seulement
+     * quand elles tranchent cette demande — sinon le résolveur SQL, même résultat.
      */
     public static function resoudreEnveloppe(
         string $organizationId,
@@ -51,21 +52,26 @@ class CommissionPartageLivraisonCategorieChecker
         string $categorieId,
         ?string $typeVehiculeId,
         CarbonInterface $date,
+        ?ReglesCommissionPrechargees $prechargees = null,
     ): int {
         if ($processusId === null) {
             return 0;
         }
 
-        $regle = CommissionRegleResolver::resolve(
-            $organizationId,
-            $processusId,
-            CommissionCibleType::CODE_EQUIPE_LIVRAISON,
-            null,
-            null,
-            $categorieId,
-            $date,
-            $typeVehiculeId,
-        );
+        $regle = $prechargees
+            && $prechargees->couvre($organizationId, $processusId, CommissionCibleType::CODE_EQUIPE_LIVRAISON, $date)
+            && $prechargees->tranche($processusId, null, null, $categorieId, $typeVehiculeId)
+            ? $prechargees->resoudre($processusId, null, null, $categorieId, $typeVehiculeId)
+            : CommissionRegleResolver::resolve(
+                $organizationId,
+                $processusId,
+                CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+                null,
+                null,
+                $categorieId,
+                $date,
+                $typeVehiculeId,
+            );
 
         return (int) round((float) ($regle?->montant ?? 0));
     }

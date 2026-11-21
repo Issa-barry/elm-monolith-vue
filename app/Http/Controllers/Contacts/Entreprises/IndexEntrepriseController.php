@@ -33,10 +33,15 @@ class IndexEntrepriseController extends Controller
             fn (array $o) => in_array(explode(':', $o['value'])[0], $lisibles, true),
         ));
 
+        // Filtre « Catégorie » à choix multiples ; un ancien lien `?fonction=client` reste valable.
+        if (is_string($request->query('fonction'))) {
+            $request->merge(['fonction' => [$request->query('fonction')]]);
+        }
+
         $filters = $request->validate([
             'recherche' => ['nullable', 'string', 'max:100'],
             'statut' => ['nullable', Rule::in(['actif', 'inactif'])],
-            'fonction' => ['nullable', Rule::in($lisibles)],
+            'fonction' => ['nullable', 'array', Rule::in($lisibles)],
             'sous_categorie' => ['nullable', Rule::in(array_column($options['sous_categories'], 'value'))],
             'ville' => ['nullable', 'string', 'max:100'],
             'categorie' => ['nullable', Rule::in(array_column($options['categories'], 'value'))],
@@ -51,7 +56,7 @@ class IndexEntrepriseController extends Controller
                 ->where('contact_categories.organization_id', $user->organization_id)
                 ->where('contact_categories.code', $code)))
             ->when($filters['statut'] ?? null, fn (Builder $q, string $s) => $q->where('entreprises_tierces.is_active', $s === 'actif'))
-            ->when($filters['fonction'] ?? null, fn (Builder $q, string $f) => $visibilite->entreprisesAvecFonction($q, $user, $f))
+            ->when($filters['fonction'] ?? [], fn (Builder $q, array $f) => $visibilite->entreprisesAvecUneDesFonctions($q, $user, array_values($f)))
             ->when($filters['sous_categorie'] ?? null, function (Builder $q, string $valeur) use ($visibilite, $user) {
                 [$categorie, $code] = explode(':', $valeur, 2);
 

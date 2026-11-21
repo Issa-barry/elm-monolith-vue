@@ -74,19 +74,34 @@ class PaiementPeriode extends Model
 
     // ── Accessors ─────────────────────────────────────────────────────────────
 
+    // Valeurs préchargées par avecTotauxFiches() quand elles existent : une liste ne refait pas
+    // trois requêtes par période.
     public function getNbFichesAttribute(): int
     {
-        return $this->fiches()->count();
+        return array_key_exists('fiches_count', $this->attributes)
+            ? (int) $this->attributes['fiches_count']
+            : $this->fiches()->count();
     }
 
     public function getTotalNetAttribute(): float
     {
-        return (float) $this->fiches()->sum('montant_net');
+        return array_key_exists('fiches_sum_montant_net', $this->attributes)
+            ? (float) $this->attributes['fiches_sum_montant_net']
+            : (float) $this->fiches()->sum('montant_net');
     }
 
     public function getTotalPayeAttribute(): float
     {
-        return (float) $this->fiches()->sum('montant_paye');
+        return array_key_exists('fiches_sum_montant_paye', $this->attributes)
+            ? (float) $this->attributes['fiches_sum_montant_paye']
+            : (float) $this->fiches()->sum('montant_paye');
+    }
+
+    public function scopeAvecTotauxFiches(Builder $query): Builder
+    {
+        return $query->withCount('fiches')
+            ->withSum('fiches', 'montant_net')
+            ->withSum('fiches', 'montant_paye');
     }
 
     public function getStatutLabelAttribute(): string

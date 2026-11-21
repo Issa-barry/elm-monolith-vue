@@ -12,6 +12,7 @@ use App\Models\MouvementFonds;
 use App\Models\PropositionVehicule;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
+use App\Models\User;
 use App\Notifications\AnomalieEncaissementNotification;
 use App\Notifications\EcartReceptionTransfertNotification;
 use App\Services\ModuleService;
@@ -23,6 +24,7 @@ use App\Support\Periodes\Periode;
 use App\Support\Permissions\RoleVisibility;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -35,6 +37,22 @@ class HandleInertiaRequests extends Middleware
      * @var string
      */
     protected $rootView = 'app';
+
+    /** @var array<string, Collection<int, Site>> */
+    private array $sitesParUtilisateur = [];
+
+    /**
+     * Sites rattachés à l'utilisateur, lus une seule fois par requête : les badges, le périmètre
+     * et l'agence par défaut s'en servent tous.
+     *
+     * @return Collection<int, Site>
+     */
+    private function sitesUtilisateur(User $user): Collection
+    {
+        return $this->sitesParUtilisateur[$user->id] ??= $user->sites()
+            ->orderBy('nom')
+            ->get(['sites.id', 'sites.nom', 'sites.type']);
+    }
 
     /**
      * Determines the current asset version.
@@ -114,7 +132,7 @@ class HandleInertiaRequests extends Middleware
             ->where('statut', StatutTransfert::TRANSIT->value);
 
         // Notification uniquement pour les utilisateurs lies au site de destination.
-        $siteIds = $user->sites()->pluck('sites.id');
+        $siteIds = $this->sitesUtilisateur($user)->pluck('id');
         if ($siteIds->isEmpty()) {
             return 0;
         }
@@ -163,7 +181,7 @@ class HandleInertiaRequests extends Middleware
             ->where('statut', StatutMouvementFonds::ENVOYE->value);
 
         if (! $user->agitSurToutesLesAgences()) {
-            $siteIds = $user->sites()->pluck('sites.id');
+            $siteIds = $this->sitesUtilisateur($user)->pluck('id');
             if ($siteIds->isEmpty()) {
                 return 0;
             }
@@ -261,7 +279,7 @@ class HandleInertiaRequests extends Middleware
 
         $aTraiter = 0;
         if ($user->can('encaissements.surveiller')) {
-            $siteIds = $user->voitToutesLesAgences() ? null : $user->sites()->pluck('sites.id')->all();
+            $siteIds = $user->voitToutesLesAgences() ? null : $this->sitesUtilisateur($user)->pluck('id')->all();
             $aTraiter = AnomalieEncaissement::query()
                 ->where('organization_id', $user->organization_id)
                 ->where('statut', StatutAnomalieEncaissement::NOUVELLE->value)
@@ -319,10 +337,9 @@ class HandleInertiaRequests extends Middleware
             return []; // Admin ou vision 360° (ADR 0025) = pas de restriction de périmètre en consultation
         }
 
-        return $user->sites()
-            ->orderBy('nom')
-            ->get(['sites.id', 'sites.nom'])
+        return $this->sitesUtilisateur($user)
             ->map(fn ($s) => ['id' => (string) $s->id, 'nom' => $s->nom])
+            ->values()
             ->toArray();
     }
 
@@ -392,10 +409,7 @@ class HandleInertiaRequests extends Middleware
             return null;
         }
 
-        $site = $user->sites()
-            ->wherePivot('is_default', true)
-            ->select('sites.id', 'sites.nom', 'sites.type')
-            ->first();
+        $site = $this->sitesUtilisateur($user)->first(fn (Site $s) => (bool) $s->pivot->is_default);
 
         if (! $site) {
             return null;
@@ -433,7 +447,9 @@ class HandleInertiaRequests extends Middleware
             'appVersion' => AppVersion::current(),
             'appVersionLabel' => AppVersion::label(),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
-            'auth' => [
+            // Calculés seulement quand une page Inertia est rendue : une réponse JSON ou une
+            // redirection (après un enregistrement) n'en a pas besoin.
+            'auth' => fn () => [
                 'user' => $this->authUserPayload($request),
                 'permissions' => $request->user()?->permissionsMap() ?? [],
                 'roles' => $request->user()?->getRoleNames() ?? [],
@@ -444,17 +460,17 @@ class HandleInertiaRequests extends Middleware
                 'voit_toutes_agences' => (bool) $request->user()?->voitToutesLesAgences(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
-            'stock_alertes' => $this->stockAlertes($request),
-            'contact_messages_non_lus' => $this->contactMessagesNonLus($request),
-            'transferts_a_receptionner' => $this->transfertsAReceptionner($request),
-            'mouvements_fonds_a_confirmer' => $this->mouvementsFondsAConfirmer($request),
-            'approvisionnements_a_confirmer' => $this->approvisionnementsAConfirmer($request),
-            'propositions_a_traiter' => $this->propositionsATraiter($request),
-            'ecarts_reception' => $this->ecartsReception($request),
-            'anomalies_encaissement' => $this->anomaliesEncaissement($request),
-            'module_flags' => $this->moduleFlags($request),
-            'theme' => $this->theme($request),
-            'org_sites' => $this->orgSites($request),
+            'stock_alertes' => fn () => $this->stockAlertes($request),
+            'contact_messages_non_lus' => fn () => $this->contactMessagesNonLus($request),
+            'transferts_a_receptionner' => fn () => $this->transfertsAReceptionner($request),
+            'mouvements_fonds_a_confirmer' => fn () => $this->mouvementsFondsAConfirmer($request),
+            'approvisionnements_a_confirmer' => fn () => $this->approvisionnementsAConfirmer($request),
+            'propositions_a_traiter' => fn () => $this->propositionsATraiter($request),
+            'ecarts_reception' => fn () => $this->ecartsReception($request),
+            'anomalies_encaissement' => fn () => $this->anomaliesEncaissement($request),
+            'module_flags' => fn () => $this->moduleFlags($request),
+            'theme' => fn () => $this->theme($request),
+            'org_sites' => fn () => $this->orgSites($request),
             // Choix du champ « Période » de DataFilters : une seule liste pour tout le back-office (ADR 0057).
             'periodes' => fn () => Periode::options(),
             'seoDefaults' => $this->seoDefaults(),

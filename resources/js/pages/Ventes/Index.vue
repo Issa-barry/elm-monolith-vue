@@ -53,6 +53,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import DatePicker from 'primevue/datepicker';
 import Dialog from 'primevue/dialog';
+import Paginator from 'primevue/paginator';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import Tooltip from 'primevue/tooltip';
@@ -154,9 +155,20 @@ interface IndicateursPrecommandes {
     en_retard: IndicateurPrecommande;
 }
 
+/** Liste Ventes paginée côté serveur (null : Distribution et Précommandes, liste complète). */
+interface PaginationServeur {
+    page: number;
+    par_page: number;
+    total: number;
+    derniere_page: number;
+    tri: string | null;
+    sens: 'asc' | 'desc' | null;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commandes: Commande[];
+    pagination: PaginationServeur | null;
     totaux: Totaux;
     indicateurs_precommandes: IndicateursPrecommandes | null;
     nature_filtree: 'vente_standard' | 'distribution_client';
@@ -499,6 +511,54 @@ const champsBarreRapide = computed(() =>
 );
 
 const commandesFiltrees = computed(() => props.commandes);
+
+// ── Pagination et tri serveur (liste Ventes) ──────────────────────────────────
+// Les filtres de l'URL sont conservés ; changer de tri revient à la première page.
+const nombreResultats = computed(
+    () => props.pagination?.total ?? commandesFiltrees.value.length,
+);
+
+function chargerPage(page: number, tri: string | null, sens: string | null) {
+    router.reload({
+        data: {
+            page: page > 1 ? page : undefined,
+            tri: tri ?? undefined,
+            sens: tri ? (sens ?? undefined) : undefined,
+        },
+    });
+}
+
+function changerPage(event: { page: number }) {
+    const p = props.pagination;
+    if (p) chargerPage(event.page + 1, p.tri, p.sens);
+}
+
+function changerTri(event: { sortField?: unknown; sortOrder?: number | null }) {
+    const champ =
+        typeof event.sortField === 'string' && event.sortOrder
+            ? event.sortField
+            : null;
+    chargerPage(1, champ, event.sortOrder === 1 ? 'asc' : 'desc');
+}
+
+const tableauServeur = computed(() => {
+    const p = props.pagination;
+    if (!p) {
+        return {
+            paginator: commandesFiltrees.value.length > 20,
+            rows: 20,
+        };
+    }
+    return {
+        lazy: true,
+        paginator: p.total > p.par_page,
+        rows: p.par_page,
+        totalRecords: p.total,
+        first: (p.page - 1) * p.par_page,
+        sortField: p.tri ?? undefined,
+        sortOrder: p.tri ? (p.sens === 'asc' ? 1 : -1) : undefined,
+    };
+});
 
 // ── Filtre mobile ─────────────────────────────────────────────────────────────
 
@@ -908,7 +968,7 @@ function confirmDelete(c: Commande) {
                     :saved-filter-scope="scopeVues"
                     :values="filterValues"
                     :sites="sites"
-                    :result-count="commandesFiltrees.length"
+                    :result-count="nombreResultats"
                     :fields="filterFields"
                 />
             </QuickFilters>
@@ -935,7 +995,7 @@ function confirmDelete(c: Commande) {
                     :saved-filter-scope="scopeVues"
                     :values="filterValues"
                     :sites="sites"
-                    :result-count="commandesFiltrees.length"
+                    :result-count="nombreResultats"
                     :fields="filterFields"
                 />
             </div>
@@ -944,6 +1004,13 @@ function confirmDelete(c: Commande) {
             <MobileVenteList
                 v-if="mobileFiltered.length"
                 :commandes="mobileFiltered"
+            />
+            <Paginator
+                v-if="pagination && pagination.total > pagination.par_page"
+                :rows="pagination.par_page"
+                :total-records="pagination.total"
+                :first="(pagination.page - 1) * pagination.par_page"
+                @page="changerPage"
             />
 
             <!-- Empty state -->
@@ -1028,7 +1095,7 @@ function confirmDelete(c: Commande) {
                                 :saved-filter-scope="scopeVues"
                                 :values="filterValues"
                                 :sites="sites"
-                                :result-count="commandesFiltrees.length"
+                                :result-count="nombreResultats"
                                 :fields="filterFields"
                             />
                         </template>
@@ -1221,8 +1288,7 @@ function confirmDelete(c: Commande) {
                 />
                 <DataTable
                     :value="commandesFiltrees"
-                    :paginator="commandesFiltrees.length > 20"
-                    :rows="20"
+                    v-bind="tableauServeur"
                     data-key="id"
                     striped-rows
                     removable-sort
@@ -1242,6 +1308,8 @@ function confirmDelete(c: Commande) {
                         bodyRow: bodyRowPt,
                     }"
                     @row-click="onRowClick"
+                    @page="changerPage"
+                    @sort="changerTri"
                 >
                     <!-- Référence -->
                     <Column

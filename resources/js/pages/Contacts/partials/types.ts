@@ -35,7 +35,7 @@ export interface OptionFiltre {
 export interface OptionsFiltres {
     fonctions: OptionFiltre[];
     sous_categories: OptionFiltre[];
-    /** Lot 6a : catégories libres actives (filtre « Catégorie »). */
+    /** Lot 6a : catégories libres actives (filtre « Catégorie libre »). */
     categories: OptionFiltre[];
 }
 
@@ -68,6 +68,9 @@ export interface PersonneListe {
     nom: string;
     telephone: string | null;
     code_phone_pays: string | null;
+    email: string | null;
+    /** Déduit des fonctions visibles : active dès qu'une fonction est active (calculé par le serveur). */
+    is_active: boolean;
     ville: string | null;
     quartier: string | null;
     fonctions: FonctionContact[];
