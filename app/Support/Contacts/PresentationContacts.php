@@ -57,6 +57,27 @@ final class PresentationContacts
         ], $fonctions);
     }
 
+    /**
+     * Statut d'une Personne dans la liste : elle n'en porte pas elle-même, il se déduit de ses
+     * fonctions visibles. Active dès qu'une fonction est active (Employé : statut « actif »),
+     * inactive quand toutes le sont.
+     *
+     * @param  list<array<string, mixed>>  $fonctions
+     */
+    public static function personneActive(array $fonctions): bool
+    {
+        foreach ($fonctions as $f) {
+            $active = $f['fonction'] === 'employe'
+                ? ($f['sous_categorie'] ?? null) === StatutEmploye::ACTIF->value
+                : ($f['actif'] ?? false) === true;
+            if ($active) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function nomPersonne(Personne $personne, array $fonctions): string
     {
         $nom = trim($personne->nom_complet);

@@ -4,8 +4,8 @@ namespace App\Services\Ventes;
 
 use App\Models\CommandeVente;
 use App\Services\Commission\CommissionProcessusDefaults;
-use Illuminate\Support\Collection;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Illuminate\Database\Eloquent\Builder;
+use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithTitle;
@@ -16,7 +16,7 @@ use Maatwebsite\Excel\Concerns\WithTitle;
  * "Agence" est le seul intitulé retenu pour le site : il n'existe aucune entité Agence distincte
  * de Site dans ce domaine (cf. DataFilters.vue, qui affiche déjà le sélecteur de site sous ce nom).
  */
-class VenteListExport implements FromCollection, WithHeadings, WithMapping, WithTitle
+class VenteListExport implements FromQuery, WithHeadings, WithMapping, WithTitle
 {
     /** @var array<string, string> */
     public const COLUMNS = [
@@ -34,11 +34,14 @@ class VenteListExport implements FromCollection, WithHeadings, WithMapping, With
     ];
 
     /**
-     * @param  Collection<int, CommandeVente>  $commandes  chargées avec ['vehicule.equipe.livreurs', 'client', 'site', 'facture']
+     * Les ventes sont lues par paquets (FromQuery) : aucune limite de volume, et les relations sont
+     * chargées paquet par paquet.
+     *
+     * @param  Builder<CommandeVente>  $commandes  requête triée, avec ['vehicule.equipe.livreurs', 'client', 'site', 'facture.encaissements']
      * @param  list<string>  $columns  sous-ensemble de array_keys(self::COLUMNS) ; vide = toutes les colonnes
      */
     public function __construct(
-        private readonly Collection $commandes,
+        private readonly Builder $commandes,
         private readonly array $columns,
         private readonly string $sheetTitle = 'ventes',
     ) {}
@@ -48,7 +51,7 @@ class VenteListExport implements FromCollection, WithHeadings, WithMapping, With
         return $this->sheetTitle;
     }
 
-    public function collection(): Collection
+    public function query(): Builder
     {
         return $this->commandes;
     }

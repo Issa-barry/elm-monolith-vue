@@ -7,6 +7,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
@@ -19,6 +20,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { computed } from 'vue';
 import BadgesFonctions from '../partials/BadgesFonctions.vue';
+import { sousCategoriesDe } from '../partials/filtres';
 import PaginationContacts from '../partials/PaginationContacts.vue';
 import type {
     OptionsFiltres,
@@ -47,10 +49,18 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<PersonneListe>(lien);
 const filterFields = computed<FilterField[]>(() => [
     {
         key: 'fonction',
-        label: 'Fonction',
-        type: 'select',
+        label: 'Catégorie',
+        type: 'multi-select',
         inline: true,
         options: props.options.fonctions,
+    },
+    {
+        key: 'sous_categorie',
+        label: 'Sous-catégorie',
+        type: 'select',
+        inline: true,
+        optionsFrom: (values) =>
+            sousCategoriesDe(props.options.sous_categories, values.fonction),
     },
     {
         key: 'recherche',
@@ -60,14 +70,8 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'Nom, téléphone, e-mail...',
     },
     {
-        key: 'sous_categorie',
-        label: 'Sous-catégorie',
-        type: 'select',
-        options: props.options.sous_categories,
-    },
-    {
         key: 'categorie',
-        label: 'Catégorie',
+        label: 'Catégorie libre',
         type: 'select',
         options: props.options.categories,
     },
@@ -153,9 +157,24 @@ function localisation(p: PersonneListe): string {
                     class="block space-y-1.5 px-4 py-3.5 active:bg-muted/40"
                     data-testid="personne-carte"
                 >
-                    <p class="truncate text-sm font-medium">{{ p.nom }}</p>
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="truncate text-sm font-medium">{{
+                            p.nom
+                        }}</span>
+                        <StatusDot
+                            class="shrink-0 text-xs text-muted-foreground"
+                            :status="p.is_active ? 'actif' : 'inactif'"
+                            :label="p.is_active ? 'Actif' : 'Inactif'"
+                        />
+                    </div>
                     <p class="text-xs text-muted-foreground tabular-nums">
                         {{ telephone(p) }} · {{ localisation(p) }}
+                    </p>
+                    <p
+                        v-if="p.email"
+                        class="truncate text-xs text-muted-foreground"
+                    >
+                        {{ p.email }}
                     </p>
                     <BadgesFonctions :fonctions="p.fonctions" />
                 </Link>
@@ -199,6 +218,13 @@ function localisation(p: PersonneListe): string {
                             >
                         </template>
                     </Column>
+                    <Column header="E-mail" style="min-width: 200px">
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground">{{
+                                data.email || '—'
+                            }}</span>
+                        </template>
+                    </Column>
                     <Column header="Localisation" style="min-width: 160px">
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{
@@ -209,6 +235,15 @@ function localisation(p: PersonneListe): string {
                     <Column header="Fonctions" style="min-width: 260px">
                         <template #body="{ data }">
                             <BadgesFonctions :fonctions="data.fonctions" />
+                        </template>
+                    </Column>
+                    <Column header="Statut" style="width: 110px">
+                        <template #body="{ data }">
+                            <StatusDot
+                                class="text-muted-foreground"
+                                :status="data.is_active ? 'actif' : 'inactif'"
+                                :label="data.is_active ? 'Actif' : 'Inactif'"
+                            />
                         </template>
                     </Column>
                     <template #empty>

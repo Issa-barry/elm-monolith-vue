@@ -3,6 +3,7 @@
 namespace App\Services\Commission;
 
 use App\Models\Categorie;
+use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
@@ -66,6 +67,10 @@ class PartageConformiteVehiculesService
                 ->get()
                 ->groupBy(fn (EquipeLivraisonPartageCategorie $p) => "{$p->equipe_id}|{$p->processus_id}|{$p->categorie_id}");
 
+        // Barèmes Livreur de tous les processus lus en une requête, résolus ensuite en mémoire.
+        $reglesLivreur = ReglesCommissionPrechargees::charger(
+            $organizationId, $processusBareme->pluck('id'), CommissionCibleType::CODE_EQUIPE_LIVRAISON, $aujourdhui,
+        );
         $baremes = [];
         $resultat = [];
 
@@ -102,7 +107,7 @@ class PartageConformiteVehiculesService
                 foreach ($proc && $procBareme ? $categorieIds : [] as $categorieId) {
                     $cle = "{$procBareme->id}|{$categorieId}|{$vehicule->type_vehicule_id}";
                     $baremes[$cle] ??= CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
-                        $organizationId, $procBareme->id, $categorieId, $vehicule->type_vehicule_id, $aujourdhui,
+                        $organizationId, $procBareme->id, $categorieId, $vehicule->type_vehicule_id, $aujourdhui, $reglesLivreur,
                     );
                     if ($baremes[$cle] <= 0) {
                         continue;

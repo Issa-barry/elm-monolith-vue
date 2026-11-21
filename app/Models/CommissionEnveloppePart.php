@@ -159,6 +159,45 @@ class CommissionEnveloppePart extends Model
         return $saved;
     }
 
+    /**
+     * Même résolution que resoudreBeneficiaire(), en une requête par type de bénéficiaire pour toute
+     * une liste (évite une requête par ligne). Clé : « type|id ».
+     *
+     * @param  iterable<CommissionEnveloppePart>  $parts
+     * @return array<string, Model>
+     */
+    public static function beneficiairesPrecharges(iterable $parts): array
+    {
+        $classes = [
+            self::TYPE_LIVREUR => Livreur::class,
+            self::TYPE_PROPRIETAIRE => Proprietaire::class,
+            self::TYPE_EMPLOYE => Employe::class,
+            self::TYPE_SITE => Site::class,
+            self::TYPE_PRESTATAIRE => Prestataire::class,
+            self::TYPE_PARRAIN => Parrain::class,
+        ];
+
+        $idsParType = [];
+        foreach ($parts as $part) {
+            if (isset($classes[$part->beneficiaire_type]) && $part->beneficiaire_id !== null) {
+                $idsParType[$part->beneficiaire_type][(string) $part->beneficiaire_id] = true;
+            }
+        }
+
+        $beneficiaires = [];
+        foreach ($idsParType as $type => $ids) {
+            $query = $classes[$type]::query()->whereKey(array_keys($ids));
+            if (method_exists($classes[$type], 'personne')) {
+                $query->with('personne');
+            }
+            foreach ($query->get() as $modele) {
+                $beneficiaires[$type.'|'.$modele->getKey()] = $modele;
+            }
+        }
+
+        return $beneficiaires;
+    }
+
     public function resoudreBeneficiaire(): ?Model
     {
         return match ($this->beneficiaire_type) {

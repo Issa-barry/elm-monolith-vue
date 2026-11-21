@@ -77,7 +77,7 @@ Trois axes indépendants, chacun avec sa propre clé `localStorage` + cookie :
 | Couleur de surface (neutre) | `PrimeVueSurfaceName` | `zinc` \| `slate` \| `stone` \| `neutral` \| `gray` | `primevue_surface` |
 
 `starter` est un cas spécial : c'est visuellement le preset `Aura` de PrimeVue
-(`PRIMEVUE_PRESETS.starter = Aura`), mais choisir `starter` **verrouille** primaire=`blue` et
+(`starter` et `aura` partagent le même objet dans `PRESETS_CHARGES`), mais choisir `starter` **verrouille** primaire=`blue` et
 surface=`slate` (cf. `updatePrimeVueTheme` dans `useAppearance.ts` — si `value === 'starter'`, il écrase
 `primeVuePrimary`/`primeVueSurface` avec les defaults). C'est le thème "maison" de l'app.
 
@@ -98,6 +98,21 @@ VITE_PRIMEVUE_SURFACE=slate
 
 `applyPrimeVueThemePreset()` appelle `usePreset()` de `@primeuix/styled` pour changer le preset PrimeVue
 globalement (structure des composants : radius, espacements, etc., propre à chaque preset).
+
+**Chargement des presets (11/11/2026, lot 5 performance)** : seul Aura (donc aussi `starter`, le
+défaut) est dans le bundle principal. Lara, Material et Nora sont des fichiers séparés, téléchargés
+seulement quand l'organisation les a choisis (`loadPrimeVuePreset()`), une fois par chargement de page,
+puis réutilisés. Le preset obtenu est identique à l'ancien (`definePreset(preset, DENSITE_APOLLO)`).
+- Au démarrage, `app.ts` monte l'application une fois le preset prêt : aucun flash de thème. Pour
+  Aura, il n'y a rien à télécharger ; pour les trois autres, un fichier de 11 à 14 Ko compressé.
+- `ssr.ts` charge le preset avant le rendu serveur.
+- Au changement de thème (`applyEnvironmentTheme()`), un preset déjà disponible est appliqué
+  immédiatement comme avant. Sinon, preset puis couleurs sont appliqués après le téléchargement, et
+  le dernier thème demandé l'emporte.
+- Si le téléchargement échoue (réseau), l'application démarre quand même avec Aura et réessaiera au
+  prochain changement.
+- Gain : bundle principal de 843 à 502 Ko bruts (181 → 137 Ko gzip, 131 → 116 Ko brotli).
+- Tests : `resources/js/lib/__tests__/primevueThemeChargement.spec.ts`.
 
 `applyPrimeVuePrimaryColor()` / `applyPrimeVueSurfaceColor()` appellent `updatePrimaryPalette()` /
 `updateSurfacePalette()` de `@primeuix/styled`, qui réinjectent les variables CSS PrimeVue
