@@ -157,6 +157,14 @@ const listeProps = {
         },
     ],
     filters: {},
+    pagination: {
+        page: 1,
+        par_page: 20,
+        total: 2,
+        derniere_page: 1,
+        tri: null,
+        sens: null,
+    },
     types_options: [],
     agences_proprietaires_options: [],
     vehicule_stats: {

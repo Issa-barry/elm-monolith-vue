@@ -35,8 +35,10 @@ use App\Services\Vehicules\VehiculeListExport;
 use App\Services\Vehicules\VehiculeSituationVentesService;
 use App\Support\Periodes\Periode;
 use App\Support\SavedFilters\SavedFilterScopes;
+use App\Support\Vehicules\ListeVehicules;
 use App\Support\Vehicules\VehiculeIndexFilters;
 use App\Support\Ventes\CommandeVenteFormBuilder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -55,14 +57,57 @@ class VehiculeController extends Controller
         private readonly VehiculeSituationVentesService $situationVentesService,
     ) {}
 
+    /** Relations lues par les filtres, la recherche, les tris et les compteurs de la liste. */
+    private const RELATIONS_LISTE = ['typeVehicule', 'proprietaire.personne', 'proprietaire.user.sites', 'equipe', 'capacites'];
+
+    /** Relations complémentaires des seules lignes affichées (vehiculeData). */
+    private const RELATIONS_LIGNE = ['site', 'parrain.personne', 'equipe.membres.livreur.personne', 'capacites.categorie'];
+
+    /** Agence du propriétaire : site par défaut de son compte, sinon son premier site. */
+    private function agenceProprietaire(Vehicule $v): ?Site
+    {
+        $proprietaireUser = $v->proprietaire?->user;
+
+        return $proprietaireUser
+            ? (($proprietaireUser->sites->firstWhere('pivot.is_default', true)) ?? $proprietaireUser->sites->first())
+            : null;
+    }
+
+    /**
+     * Champs de la liste lus par les filtres, la recherche, les tris, les compteurs et les options,
+     * calculés pour TOUS les véhicules : mêmes valeurs que vehiculeData() (vérifié par
+     * VehiculeListePagineeTest), sans les données des seules lignes affichées.
+     */
+    private function ligneListe(Vehicule $v): array
+    {
+        $agence = $this->agenceProprietaire($v);
+
+        return [
+            'id' => $v->id,
+            'nom_vehicule' => $v->nom_vehicule,
+            'immatriculation' => $v->immatriculation,
+            'type_vehicule_id' => $v->type_vehicule_id,
+            'type_label' => $v->type_label,
+            'capacites' => $v->capacites->map(fn ($c) => ['capacite_max' => $c->capacite_max])->values()->all(),
+            'site_id' => $v->site_id,
+            'proprietaire_nom' => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
+            'proprietaire_telephone' => $v->proprietaire?->telephone,
+            'agence_nom' => $agence?->nom,
+            'agence_id' => $agence?->id,
+            'equipe_nom' => $v->equipe ? $v->nom_vehicule : null,
+            'livraison_vente' => $v->livraison_vente,
+            'livraison_logistique' => $v->livraison_logistique,
+            'livraison_grossiste' => $v->livraison_grossiste,
+            'usage_label' => $v->usage_label,
+            'is_active' => $v->is_active,
+        ];
+    }
+
     private function vehiculeData(Vehicule $v): array
     {
         $equipe = $v->equipe;
         $membres = $equipe ? $equipe->loadMissing('membres.livreur')->membres : collect();
-        $proprietaireUser = $v->proprietaire?->user;
-        $agence = $proprietaireUser
-            ? (($proprietaireUser->sites->firstWhere('pivot.is_default', true)) ?? $proprietaireUser->sites->first())
-            : null;
+        $agence = $this->agenceProprietaire($v);
 
         return [
             'id' => $v->id,
@@ -187,7 +232,12 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $request->validate([
+            'saved_view' => ['nullable', 'ulid'],
+            'tri' => ['nullable', 'in:'.implode(',', ListeVehicules::TRIS)],
+            'sens' => ['nullable', 'in:asc,desc'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
         $savedViews = app(SavedFilterService::class);
         $savedView = $savedViews->applyToRequest($request, 'vehicules');
         $filters = $request->only($savedViews->filterKeys($request->user(), 'vehicules'));
@@ -199,27 +249,60 @@ class VehiculeController extends Controller
         ])->validate();
 
         $orgId = auth()->user()->organization_id;
-        $modeles = Vehicule::with(['typeVehicule', 'site', 'proprietaire.personne', 'proprietaire.user.sites', 'parrain.personne', 'equipe.membres.livreur.personne', 'capacites.categorie'])
+        // Les statuts Partages / Part du parrain ne sont calculés pour tous les véhicules que si un
+        // filtre en dépend ; sinon seulement pour la page affichée (un statut ne dépend que de son
+        // véhicule).
+        $filtrePartage = ! empty($filters['partage']);
+        $filtreParrain = ! empty($filters['parrain_part']);
+        $modeles = Vehicule::with($filtrePartage ? [...self::RELATIONS_LISTE, 'equipe.membres.livreur'] : self::RELATIONS_LISTE)
             ->where('organization_id', $orgId)
             ->orderBy('nom_vehicule')
             ->get();
-        $partages = PartageConformiteVehiculesService::statuts($orgId, $modeles);
-        $partsParrain = PartParrainService::statuts($modeles);
+        $partages = $filtrePartage ? PartageConformiteVehiculesService::statuts($orgId, $modeles) : null;
+        $partsParrain = $filtreParrain ? PartParrainService::statuts($modeles) : null;
 
-        $vehicules = $modeles->map(fn (Vehicule $v) => [
-            ...$this->vehiculeData($v),
-            'partages_commission' => $partages[$v->id] ?? [],
-            'parrain_part' => $partsParrain[$v->id] ?? null,
+        $lignes = $modeles->map(fn (Vehicule $v) => [
+            ...$this->ligneListe($v),
+            ...($partages !== null ? ['partages_commission' => $partages[$v->id] ?? []] : []),
+            ...($partsParrain !== null ? ['parrain_part' => $partsParrain[$v->id] ?? null] : []),
         ]);
+
+        $tri = $request->input('tri');
+        $sens = $request->input('sens') === 'asc' ? 'asc' : 'desc';
+        $page = (int) $request->input('page', 1);
+        $filtrees = ListeVehicules::trier(VehiculeIndexFilters::apply($lignes, $filters), $tri, $sens);
+        $total = $filtrees->count();
+
+        // Données complètes des seules lignes affichées.
+        $modelesParId = $modeles->keyBy('id');
+        $affiches = new EloquentCollection(
+            $filtrees->forPage($page, ListeVehicules::PAR_PAGE)->map(fn (array $l) => $modelesParId[$l['id']])->values()->all(),
+        );
+        $affiches->loadMissing(self::RELATIONS_LIGNE);
+        $partagesAffiches = $partages ?? PartageConformiteVehiculesService::statuts($orgId, $affiches);
+        $parrainAffiches = $partsParrain ?? PartParrainService::statuts($affiches);
 
         return Inertia::render('Vehicules/Index', [
             'saved_view' => $savedView,
             'filters' => $filters,
-            'vehicules' => VehiculeIndexFilters::apply($vehicules, $filters),
-            'vehicule_stats' => VehiculeIndexFilters::stats($vehicules),
-            'types_options' => $vehicules->unique('type_vehicule_id')->sortBy('type_label')
+            'vehicules' => $affiches->map(fn (Vehicule $v) => [
+                ...$this->vehiculeData($v),
+                'partages_commission' => $partagesAffiches[$v->id] ?? [],
+                'parrain_part' => $parrainAffiches[$v->id] ?? null,
+            ])->values()->all(),
+            'pagination' => [
+                'page' => $page,
+                'par_page' => ListeVehicules::PAR_PAGE,
+                'total' => $total,
+                'derniere_page' => max(1, (int) ceil($total / ListeVehicules::PAR_PAGE)),
+                'tri' => $tri,
+                'sens' => $tri !== null ? $sens : null,
+            ],
+            // Vue d'ensemble indépendante des filtres, sur tous les véhicules.
+            'vehicule_stats' => VehiculeIndexFilters::stats($lignes),
+            'types_options' => $lignes->unique('type_vehicule_id')->sortBy('type_label')
                 ->map(fn ($v) => ['value' => $v['type_vehicule_id'], 'label' => $v['type_label']])->values(),
-            'agences_proprietaires_options' => $vehicules->whereNotNull('agence_id')->unique('agence_id')->sortBy('agence_nom')
+            'agences_proprietaires_options' => $lignes->whereNotNull('agence_id')->unique('agence_id')->sortBy('agence_nom')
                 ->map(fn ($v) => ['value' => $v['agence_id'], 'label' => $v['agence_nom']])->values(),
         ]);
     }

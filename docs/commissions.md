@@ -1109,6 +1109,8 @@ rattraper.
     mais aucune équipe), Non requis (aucun barème Livreur positif) ; un processus que l'usage du
     véhicule n'exerce pas n'est pas affiché. Filtre « Partages commission » (au moins un à faire /
     tous faits). Calcul groupé : `PartageConformiteVehiculesService`, même juge que la commande.
+    Liste paginée (12/11/2026) : états calculés pour les 20 véhicules affichés, ou pour tous quand
+    le filtre « Partages commission » est actif (cf. docs/filters.md).
     Barèmes Livreur (11/11/2026) : lus en une seule requête pour tous les processus
     (`ReglesCommissionPrechargees`), puis résolus en mémoire avec les mêmes filtres, le même ordre
     et la même cascade que `CommissionRegleResolver` — aucune règle ne change ; si deux règles du

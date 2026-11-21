@@ -465,6 +465,26 @@ défaut les plus récentes d'abord). La période par défaut reste « Tout ».
 - Distribution et Précommandes, servies par la même page, gardent leur liste complète triée dans le
   navigateur.
 
+### Pagination et tri côté serveur (Véhicules, 12/11/2026)
+
+La liste **Véhicules** envoie une page de 20 véhicules (`page`), sur ordinateur comme sur mobile
+(qui affichait auparavant tous les véhicules d'un coup). Les quatre colonnes triables (véhicule,
+type, usage, statut) sont triées côté serveur (`tri`, `sens`) sur tous les véhicules filtrés ;
+par défaut, ordre du nom du véhicule.
+
+- Filtres, recherche, « Mes vues » et compteurs du haut (Total, Actifs, Inactifs, Sans équipe, Par
+  type, toujours indépendants des filtres) donnent exactement les mêmes résultats qu'avant : ils
+  lisent, pour tous les véhicules, les mêmes champs que la ligne affichée
+  (`VehiculeController::ligneListe()`), filtrés par `VehiculeIndexFilters`.
+- Le tri reproduit celui que faisait le tableau dans le navigateur (`App\Support\Vehicules\ListeVehicules`) :
+  textes comparés comme `Intl.Collator` numérique (« Camion 2 » avant « Camion 10 », accents
+  pondérés), valeurs vides toujours en dernier, égalités dans l'ordre du nom. Sans l'extension PHP
+  `intl`, ordre naturel insensible à la casse (accents non pondérés).
+- Les états « Partages » et « Part du parrain » ne sont calculés que pour les 20 véhicules affichés,
+  sauf si un filtre en dépend (alors pour tous) : l'état d'un véhicule ne dépend que de lui.
+- Changer un filtre ou un tri revient à la première page. Les exports sont inchangés (tous les
+  véhicules de l'organisation).
+
 ---
 
 ## Réinitialisation
