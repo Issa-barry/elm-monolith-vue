@@ -107,6 +107,26 @@ final class VisibiliteContacts
         return $requete->whereExists(fn (QueryBuilder $s) => $this->fonctionDeLEntreprise($s, $fonction, $code));
     }
 
+    /**
+     * Restreint une requête d'entreprises à celles qui portent au moins une de ces fonctions
+     * (filtre « Catégorie » à choix multiples) ; une fonction non lisible ne retient rien.
+     *
+     * @param  list<string>  $fonctions
+     */
+    public function entreprisesAvecUneDesFonctions(Builder $requete, User $lecteur, array $fonctions): Builder
+    {
+        $retenues = array_values(array_filter($fonctions, fn (string $f) => in_array($f, self::FONCTIONS_ENTREPRISE, true) && $this->peutLire($lecteur, $f)));
+        if ($retenues === []) {
+            return $requete->whereRaw(self::AUCUN);
+        }
+
+        return $requete->where(function (Builder $q) use ($retenues) {
+            foreach ($retenues as $fonction) {
+                $q->orWhereExists(fn (QueryBuilder $s) => $this->fonctionDeLEntreprise($s, $fonction));
+            }
+        });
+    }
+
     public function entrepriseVisible(EntrepriseTierce $entreprise, User $lecteur): bool
     {
         return $this->entreprisesVisibles($lecteur)->whereKey($entreprise->getKey())->exists();
@@ -139,6 +159,26 @@ final class VisibiliteContacts
         }
 
         return $requete->where(fn (Builder $q) => $this->ouAvecFonction($q, $lecteur, $fonction, $code));
+    }
+
+    /**
+     * Restreint une requête de personnes à celles qui portent au moins une de ces fonctions
+     * (filtre « Catégorie » à choix multiples) ; une fonction non lisible ne retient rien.
+     *
+     * @param  list<string>  $fonctions
+     */
+    public function personnesAvecUneDesFonctions(Builder $requete, User $lecteur, array $fonctions): Builder
+    {
+        $retenues = array_values(array_filter($fonctions, fn (string $f) => $this->peutLire($lecteur, $f)));
+        if ($retenues === []) {
+            return $requete->whereRaw(self::AUCUN);
+        }
+
+        return $requete->where(function (Builder $q) use ($lecteur, $retenues) {
+            foreach ($retenues as $fonction) {
+                $this->ouAvecFonction($q, $lecteur, $fonction);
+            }
+        });
     }
 
     public function personneVisible(Personne $personne, User $lecteur): bool

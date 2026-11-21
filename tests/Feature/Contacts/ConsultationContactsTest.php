@@ -195,6 +195,58 @@ class ConsultationContactsTest extends TestCase
         $this->assertSame([$proprio->id], $this->idsListe($user, 'contacts.personnes.index', ['recherche' => 'Chérif']));
     }
 
+    public function test_la_liste_affiche_l_email_et_un_statut_deduit_des_fonctions(): void
+    {
+        $active = $this->personne(['nom_complet' => 'Awa Active', 'email' => 'awa@exemple.test']);
+        Livreur::create(['organization_id' => $this->org->id, 'personne_id' => $active->id, 'nom_complet' => 'Awa Active', 'is_active' => false]);
+        Proprietaire::create(['organization_id' => $this->org->id, 'personne_id' => $active->id, 'type' => 'personne_physique', 'is_active' => true]);
+        $inactive = $this->personne(['nom_complet' => 'Binta Inactive', 'email' => null]);
+        Livreur::create(['organization_id' => $this->org->id, 'personne_id' => $inactive->id, 'nom_complet' => 'Binta Inactive', 'is_active' => false]);
+        $sortie = $this->personne(['nom_complet' => 'Chérif Sorti']);
+        Employe::create(['organization_id' => $this->org->id, 'personne_id' => $sortie->id, 'matricule' => 'EMP-0002', 'type_employe' => 'interne', 'statut' => 'sorti']);
+        $employe = $this->personne(['nom_complet' => 'Diaka Employée']);
+        Employe::create(['organization_id' => $this->org->id, 'personne_id' => $employe->id, 'matricule' => 'EMP-0003', 'type_employe' => 'interne', 'statut' => 'actif']);
+        $user = $this->lecteur(['contacts.read', 'livreurs.read', 'proprietaires.read', 'rh-employes.read']);
+
+        $lignes = [];
+        $this->actingAs($user)->get(route('contacts.personnes.index'))
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) use (&$lignes) {
+                $lignes = collect($page->toArray()['props']['personnes']['data'])->keyBy('id');
+            });
+
+        $this->assertSame('awa@exemple.test', $lignes[$active->id]['email']);
+        $this->assertNull($lignes[$inactive->id]['email']);
+        // Active dès qu'une fonction est active, même si une autre ne l'est plus.
+        $this->assertTrue($lignes[$active->id]['is_active']);
+        $this->assertFalse($lignes[$inactive->id]['is_active']);
+        $this->assertFalse($lignes[$sortie->id]['is_active']);
+        $this->assertTrue($lignes[$employe->id]['is_active']);
+    }
+
+    public function test_le_filtre_categorie_accepte_plusieurs_fonctions(): void
+    {
+        $client = $this->client($this->personne(['nom_complet' => 'Awa Cliente']))->personne;
+        $proprio = $this->personne(['nom_complet' => 'Chérif Propriétaire']);
+        Proprietaire::create(['organization_id' => $this->org->id, 'personne_id' => $proprio->id, 'type' => 'personne_physique', 'is_active' => true]);
+        $lesDeux = $this->client($this->personne(['nom_complet' => 'Binta Les Deux']))->personne;
+        Proprietaire::create(['organization_id' => $this->org->id, 'personne_id' => $lesDeux->id, 'type' => 'personne_physique', 'is_active' => true]);
+        $livreur = $this->personne(['nom_complet' => 'Mamadou Livreur']);
+        Livreur::create(['organization_id' => $this->org->id, 'personne_id' => $livreur->id, 'nom_complet' => 'Mamadou Livreur', 'is_active' => true]);
+        $user = $this->lecteur(['contacts.read', 'clients.read', 'proprietaires.read', 'livreurs.read']);
+
+        // Au moins une des catégories cochées ; une fiche qui porte les deux n'apparaît qu'une fois.
+        $this->assertEqualsCanonicalizing(
+            [$client->id, $proprio->id, $lesDeux->id],
+            $this->idsListe($user, 'contacts.personnes.index', ['fonction' => ['client', 'proprietaire']]),
+        );
+        // Un ancien lien à valeur unique reste accepté.
+        $this->assertEqualsCanonicalizing([$proprio->id, $lesDeux->id], $this->idsListe($user, 'contacts.personnes.index', ['fonction' => 'proprietaire']));
+
+        $this->actingAs($user)->get(route('contacts.personnes.index', ['fonction' => ['client', 'fournisseur']]))
+            ->assertSessionHasErrors('fonction');
+    }
+
     public function test_la_liste_est_paginee_cote_serveur(): void
     {
         foreach (range(1, 27) as $i) {
@@ -416,6 +468,7 @@ class ConsultationContactsTest extends TestCase
 
         $this->assertSame([$active->id], $this->idsListe($user, 'contacts.entreprises.index', ['statut' => 'actif'], 'entreprises'));
         $this->assertSame([$inactive->id], $this->idsListe($user, 'contacts.entreprises.index', ['fonction' => 'prestataire'], 'entreprises'));
+        $this->assertEqualsCanonicalizing([$active->id, $inactive->id], $this->idsListe($user, 'contacts.entreprises.index', ['fonction' => ['fournisseur', 'prestataire']], 'entreprises'));
         $this->assertSame([$inactive->id], $this->idsListe($user, 'contacts.entreprises.index', ['sous_categorie' => 'prestataire:consultant'], 'entreprises'));
         $this->assertSame([$active->id], $this->idsListe($user, 'contacts.entreprises.index', ['recherche' => 'Active'], 'entreprises'));
     }

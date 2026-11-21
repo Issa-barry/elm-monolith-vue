@@ -512,9 +512,9 @@ sur les ventes, commissions, comptabilité ou logistique.
 
 | Route | Écran |
 | --- | --- |
-| `GET /backoffice/contacts/personnes` | Liste Personnes physiques : nom (repli sur la désignation du livreur, puis le téléphone), téléphone, localisation, badges de fonctions ; barre de filtres « Catégorie » (la fonction : client, fournisseur, prestataire…), « Sous-catégorie », recherche ; dans le tiroir, catégorie libre et ville ; 25 par page |
+| `GET /backoffice/contacts/personnes` | Liste Personnes physiques : nom (repli sur la désignation du livreur, puis le téléphone), téléphone, e-mail, localisation, badges de fonctions, statut (une Personne n'en porte pas : « Actif » dès qu'une de ses fonctions visibles est active — Employé : statut « actif » —, « Inactif » sinon, calculé par le serveur) ; barre de filtres « Catégorie » (la fonction : client, fournisseur, prestataire… ; choix multiple, `fonction[]`, une fiche ressort si elle porte au moins une des catégories cochées), « Sous-catégorie » (limitée aux catégories cochées), recherche ; dans le tiroir, catégorie libre et ville ; 25 par page |
 | `GET /backoffice/contacts/personnes/{personne}` | Fiche : Informations, Fonctions (lien vers l'écran existant de la fonction), Entreprises représentées |
-| `GET /backoffice/contacts/entreprises` | Liste Entreprises : raison sociale, téléphone, ville, fonctions, interlocuteur principal, statut ; barre de filtres statut, « Catégorie » (la fonction), « Sous-catégorie », recherche ; dans le tiroir, catégorie libre et ville |
+| `GET /backoffice/contacts/entreprises` | Liste Entreprises : raison sociale, téléphone, ville, fonctions, interlocuteur principal, statut ; barre de filtres statut, « Catégorie » (la fonction, choix multiple comme sur Personnes physiques), « Sous-catégorie », recherche ; dans le tiroir, catégorie libre et ville |
 | `GET /backoffice/contacts/entreprises/{entreprise}` | Fiche : Informations, Fonctions, Interlocuteurs (lecture) |
 
 Menu : « Entreprises » et « Personnes physiques » en tête de Contacts, visibles avec

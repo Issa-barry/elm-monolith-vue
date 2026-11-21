@@ -20,6 +20,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { computed } from 'vue';
 import BadgesFonctions from '../partials/BadgesFonctions.vue';
+import { sousCategoriesDe } from '../partials/filtres';
 import PaginationContacts from '../partials/PaginationContacts.vue';
 import type {
     EntrepriseListe,
@@ -59,7 +60,7 @@ const filterFields = computed<FilterField[]>(() => [
     {
         key: 'fonction',
         label: 'Catégorie',
-        type: 'select',
+        type: 'multi-select',
         inline: true,
         options: props.options.fonctions,
     },
@@ -68,7 +69,8 @@ const filterFields = computed<FilterField[]>(() => [
         label: 'Sous-catégorie',
         type: 'select',
         inline: true,
-        options: props.options.sous_categories,
+        optionsFrom: (values) =>
+            sousCategoriesDe(props.options.sous_categories, values.fonction),
     },
     {
         key: 'recherche',
