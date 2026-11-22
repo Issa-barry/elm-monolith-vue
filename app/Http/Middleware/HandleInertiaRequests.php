@@ -78,16 +78,12 @@ class HandleInertiaRequests extends Middleware
     /**
      * Thème global (preset PrimeVue / couleur principale / surface), partagé à
      * chaque page — pas seulement l'écran de réglages, cf. docs/theming.md.
-     * Résolu même pour un visiteur non authentifié (page de login) en retombant
-     * sur la première organisation du déploiement, comme ModuleService le fait
-     * déjà pour les flags publics.
+     * Résolu même pour un visiteur non authentifié (cf.
+     * ThemePolicyService::sharedPayloadForRequest()).
      */
     private function theme(Request $request): array
     {
-        $orgId = $request->user()?->organization_id
-            ?? ModuleService::publicOrganization()?->id;
-
-        return app(ThemePolicyService::class)->sharedPayload($orgId);
+        return app(ThemePolicyService::class)->sharedPayloadForRequest($request);
     }
 
     private function moduleFlags(Request $request): array
