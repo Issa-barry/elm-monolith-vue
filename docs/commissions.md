@@ -538,7 +538,8 @@ garde un choix unique.
   statuts cochés (`CommissionStatutFilter`) — sauf sur l'écran **Livreurs**, où le statut s'applique
   commission par commission (section suivante) ; une commission est retenue si sa date (`earned_at`)
   tombe dans l'une des périodes cochées (`CommissionPeriodeFilter`). Aucune case cochée = tous les
-  statuts / toutes les périodes.
+  statuts / toutes les périodes — sauf la période sur l'écran **Livreurs** : quinzaine en cours et
+  quinzaines non soldées, « Toutes les périodes » étant un choix explicite (section dédiée plus bas).
 - **Même périmètre partout** : les dépenses déduites (`date_depense`), la fiche proposée au bouton
   Payer (`FichePayableResolver`) et les exports Excel/PDF utilisent exactement les mêmes périodes
   que la liste.
@@ -580,6 +581,57 @@ vue « Impayé » même avec d'autres commissions validées non payées.
 - La recherche serveur (`?search=`) ne fait plus correspondre toutes les lignes quand le texte
   ne contient aucun chiffre (même garde que l'export).
 - Test : `tests/Feature/Comptabilite/CommissionVenteFiltreStatutMontantsTest.php`.
+
+**Calcul de l'écran (22/11/2026, performance)** : l'écran ne charge plus chaque commission avec sa
+vente ou son transfert et son véhicule. Les montants et compartiments de chaque livreur sont
+calculés par la base (`CommissionKpiBuckets::sommesParBeneficiaire()`), ses véhicules, agences,
+processus, nombre de commandes, première échéance et dates de commission sont lus en lignes légères
+(`App\Support\Commission\SyntheseCommissionsLivreurs`) ; seules les commissions encore « Créée »
+(bouton Valider, statut de validation) sont chargées. Mêmes règles qu'avant, résultat identique
+(comparé sur tous les filtres Statut) : agence = site du véhicule, sinon site de la vente ou site
+de départ du transfert ; dépenses avec un filtre Statut via
+`CommissionVenteCalculatorService::fraisDepensesSurPeriodes()`. Les exports ne changent pas.
+
+### Commissions des livreurs — vue par défaut : quinzaine en cours et quinzaines non soldées (22/11/2026)
+
+**Constat** : l'écran s'ouvrait sur tout l'historique de chaque livreur, quinzaines soldées
+comprises. Décision produit du 22/11/2026 (« option B ») : ouvrir sur ce qui reste à traiter.
+
+**Règle** (écran Livreurs, liste, cartes et exports Excel/PDF ; les trois autres listes ne
+changent pas) :
+
+- **Sans période cochée** : la quinzaine en cours, plus, pour chaque livreur, ses quinzaines
+  antérieures **non soldées** (`App\Support\Commission\PerimetreParDefautLivreurs`). L'en-tête
+  affiche « Quinzaine en cours et quinzaines non soldées ».
+- **Quinzaine non soldée** pour un livreur : il y reste une commission « Créée » (à valider), ou son
+  solde n'est pas nul — commissions retenues (`montant_actuel` sinon `montant_net`) − dépenses
+  validées de la quinzaine − déjà versé. Toutes les commissions de la quinzaine sont alors
+  affichées, payées comprises, comme sur la fiche de paie. Une quinzaine sort de la vue seulement
+  quand ce solde est nul.
+- **Pourquoi le solde et pas le statut des commissions** : un paiement de fiche est versé net des
+  dépenses, réparti FIFO sur les commissions (`CommissionEnveloppePartAllocationService`). Une
+  quinzaine payée garde donc une commission « Partielle » à hauteur des dépenses : son solde est
+  nul, elle sort de la vue et ses dépenses ne sont pas déduites une deuxième fois. Une dépense
+  validée après le paiement donne un solde négatif (reporté sur la fiche suivante) : la quinzaine
+  reste affichée, sinon la quinzaine qui porte le report afficherait ce report comme encore dû.
+- **Dépenses déduites** sans filtre Statut : celles de la quinzaine en cours et des quinzaines non
+  soldées du livreur (`PerimetreParDefautLivreurs::fraisDepenses()`), chacune une seule fois. Avec
+  un filtre Statut, la règle de la section précédente s'applique aux commissions retenues.
+- **Garantie** : seules des quinzaines de solde nul sortent de la vue, donc le reste à payer de
+  chaque livreur est identique à celui de « Toutes les périodes ». Brut, dépenses et déjà payé ne
+  portent que sur les quinzaines affichées.
+- **« Toutes les périodes »** : premier choix du filtre Période (code `toutes`, prop
+  `selected_periodes = ['toutes']`), qui l'emporte sur les quinzaines cochées avec lui ; il donne
+  l'ancien affichage de tout l'historique. Une ou plusieurs quinzaines cochées gardent leur sens.
+- **Exports** : mêmes paramètres que l'écran, donc même périmètre ; colonne Période « Quinzaine en
+  cours et quinzaines non soldées » ou « Toutes périodes ».
+- **Vues enregistrées** : une vue sans période ouvre la vue par défaut ; `periode = toutes` est
+  accepté (`SavedFilterScopes`, écran Livreurs).
+- La recherche du tableau porte sur les lignes chargées : un livreur sans quinzaine non soldée ni
+  activité dans la quinzaine en cours ne se trouve qu'avec « Toutes les périodes ».
+- Test : `tests/Feature/Comptabilite/CommissionsLivreursVueParDefautTest.php` (reste à payer
+  quinzaine par quinzaine, dépense d'une quinzaine soldée, dépense validée après paiement, égalité
+  avec « Toutes les périodes », exports, filtre Statut, recherche, vue enregistrée).
 
 ### Détail (Show) — indépendance vis-à-vis du filtre Index généralisée le 02/09/2026
 

@@ -122,8 +122,17 @@ class CommissionProcessusFilter
      */
     public static function labelsPresents(Collection $parts): array
     {
-        $codesPresents = $parts->pluck('enveloppe.processus.code')->filter()->unique()->all();
+        return self::labelsPourCodes($parts->pluck('enveloppe.processus.code')->filter()->unique()->all());
+    }
 
+    /**
+     * Libellés (ordre stable de options()) des codes de processus fournis.
+     *
+     * @param  array<int, string>  $codesPresents
+     * @return array<int, string>
+     */
+    public static function labelsPourCodes(array $codesPresents): array
+    {
         return collect(self::options())
             ->filter(fn (array $o) => in_array($o['value'], $codesPresents, true))
             ->pluck('label')
