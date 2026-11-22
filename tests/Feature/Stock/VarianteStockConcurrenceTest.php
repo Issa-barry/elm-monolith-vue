@@ -25,8 +25,11 @@ use Tests\TestCase;
  * infrastructure locale, contrairement au reste de la suite.
  *
  * N'utilise PAS RefreshDatabase : cette connexion est hors du scope sqlite forcé par
- * phpunit.xml. La base est entièrement nettoyée (TRUNCATE, FK désactivées) en amont de chaque
- * test plutôt que suivie ligne par ligne — cette base n'a aucun autre usage que ce fichier.
+ * phpunit.xml. La base est partagée avec les autres tests de concurrence (paiement de fiche,
+ * comptes mobile money, solde des supports, facture fournisseur), qui peuvent tourner en même
+ * temps en exécution parallèle : seules les lignes de l'organisation créée par ce test sont
+ * supprimées à la fin, jamais les tables entières (un TRUNCATE effaçait les données d'un autre
+ * test en cours, constaté le 22/11/2026).
  */
 class VarianteStockConcurrenceTest extends TestCase
 {
@@ -35,6 +38,8 @@ class VarianteStockConcurrenceTest extends TestCase
     private const CONNECTION = 'mysql_testing';
 
     private ?string $syncDir = null;
+
+    private ?string $orgId = null;
 
     protected function setUp(): void
     {
@@ -47,12 +52,14 @@ class VarianteStockConcurrenceTest extends TestCase
                 '(php artisan migrate --database=mysql_testing).'
             );
         }
-
-        $this->reinitialiserBaseTest();
     }
 
     protected function tearDown(): void
     {
+        if ($this->orgId !== null) {
+            $this->supprimerOrganisation($this->orgId);
+        }
+
         if ($this->syncDir && is_dir($this->syncDir)) {
             foreach (glob($this->syncDir.'/*') ?: [] as $f) {
                 @unlink($f);
@@ -78,17 +85,23 @@ class VarianteStockConcurrenceTest extends TestCase
     }
 
     /**
-     * Base dédiée exclusivement à ce test : un TRUNCATE complet (FK désactivées le temps de
-     * l'opération) est plus simple et plus rapide qu'un suivi précis des lignes créées, et sans
-     * risque puisqu'aucun autre test ni processus n'écrit dans cette base.
+     * Lignes de cette organisation seulement, dans toutes les tables qui portent organization_id
+     * (même nettoyage que PaiementFicheConcurrenceTest) : la base est partagée avec les autres
+     * tests de concurrence.
      */
-    private function reinitialiserBaseTest(): void
+    private function supprimerOrganisation(string $organizationId): void
     {
-        $conn = DB::connection('mysql_testing');
+        $conn = DB::connection(self::CONNECTION);
+        $tables = $conn->select(
+            'SELECT TABLE_NAME AS nom FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND COLUMN_NAME = ?',
+            [$conn->getDatabaseName(), 'organization_id'],
+        );
+
         $conn->statement('SET FOREIGN_KEY_CHECKS=0');
-        foreach (['variante_stocks', 'stock_reservations', 'produit_variantes', 'produits', 'produit_types', 'sites', 'organizations'] as $table) {
-            $conn->table($table)->truncate();
+        foreach ($tables as $table) {
+            $conn->table($table->nom)->where('organization_id', $organizationId)->delete();
         }
+        $conn->table('organizations')->where('id', $organizationId)->delete();
         $conn->statement('SET FOREIGN_KEY_CHECKS=1');
     }
 
@@ -108,6 +121,7 @@ class VarianteStockConcurrenceTest extends TestCase
 
         try {
             $org = Organization::factory()->create();
+            $this->orgId = $org->id;
             $site = Site::create([
                 'organization_id' => $org->id,
                 'nom' => 'Site Concurrence',
@@ -204,8 +218,9 @@ class VarianteStockConcurrenceTest extends TestCase
      * framework Laravel puis ouvrir une connexion MySQL avant de pouvoir écrire "b_ready" — sous
      * charge système forte (ex : exécuté au sein de la suite complète, des milliers de tests
      * juste avant), ce démarrage peut dépasser 10s sans qu'il s'agisse d'un défaut de
-     * lockOuCreer() lui-même (constaté : 5/5 exécutions isolées passent en ~5-6s chacune ; le
-     * seul échec observé survenait au sein d'une exécution de ~70 minutes de la suite complète).
+     * lockOuCreer() lui-même (constaté : 5/5 exécutions isolées passent en ~5-6s chacune). Les
+     * échecs observés ensuite dans la suite complète en parallèle venaient d'un autre test de
+     * concurrence qui travaillait en même temps sur la même base, pas de ce délai (22/11/2026).
      */
     private function attendreFichier(string $path, string $messageEchec, bool $autoriserErreur = false): void
     {
