@@ -16,7 +16,10 @@ return [
     */
 
     'ssr' => [
-        'enabled' => true,
+        // Désactivé dans phpunit.xml : sinon, dès qu'un bootstrap/ssr/ssr.js local existe (ancien
+        // `npm run build:ssr`), chaque page Inertia rendue par un test tente de joindre le serveur
+        // SSR absent (~2 s d'échec de connexion par page sous Windows).
+        'enabled' => (bool) env('INERTIA_SSR_ENABLED', true),
         'url' => 'http://127.0.0.1:13714',
         // 'bundle' => base_path('bootstrap/ssr/ssr.mjs'),
     ],

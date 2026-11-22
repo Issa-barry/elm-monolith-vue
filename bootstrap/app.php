@@ -14,6 +14,7 @@ use App\Http\Middleware\RequireActiveLivreur;
 use App\Http\Middleware\RequireModuleEnabled;
 use App\Http\Middleware\RequireSiteAssigned;
 use App\Http\Middleware\VerifyVitrineServiceToken;
+use App\Services\ThemePolicyService;
 use App\Support\AuthRedirects;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -129,7 +130,19 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $response->getStatusCode();
             if (in_array($status, [403, 404, 500]) && ! $request->is('api/*') && ! $request->expectsJson()) {
-                return Inertia::render('Errors/Error', ['status' => $status])
+                return Inertia::render('Errors/Error', [
+                    'status' => $status,
+                    // Les props partagées par HandleInertiaRequests manquent quand l'erreur
+                    // survient avant ce middleware (route inconnue, modèle introuvable) : sans
+                    // `theme`, app.ts ne peut pas démarrer et la page reste blanche. Résolution
+                    // sans risque : si elle échoue (ex. base indisponible pendant une 500),
+                    // le prop est absent et app.ts démarre avec le thème par défaut.
+                    'theme' => fn () => rescue(
+                        fn () => app(ThemePolicyService::class)->sharedPayloadForRequest($request),
+                        null,
+                        false,
+                    ),
+                ])
                     ->toResponse($request)
                     ->setStatusCode($status);
             }

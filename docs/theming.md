@@ -114,6 +114,16 @@ puis réutilisés. Le preset obtenu est identique à l'ancien (`definePreset(pre
 - Gain : bundle principal de 843 à 502 Ko bruts (181 → 137 Ko gzip, 131 → 116 Ko brotli).
 - Tests : `resources/js/lib/__tests__/primevueThemeChargement.spec.ts`.
 
+**Page d'erreur (22/11/2026)** : la page `Errors/Error` (403, 404, 500, rendue dans
+`bootstrap/app.php`) reçoit elle aussi le prop `theme`, via
+`ThemePolicyService::sharedPayloadForRequest()`. Sans lui, une page d'erreur ouverte directement
+(favori, lien collé, F5) restait blanche : l'erreur survient souvent avant `HandleInertiaRequests`
+(route inconnue, modèle introuvable), et `app.ts` lisait `theme.active` sans garde.
+- Si la résolution du thème échoue elle-même (ex. base indisponible pendant une 500), le prop est
+  absent : `app.ts` et `ssr.ts` démarrent avec le preset par défaut (`themeActifInitial()`,
+  `resources/js/lib/themeInitial.ts`) au lieu de planter.
+- Tests : `tests/Feature/PageErreurThemeTest.php`, `resources/js/lib/__tests__/themeInitial.spec.ts`.
+
 `applyPrimeVuePrimaryColor()` / `applyPrimeVueSurfaceColor()` appellent `updatePrimaryPalette()` /
 `updateSurfacePalette()` de `@primeuix/styled`, qui réinjectent les variables CSS PrimeVue
 (`--p-primary-*`, `--p-surface-*`) utilisées par tous les composants PrimeVue (Button, Dialog, DataTable...).
@@ -359,7 +369,7 @@ d'attention" (obsolète : elle décrivait l'architecture 100% client d'avant cet
 | [app/Models/Parametre.php](../app/Models/Parametre.php) | `GROUPE_THEME` + `getTheme*()`/`setTheme()` — persistance de la valeur active, scopée `organization_id` |
 | [app/Http/Requests/Settings/UpdateThemeRequest.php](../app/Http/Requests/Settings/UpdateThemeRequest.php) | `Rule::in()` contre `ThemePolicyService` — seule porte d'écriture validée |
 | [app/Http/Controllers/Settings/ThemeController.php](../app/Http/Controllers/Settings/ThemeController.php) | `edit`/`update`, permissions `parametres.read`/`update` |
-| [app/Http/Middleware/HandleInertiaRequests.php](../app/Http/Middleware/HandleInertiaRequests.php) | Partage `theme` (actif + autorisé + verrouillé) à **chaque page**, y compris invité (fallback `ModuleService::publicOrganization()`) |
+| [app/Http/Middleware/HandleInertiaRequests.php](../app/Http/Middleware/HandleInertiaRequests.php) | Partage `theme` (actif + autorisé + verrouillé) à **chaque page**, y compris invité (fallback `ModuleService::publicOrganization()`, dans `ThemePolicyService::sharedPayloadForRequest()`, aussi utilisé par la page d'erreur) |
 
 **Garde-fou important** : `ParametreController` (formulaire générique) refuse explicitement
 `GROUPE_THEME` (édition → 404, listing → exclu) — sans ça, son typage générique

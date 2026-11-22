@@ -4,6 +4,7 @@ namespace App\Support\Commission;
 
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
+use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
 use App\Models\Depense;
 use App\Services\PeriodeComptableService;
@@ -113,19 +114,22 @@ final class PerimetreParDefautLivreurs
     }
 
     /**
-     * Restreint la requête des parts (déjà limitée à l'organisation) à la quinzaine en cours et
-     * aux quinzaines antérieures non soldées de chaque livreur.
+     * Restreint les commissions (à appliquer dans le whereHas('enveloppe') de la requête des parts
+     * de livreurs) à la quinzaine en cours et aux quinzaines antérieures non soldées de chaque
+     * livreur. Une seule condition dans la même sous-requête que l'organisation et la période,
+     * plutôt qu'une sous-requête par quinzaine : le livreur est lu sur la part
+     * (commission_enveloppe_parts.beneficiaire_id).
      *
-     * @param  Builder<CommissionEnveloppePart>  $parts
+     * @param  Builder<CommissionEnveloppe>  $enveloppes
      */
-    public function restreindre(Builder $parts): void
+    public function restreindreEnveloppes(Builder $enveloppes): void
     {
-        $parts->where(function (Builder $q) {
-            $q->whereHas('enveloppe', fn ($e) => $e->where('earned_at', '>=', $this->debutCourant->toDateString()));
+        $enveloppes->where(function (Builder $q) {
+            $q->where('earned_at', '>=', $this->debutCourant->toDateString());
             foreach ($this->livreursParQuinzaine() as $code => $livreurIds) {
                 $q->orWhere(fn (Builder $o) => $o
-                    ->whereIn('beneficiaire_id', $livreurIds)
-                    ->whereHas('enveloppe', fn ($e) => CommissionPeriodeFilter::appliquer($e, [$code], 'earned_at', colonneDate: true)));
+                    ->whereIn('commission_enveloppe_parts.beneficiaire_id', $livreurIds)
+                    ->where(fn (Builder $d) => CommissionPeriodeFilter::appliquer($d, [$code], 'earned_at', colonneDate: true)));
             }
         });
     }

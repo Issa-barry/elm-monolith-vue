@@ -30,6 +30,7 @@ use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSiteResponsableFilter;
 use App\Support\Commission\CommissionStatutFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
+use App\Support\Commission\LecturePartsCommission;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -55,9 +56,9 @@ class CommissionProprietaireController extends Controller
     }
 
     /**
-     * Écran "Commission propriétaire" — cf. CommissionVenteController::index()
-     * pour le raisonnement (collection plutôt que SQL brut ; le bouton Payer d'une ligne
-     * enregistre le paiement sur la fiche de la période, cf. FichePayableResolver).
+     * Écran "Commission propriétaire". Parts lues en lignes légères (LecturePartsCommission),
+     * mêmes règles et même ordre d'addition qu'avec les modèles ; le bouton Payer d'une ligne
+     * enregistre le paiement sur la fiche de la période, cf. FichePayableResolver.
      */
     public function index(Request $request): Response
     {
@@ -82,11 +83,10 @@ class CommissionProprietaireController extends Controller
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
-        $query = CommissionEnveloppePart::with([
-            'enveloppe.source.site:id,nom',
-            'enveloppe.source.vehicule:id,site_id,nom_vehicule,immatriculation',
-            'enveloppe.processus',
-        ])
+        // Requête filtrée des parts : jamais chargée en entier, lue en lignes légères
+        // (LecturePartsCommission) — charger chaque part avec sa vente, son véhicule et son site
+        // sur tout l'historique faisait l'essentiel du temps de la page.
+        $query = CommissionEnveloppePart::query()
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
             ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {
@@ -107,8 +107,10 @@ class CommissionProprietaireController extends Controller
 
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
-        $allParts = $query->get();
-        $partsParProprio = $allParts->groupBy('beneficiaire_id');
+        // Parts dans l'ordre de la requête (ordre des propriétaires et des additions inchangé),
+        // chacune avec la date, le processus, le véhicule, l'agence et le site de sa commission.
+        $partsParProprio = collect(LecturePartsCommission::lignes($query))->groupBy('beneficiaire_id');
+        $enveloppes = $partsParProprio->isEmpty() ? [] : LecturePartsCommission::enveloppes(LecturePartsCommission::enveloppeIds($query));
 
         $proprioIds = $partsParProprio->keys()->map(fn ($id) => (string) $id)->values();
         $proprietaires = Proprietaire::with('personne')
@@ -158,13 +160,16 @@ class CommissionProprietaireController extends Controller
             }
         }
 
-        $premiereEcheanceParProprio = $partsParProprio->map(function ($parts) {
-            return $parts
-                ->filter(fn (CommissionEnveloppePart $p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
-                ->pluck('enveloppe.earned_at')
+        // Plus ancienne commission Impayée ou Partielle de chaque propriétaire.
+        $aEcheance = [StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value];
+        $premiereEcheanceParProprio = $partsParProprio->map(function (Collection $parts) use ($enveloppes, $aEcheance) {
+            $premiere = $parts
+                ->filter(fn (object $p) => in_array($p->statut, $aEcheance, true))
+                ->map(fn (object $p) => $enveloppes[$p->enveloppe_id]->earned_at ?? null)
                 ->filter()
-                ->sort()
-                ->first();
+                ->min();
+
+            return $premiere !== null ? Carbon::parse($premiere)->startOfDay() : null;
         });
 
         $periodesParDate = app(PeriodePaiementService::class)->getPeriodsForDates(
@@ -188,21 +193,21 @@ class CommissionProprietaireController extends Controller
         $nomsSites = $sites->pluck('nom', 'id');
         $beneficiaires = $partsParProprio->map(function (Collection $parts, string $proprioId) use (
             $fraisParProprio, $premiereEcheanceParProprio, $periodesParDate, $labelsParStatut, $teamStatusParPeriode,
-            $proprietaires, $fichesPayables, $nomsSites,
+            $proprietaires, $fichesPayables, $nomsSites, $enveloppes,
         ) {
             // total_brut_cumule/total_net_cumule/solde_restant restent calculés exclusivement
             // sur les parts déjà actives (jamais CREEE) — jamais mélangées à une commission pas
             // encore éligible au paiement (cf. compartiments ci-dessous, décision produit du
             // 20/08/2026 « visible ne veut pas dire payable »).
-            $partsPayables = $parts->filter(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
-            $totalBrut = (float) $partsPayables->sum('montant_brut');
-            $totalAPayer = (float) $partsPayables->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
+            $partsPayables = $parts->filter(fn (object $p) => $p->statut !== StatutCommission::CREEE->value);
+            $totalBrut = (float) $partsPayables->sum('brut');
+            $totalAPayer = (float) $partsPayables->sum('a_payer');
             $totalFrais = $fraisParProprio[$proprioId] ?? 0.0;
             $totalNet = max(0.0, $totalAPayer - $totalFrais);
-            $totalVerse = (float) $partsPayables->sum('montant_verse');
+            $totalVerse = (float) $partsPayables->sum('verse');
             $solde = max(0.0, $totalNet - $totalVerse);
 
-            $buckets = CommissionKpiBuckets::calculer($parts);
+            $buckets = CommissionKpiBuckets::calculerLignes($parts);
 
             $statutGlobal = match (true) {
                 $partsPayables->isEmpty() && $buckets['en_attente_periode'] > 0.009 => StatutCommission::CREEE->value,
@@ -228,32 +233,35 @@ class CommissionProprietaireController extends Controller
 
             $beneficiaire = $proprietaires->get($proprioId);
             // Liste derivee uniquement des ventes portant les parts affichees : un vehicule
-            // simplement rattache au proprietaire n'apparait jamais. Les relations source,
-            // vehicule et site sont chargees par la requete principale (aucun N+1).
+            // simplement rattache au proprietaire n'apparait jamais. Vehicule et site de chaque
+            // vente lus avec les parts (LecturePartsCommission::enveloppes(), aucun N+1).
             $vehicules = $parts
-                ->filter(fn (CommissionEnveloppePart $part) => $part->enveloppe?->source?->vehicule !== null)
-                ->groupBy(fn (CommissionEnveloppePart $part) => (string) $part->enveloppe->source->vehicule->id)
-                ->map(function (Collection $vehiculeParts) {
-                    $vehicule = $vehiculeParts->first()->enveloppe->source->vehicule;
+                ->filter(fn (object $part) => ($enveloppes[$part->enveloppe_id]->vehicule_id ?? null) !== null)
+                ->groupBy(fn (object $part) => (string) $enveloppes[$part->enveloppe_id]->vehicule_id)
+                ->map(function (Collection $vehiculeParts) use ($enveloppes) {
+                    $vehicule = $enveloppes[$vehiculeParts->first()->enveloppe_id];
                     $sitesContributeurs = $vehiculeParts
-                        ->pluck('enveloppe.source.site')
-                        ->filter()
+                        ->map(fn (object $part) => $enveloppes[$part->enveloppe_id])
+                        ->filter(fn (object $e) => $e->source_site_id !== null)
+                        ->map(fn (object $e) => ['id' => (string) $e->source_site_id, 'nom' => $e->source_site_nom])
                         ->unique('id')
                         ->sortBy('nom')
-                        ->map(fn (Site $site) => ['id' => $site->id, 'nom' => $site->nom])
                         ->values();
 
                     return [
-                        'id' => $vehicule->id,
-                        'nom' => $vehicule->nom_vehicule,
-                        'immatriculation' => $vehicule->immatriculation,
+                        'id' => (string) $vehicule->vehicule_id,
+                        'nom' => $vehicule->vehicule_nom,
+                        'immatriculation' => $vehicule->vehicule_immatriculation,
                         'sites' => $sitesContributeurs->all(),
-                        'commission_generee' => CommissionKpiBuckets::calculer($vehiculeParts)['total_genere'],
+                        'commission_generee' => CommissionKpiBuckets::calculerLignes($vehiculeParts)['total_genere'],
                     ];
                 })
                 ->sortBy('nom')
                 ->values();
-            $agence = self::agencesResponsables($parts, $nomsSites);
+            // Agence(s) qui paient (site responsable de chaque vente), jamais le lieu de vente.
+            $agence = $parts
+                ->map(fn (object $part) => $nomsSites->get((string) ($enveloppes[$part->enveloppe_id]->site_id ?? '')))
+                ->filter()->unique()->sort()->implode(', ');
 
             return [
                 'beneficiaire_id' => $proprioId,
@@ -274,7 +282,9 @@ class CommissionProprietaireController extends Controller
                 'payable' => $buckets['payable'],
                 // Toujours exposé, même filtré sur un seul processus (décision produit du
                 // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
-                'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
+                'processus_labels' => CommissionProcessusFilter::labelsPourCodes($parts
+                    ->map(fn (object $part) => $enveloppes[$part->enveloppe_id]->code ?? null)
+                    ->filter()->unique()->all()),
                 ...$resolved,
                 'fiche_a_payer' => $fiche,
             ];

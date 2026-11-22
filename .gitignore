@@ -44,3 +44,6 @@ yarn-error.log
 
 # Claude Code local settings (jamais commités)
 /.claude/settings.local.json
+
+# Configuration générée par scripts/ci/phpunit-shard.php (shard CI)
+/phpunit.shard.xml

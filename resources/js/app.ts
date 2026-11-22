@@ -14,7 +14,7 @@ import {
     watchEnvironmentTheme,
 } from './composables/useEnvironmentTheme';
 import { loadPrimeVuePreset } from './lib/primevue-theme';
-import type { ThemeSharedProps } from './types/theme';
+import { themeActifInitial } from './lib/themeInitial';
 
 // Quand la session expire, Inertia suit la redirection vers /login avec la
 // même méthode HTTP (PUT/PATCH/DELETE) ce qui génère un 405. On force un
@@ -64,11 +64,10 @@ createInertiaApp({
         // cf. docs/theming.md. `props` contient déjà la page initiale ici ;
         // l'application n'est montée qu'une fois le preset prêt (immédiat pour
         // Aura, un fichier à télécharger pour Lara/Material/Nora), donc pas de
-        // flash de thème.
-        const initialTheme = (
-            props.initialPage.props as { theme: ThemeSharedProps }
-        ).theme.active;
-        void loadPrimeVuePreset(initialTheme.preset).then((primeVuePreset) => {
+        // flash de thème. Sans prop `theme` (page d'erreur dont le thème n'a
+        // pas pu être résolu), preset par défaut plutôt qu'une page blanche.
+        const initialTheme = themeActifInitial(props.initialPage.props);
+        void loadPrimeVuePreset(initialTheme?.preset).then((primeVuePreset) => {
             const app = createApp({ render: () => h(App, props) })
                 .use(plugin)
                 .use(PrimeVue, {
@@ -222,7 +221,9 @@ createInertiaApp({
                     },
                 });
 
-            applyEnvironmentTheme(initialTheme);
+            if (initialTheme) {
+                applyEnvironmentTheme(initialTheme);
+            }
             // Garde les couleurs synchronisées avec le prop `theme` à chaque
             // navigation Inertia et après tout changement fait par un admin.
             watchEnvironmentTheme();
