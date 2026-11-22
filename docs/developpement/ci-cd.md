@@ -80,20 +80,37 @@ Job `quality`, sur toutes les pull requests. PHP 8.4, Node 22. Étapes, dans l'o
 
 ### `tests.yml`
 
-Sur les pull requests vers `pre-prod`, `production` et `main`.
+Sur les pull requests vers `pre-prod`, `production` et `main`. Un nouveau push sur la pull
+request **annule** le run encore en cours (`concurrency`, groupe `tests-<numéro de PR>`).
 
-**Job `PHPUnit`**
+**PHPUnit** : trois jobs.
 
-1. Calcule une empreinte du code testable (tout sauf `.github/`, `docs/`, `README*`, `CHANGELOG*`
-   et `*.md`). Si elle figure dans la variable de dépôt `PHPUNIT_PASSED_FINGERPRINTS`, PHPUnit est
-   **sauté** : ce code a déjà été validé à l'étape précédente du flux.
-2. Sinon : `npm ci`, `composer install`, `.env.example`, clé, `npm run build` (le manifeste Vite est
-   nécessaire à certaines pages rendues dans les tests).
-3. `php artisan test --parallel --processes=4`. En cas d'échec, les tests en échec sont **rejoués en
-   série** : seul un échec confirmé en série (ou un plantage sans test identifiable) fait échouer le
-   job. Raison : quelques tests ne sont pas isolés en parallèle ([tests.md](tests.md#phpunit)).
-4. Enregistre l'empreinte validée (30 dernières conservées), avec le jeton `PHPUNIT_FP_PAT`. Si ce
-   jeton expire, seule la déduplication est perdue : l'étape ne bloque pas.
+1. **`PHPUnit — empreinte`** calcule une empreinte du code testable (tout sauf `.github/`, `docs/`,
+   `README*`, `CHANGELOG*` et `*.md`). S'il existe dans le dépôt un artefact non expiré
+   `phpunit-passed-<empreinte>` (produit depuis ce dépôt, pas depuis un fork), PHPUnit est
+   **sauté** : ce code a déjà été validé à l'étape précédente du flux. La recherche utilise
+   `GITHUB_TOKEN` (`actions: read`) ; en cas d'erreur d'API, les tests tournent.
+2. **`PHPUnit (shard n/4)`**, sinon : quatre machines en parallèle. Chacune fait `npm ci`,
+   `composer install`, `.env.example`, clé, `npm run build` (le manifeste Vite est nécessaire à
+   certaines pages rendues dans les tests), puis `php scripts/ci/phpunit-shard.php n 4` choisit ses
+   fichiers de test : répartition déterministe, chaque fichier de `tests/Unit` et `tests/Feature`
+   dans exactement un shard, équilibrée sur la taille des fichiers. Ensuite
+   `php artisan test --parallel --processes=4 --configuration=phpunit.shard.xml`. En cas d'échec,
+   les tests en échec sont **rejoués en série** : seul un échec confirmé en série (ou un plantage
+   sans test identifiable) fait échouer le shard. Raison : quelques tests ne sont pas isolés en
+   parallèle ([tests.md](tests.md#phpunit)). Délai maximal 40 minutes.
+3. **`PHPUnit`** (le contrôle exigé par les rulesets) agrège : réussi si les quatre shards ont
+   réussi, ou si les tests ont été sautés à l'étape 1. Il publie alors l'artefact témoin
+   `phpunit-passed-<empreinte>` (conservé 30 jours ; un échec d'envoi ne fait perdre que la
+   déduplication).
+
+Historique (22/11/2026) : un seul job faisait toute la suite (35 à 75 min). L'empreinte était
+écrite dans une variable de dépôt avec un jeton `PHPUNIT_FP_PAT` qui n'a jamais été créé : chaque
+promotion relançait toute la suite.
+
+`phpunit.xml` force `APP_DEBUG=false` (en mode debug, chaque réponse d'erreur d'un test construit la
+page d'exception de Laravel, plusieurs secondes par test) et `INERTIA_SSR_ENABLED=false` (avec un
+`bootstrap/ssr/ssr.js` local, chaque page Inertia rendue tentait de joindre le serveur SSR absent).
 
 **Job `Detect non-doc changes`** : les E2E ne tournent que si la pull request modifie au moins un
 fichier hors `README.md`, `docs/**` et `*.md`.
@@ -148,9 +165,7 @@ environnement).
 |---|---|---|
 | `HOSTINGER_ADMIN_HOST`, `_SSH_PORT`, `_SSH_USER`, `_SSH_PRIVATE_KEY`, `_DEPLOY_PATH` | secrets de l'environnement `production_elm` | `deploy-hostinger-admin.yml` |
 | `HOSTINGER_FORMATION_HOST`, `_SSH_PORT`, `_SSH_USER`, `_SSH_PRIVATE_KEY`, `_DEPLOY_PATH` | secrets de l'environnement `formation_elm` | `deploy-hostinger-formation.yml` |
-| `PHPUNIT_FP_PAT` | secret de dépôt (jeton à droits « Variables: write ») | `tests.yml` |
-| `PHPUNIT_PASSED_FINGERPRINTS` | variable de dépôt | `tests.yml` |
-| `GITHUB_TOKEN` | fourni par GitHub | `auto-release.yml` (tags, release) |
+| `GITHUB_TOKEN` | fourni par GitHub | `auto-release.yml` (tags, release), `tests.yml` (recherche de l'artefact `phpunit-passed-*`) |
 
 ## Hors GitHub Actions
 

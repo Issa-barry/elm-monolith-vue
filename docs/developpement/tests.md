@@ -32,7 +32,16 @@ php artisan test tests/Feature/Rapports/RapportAgencesTest.php --filter=test_le_
 
 # Comme la CI : en parallèle
 php artisan test --parallel --processes=4
+
+# Comme un shard de la CI (ici le 2e sur 4)
+php scripts/ci/phpunit-shard.php 2 4 phpunit.shard.xml
+php artisan test --parallel --processes=4 --configuration=phpunit.shard.xml
 ```
+
+- `phpunit.xml` force `APP_DEBUG=false` et `INERTIA_SSR_ENABLED=false` : la page d'exception de
+  debug et les tentatives de rendu SSR coûtaient plusieurs secondes par test concerné. Un test qui
+  vérifie le message d'un `abort()` le lit en JSON (`postJson`, `getJson`…), pas dans la page
+  d'erreur HTML.
 
 - `composer test` fait la même chose que `npm run test`.
 - La suite complète compte plusieurs milliers de tests et prend de longues minutes : en local,
