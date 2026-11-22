@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Parametre;
+use Illuminate\Http\Request;
 
 /**
  * Autorité unique côté serveur pour la politique de thème global (preset
@@ -115,6 +116,20 @@ class ThemePolicyService
         }
 
         return $allowed[0] ?? $deploymentDefault;
+    }
+
+    /**
+     * Payload de la requête : thème de l'organisation de l'utilisateur connecté, ou de la
+     * première organisation du déploiement pour un visiteur non authentifié (page de login),
+     * comme ModuleService le fait déjà pour les flags publics. Utilisé par
+     * HandleInertiaRequests::share() et par la page d'erreur Inertia (bootstrap/app.php).
+     */
+    public function sharedPayloadForRequest(Request $request): array
+    {
+        $orgId = $request->user()?->organization_id
+            ?? ModuleService::publicOrganization()?->id;
+
+        return $this->sharedPayload($orgId);
     }
 
     /**
