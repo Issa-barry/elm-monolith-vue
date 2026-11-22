@@ -88,6 +88,15 @@ async function ouvrir(page: Page, dark = false) {
                 locked: {},
             },
             factures,
+            pagination: {
+                page: 1,
+                par_page: 20,
+                total: factures.length,
+                derniere_page: 1,
+                tri: null,
+                sens: null,
+            },
+            suivi_toutes_periodes: null,
             totaux: {
                 total: 133268039,
                 nb_total: 3,
@@ -114,6 +123,39 @@ async function ouvrir(page: Page, dark = false) {
         const url = new URL(route.request().url());
         if (url.pathname.startsWith('/backoffice/saved-filters'))
             return route.fulfill({ json: { data: [] } });
+        // Tri côté serveur (lot 7) : la page redemande la liste triée ; le faux serveur trie
+        // comme le vrai (ListeFactures::trier()) et renvoie la réponse Inertia.
+        if (
+            url.pathname === '/backoffice/factures' &&
+            route.request().headers()['x-inertia']
+        ) {
+            const tri = url.searchParams.get('tri');
+            const sens = url.searchParams.get('sens') === 'asc' ? 1 : -1;
+            const triees = tri
+                ? [...factures].sort(
+                      (a, b) =>
+                          sens *
+                          (Number(a[tri as keyof typeof a]) -
+                              Number(b[tri as keyof typeof b])),
+                  )
+                : factures;
+            return route.fulfill({
+                headers: { 'X-Inertia': 'true', Vary: 'X-Inertia' },
+                json: {
+                    ...data,
+                    url: url.pathname + url.search,
+                    props: {
+                        ...data.props,
+                        factures: triees,
+                        pagination: {
+                            ...data.props.pagination,
+                            tri,
+                            sens: tri ? url.searchParams.get('sens') : null,
+                        },
+                    },
+                },
+            });
+        }
         if (url.pathname === '/backoffice/factures') {
             const escaped = JSON.stringify(data)
                 .replaceAll('&', '&amp;')
