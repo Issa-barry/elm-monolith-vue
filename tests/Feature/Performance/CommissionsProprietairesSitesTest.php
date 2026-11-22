@@ -79,33 +79,15 @@ class CommissionsProprietairesSitesTest extends TestCase
         $statuts = ['creee', 'impaye', 'partiel', 'paye', 'annulee', 'impaye'];
 
         foreach (range(0, 30 * $repetitions - 1) as $k) {
-            $statut = $statuts[($k * 5) % 6];
             $vehicule = $vehicules[$k % 5];
             $siteVente = [$a, $b, $c][$k % 3];
-            if ($k % 4 === 3) {
-                $source = TransfertLogistique::create(['organization_id' => $org, 'site_source_id' => $siteVente->id, 'site_destination_id' => $a->id, 'vehicule_id' => $vehicule?->id, 'created_by' => $this->user->id]);
-                $processus = $logistique;
-            } else {
-                $source = CommandeVente::withoutEvents(fn () => CommandeVente::create(['organization_id' => $org, 'reference' => sprintf('CPS%s-%04d', $p, $k), 'site_id' => $siteVente->id,
-                    'vehicule_id' => $vehicule?->id, 'statut' => 'livree', 'total_commande' => 500000]));
-                $processus = $k % 5 === 0 ? $distribution : $vente;
-            }
-            $montant = 20000 + 1234.56 * $k;
-            foreach (['proprietaire' => ($vehicule?->proprietaire_id) ?? $p2->id, 'site' => $siteVente->id] as $cible => $beneficiaire) {
-                $enveloppe = CommissionEnveloppe::create(['organization_id' => $org, 'source_type' => $source::class, 'source_id' => $source->id, 'processus_id' => $processus,
-                    'cible_type' => $cible, 'cible_id' => (string) Str::ulid(), 'montant_total' => $montant, 'earned_at' => $dates[$k % 4], 'statut' => $statut]);
-                foreach ([$categories[0]->id, $k % 2 ? $categories[1]->id : null] as $categorie) {
-                    CommissionEnveloppeLigne::create(['enveloppe_id' => $enveloppe->id, 'source_ligne_type' => 'App\\Models\\CommandeVenteLigne', 'source_ligne_id' => (string) Str::ulid(),
-                        'categorie_id_snapshot' => $categorie, 'quantite' => 10, 'unite_calcul_snapshot' => 'pack', 'montant_ligne' => $montant / 2]);
-                }
-                $m = $cible === 'site' ? $montant / 7 : $montant / 3;
-                CommissionEnveloppePart::create(['enveloppe_id' => $enveloppe->id, 'beneficiaire_type' => $cible, 'beneficiaire_id' => $beneficiaire,
-                    'taux_repartition_snapshot' => 100, 'montant_brut' => $m, 'montant_net' => $m, 'montant_actuel' => $k % 3 === 0 ? $m - 500.25 : null,
-                    'montant_verse' => match ($statut) {
-                        'paye' => $k % 3 === 0 ? $m - 500.25 : $m, 'partiel' => round($m / 3, 2), default => 0
-                    },
-                    'statut' => $statut, 'validated_at' => $statut === 'creee' ? null : $dates[$k % 4]]);
-            }
+            $transfert = $k % 4 === 3;
+            $source = $this->source($transfert, sprintf('CPS%s-%04d', $p, $k), $siteVente, $a, $vehicule);
+            $processus = $transfert ? $logistique : ($k % 5 === 0 ? $distribution : $vente);
+            $operation = ['k' => $k, 'statut' => $statuts[($k * 5) % 6], 'date' => $dates[$k % 4], 'processus' => $processus, 'montant' => 20000 + 1234.56 * $k];
+            $categoriesLignes = [$categories[0]->id, $k % 2 ? $categories[1]->id : null];
+            $this->commission($source, 'proprietaire', ($vehicule?->proprietaire_id) ?? $p2->id, $operation, $categoriesLignes);
+            $this->commission($source, 'site', $siteVente->id, $operation, $categoriesLignes);
             if ($k === 4) {
                 $source->delete();
             }
@@ -117,6 +99,41 @@ class CommissionsProprietairesSitesTest extends TestCase
         }
         $vehicules[2]->delete();
         $c->delete();
+    }
+
+    private function source(bool $transfert, string $reference, Site $site, Site $destination, ?Vehicule $vehicule): CommandeVente|TransfertLogistique
+    {
+        if ($transfert) {
+            return TransfertLogistique::create(['organization_id' => $this->org->id, 'site_source_id' => $site->id, 'site_destination_id' => $destination->id,
+                'vehicule_id' => $vehicule?->id, 'created_by' => $this->user->id]);
+        }
+
+        return CommandeVente::withoutEvents(fn () => CommandeVente::create(['organization_id' => $this->org->id, 'reference' => $reference, 'site_id' => $site->id,
+            'vehicule_id' => $vehicule?->id, 'statut' => 'livree', 'total_commande' => 500000]));
+    }
+
+    /**
+     * Commission d'une cible (propriétaire ou site) avec ses lignes et la part du bénéficiaire.
+     *
+     * @param  array{k: int, statut: string, date: string, processus: string, montant: float}  $o
+     * @param  list<?string>  $categories
+     */
+    private function commission(CommandeVente|TransfertLogistique $source, string $cible, string $beneficiaire, array $o, array $categories): void
+    {
+        $enveloppe = CommissionEnveloppe::create(['organization_id' => $this->org->id, 'source_type' => $source::class, 'source_id' => $source->id, 'processus_id' => $o['processus'],
+            'cible_type' => $cible, 'cible_id' => (string) Str::ulid(), 'montant_total' => $o['montant'], 'earned_at' => $o['date'], 'statut' => $o['statut']]);
+        foreach ($categories as $categorie) {
+            CommissionEnveloppeLigne::create(['enveloppe_id' => $enveloppe->id, 'source_ligne_type' => 'App\\Models\\CommandeVenteLigne', 'source_ligne_id' => (string) Str::ulid(),
+                'categorie_id_snapshot' => $categorie, 'quantite' => 10, 'unite_calcul_snapshot' => 'pack', 'montant_ligne' => $o['montant'] / 2]);
+        }
+        $m = $cible === 'site' ? $o['montant'] / 7 : $o['montant'] / 3;
+        $ajuste = $o['k'] % 3 === 0;
+        CommissionEnveloppePart::create(['enveloppe_id' => $enveloppe->id, 'beneficiaire_type' => $cible, 'beneficiaire_id' => $beneficiaire,
+            'taux_repartition_snapshot' => 100, 'montant_brut' => $m, 'montant_net' => $m, 'montant_actuel' => $ajuste ? $m - 500.25 : null,
+            'montant_verse' => match ($o['statut']) {
+                'paye' => $ajuste ? $m - 500.25 : $m, 'partiel' => round($m / 3, 2), default => 0
+            },
+            'statut' => $o['statut'], 'validated_at' => $o['statut'] === 'creee' ? null : $o['date']]);
     }
 
     /** @return Collection<string, array<string, mixed>> lignes de l'écran par bénéficiaire */
