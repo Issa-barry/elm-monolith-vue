@@ -175,7 +175,12 @@ final class SavedFilterScopes
                     'parrain_part' => [Rule::in(['a_definir', 'definie'])],
                 ],
             ],
-            'commissions-livreurs' => $commission,
+            // « toutes » : choix explicite « Toutes les périodes », la vue par défaut étant la
+            // quinzaine en cours et les quinzaines non soldées (PerimetreParDefautLivreurs).
+            'commissions-livreurs' => [
+                ...$commission,
+                'criteria' => [...$commission['criteria'], 'periode' => ['string', 'regex:/^(toutes|\d{4}-(0[1-9]|1[0-2])-(P1|P2|M))$/']],
+            ],
             'commissions-proprietaires' => [
                 ...$commission,
                 'criteria' => [...$commission['criteria'], 'nom' => $search, 'telephone' => $search],
