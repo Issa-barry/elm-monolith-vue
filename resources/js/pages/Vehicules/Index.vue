@@ -13,6 +13,10 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
+import {
+    usePaginationServeur,
+    type PaginationServeur,
+} from '@/composables/usePaginationServeur';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -82,16 +86,6 @@ interface Vehicule {
     partages_commission: Record<string, string>;
     /** Part du parrain (PARRAIN-021) : rappel, jamais bloquant ; null sans parrain. */
     parrain_part: 'a_definir' | 'definie' | null;
-}
-
-/** Liste paginée et triée côté serveur (cf. App\Support\Vehicules\ListeVehicules). */
-interface PaginationServeur {
-    page: number;
-    par_page: number;
-    total: number;
-    derniere_page: number;
-    tri: string | null;
-    sens: 'asc' | 'desc' | null;
 }
 
 const props = defineProps<{
@@ -215,41 +209,9 @@ const filteredVehicules = computed(() => props.vehicules);
 const nombreResultats = computed(() => props.pagination.total);
 
 // ── Pagination et tri serveur ─────────────────────────────────────────────────
-// Les filtres de l'URL sont conservés ; changer de tri revient à la première page.
-function chargerPage(page: number, tri: string | null, sens: string | null) {
-    router.reload({
-        data: {
-            page: page > 1 ? page : undefined,
-            tri: tri ?? undefined,
-            sens: tri ? (sens ?? undefined) : undefined,
-        },
-    });
-}
-
-function changerPage(event: { page: number }) {
-    chargerPage(event.page + 1, props.pagination.tri, props.pagination.sens);
-}
-
-function changerTri(event: { sortField?: unknown; sortOrder?: number | null }) {
-    const champ =
-        typeof event.sortField === 'string' && event.sortOrder
-            ? event.sortField
-            : null;
-    chargerPage(1, champ, event.sortOrder === 1 ? 'asc' : 'desc');
-}
-
-const tableauServeur = computed(() => {
-    const p = props.pagination;
-    return {
-        lazy: true,
-        paginator: p.total > p.par_page,
-        rows: p.par_page,
-        totalRecords: p.total,
-        first: (p.page - 1) * p.par_page,
-        sortField: p.tri ?? undefined,
-        sortOrder: p.tri ? (p.sens === 'asc' ? 1 : -1) : undefined,
-    };
-});
+const { changerPage, changerTri, tableauServeur } = usePaginationServeur(
+    () => props.pagination,
+);
 const vehiculeStats = computed(() => props.vehicule_stats);
 
 const breadcrumbs: BreadcrumbItem[] = [
