@@ -83,7 +83,11 @@ class CommissionsProprietairesSitesTest extends TestCase
             $siteVente = [$a, $b, $c][$k % 3];
             $transfert = $k % 4 === 3;
             $source = $this->source($transfert, sprintf('CPS%s-%04d', $p, $k), $siteVente, $a, $vehicule);
-            $processus = $transfert ? $logistique : ($k % 5 === 0 ? $distribution : $vente);
+            $processus = match (true) {
+                $transfert => $logistique,
+                $k % 5 === 0 => $distribution,
+                default => $vente,
+            };
             $operation = ['k' => $k, 'statut' => $statuts[($k * 5) % 6], 'date' => $dates[$k % 4], 'processus' => $processus, 'montant' => 20000 + 1234.56 * $k];
             $categoriesLignes = [$categories[0]->id, $k % 2 ? $categories[1]->id : null];
             $this->commission($source, 'proprietaire', ($vehicule?->proprietaire_id) ?? $p2->id, $operation, $categoriesLignes);
