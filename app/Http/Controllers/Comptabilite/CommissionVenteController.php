@@ -62,9 +62,11 @@ class CommissionVenteController extends Controller
     }
 
     /**
-     * Écrans "Commission livreur vente" — source CommissionEnveloppePart. Montants calculés par la
-     * base et lignes légères (CommissionKpiBuckets::sommesParBeneficiaire(),
-     * SyntheseCommissionsLivreurs), mêmes règles que les accesseurs des modèles. Sans période
+     * Écran « Commissions des livreurs » (tous les processus : vente, distribution client,
+     * transferts ; URL historique /comptabilite/commissions/vente) — source
+     * CommissionEnveloppePart. Montants calculés par la base et lignes légères
+     * (CommissionKpiBuckets::sommesParBeneficiaire(), SyntheseCommissionsLivreurs), mêmes règles
+     * que les accesseurs des modèles. Sans période
      * cochée : quinzaine en cours et quinzaines non soldées (PerimetreParDefautLivreurs).
      *
      * Paiement : le bouton Payer d'une ligne enregistre le paiement sur la fiche de la
@@ -97,6 +99,8 @@ class CommissionVenteController extends Controller
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
         $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
+        $perimetreDefaut = $filtrePeriode['par_defaut'] ? PerimetreParDefautLivreurs::calculer($orgId) : null;
+
         // Requête filtrée des parts : jamais chargée en entier (voir plus bas).
         $query = CommissionEnveloppePart::query()
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
@@ -105,12 +109,11 @@ class CommissionVenteController extends Controller
             // représente plus de créance réelle, est exclue ici. Le détail payable/en attente de
             // période est ventilé plus bas via CommissionKpiBuckets, jamais en cachant la ligne.
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
-            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes, $perimetreDefaut) {
                 $q->where('organization_id', $orgId);
                 CommissionPeriodeFilter::appliquer($q, $filtrePeriodes, 'earned_at');
+                $perimetreDefaut?->restreindreEnveloppes($q);
             });
-        $perimetreDefaut = $filtrePeriode['par_defaut'] ? PerimetreParDefautLivreurs::calculer($orgId) : null;
-        $perimetreDefaut?->restreindre($query);
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
         self::restreindreAuxStatuts($query, $filtreStatuts);
 
@@ -830,7 +833,9 @@ class CommissionVenteController extends Controller
         $rows = $this->buildExportRows($parts, $filtrePeriodes, $search, $fraisDepensesParLivreur);
 
         $periodeLabel = $perimetreDefaut !== null ? PerimetreParDefautLivreurs::LIBELLE : CommissionPeriodeFilter::label($filtrePeriodes);
-        $filename = 'commissions-vente-'.now()->format('Y-m-d').'.csv';
+        // Nom visible : l'écran couvre tous les processus des livreurs (décision du 02/09/2026),
+        // l'URL /commissions/vente reste pour la compatibilité des liens.
+        $filename = 'commissions-livreurs-'.now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($rows, $periodeLabel) {
             $handle = fopen('php://output', 'w');
@@ -890,7 +895,7 @@ class CommissionVenteController extends Controller
         $periodeLabel = $perimetreDefaut !== null ? PerimetreParDefautLivreurs::LIBELLE : CommissionPeriodeFilter::label($filtrePeriodes);
 
         $pdf = Pdf::loadView('pdf.commissions.index', [
-            'title' => 'Commissions livreur vente',
+            'title' => 'Commissions des livreurs',
             'org' => $org,
             'periode_label' => $periodeLabel,
             'filters' => ['statut' => $filtreStatuts, 'search' => $search],
@@ -900,7 +905,7 @@ class CommissionVenteController extends Controller
             'generated_at' => now(),
         ])->setPaper('a4', 'landscape')->setCallbacks(CommissionPdfFooter::callbacks());
 
-        return $pdf->download('commissions-vente-'.now()->format('Y-m-d').'.pdf');
+        return $pdf->download('commissions-livreurs-'.now()->format('Y-m-d').'.pdf');
     }
 
     /**
@@ -916,11 +921,11 @@ class CommissionVenteController extends Controller
         ])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
-            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes, $perimetreDefaut) {
                 $q->where('organization_id', $orgId);
                 CommissionPeriodeFilter::appliquer($q, $filtrePeriodes, 'earned_at');
+                $perimetreDefaut?->restreindreEnveloppes($q);
             });
-        $perimetreDefaut?->restreindre($query);
         CommissionProcessusFilter::appliquer($query, $filtreProcessus);
         self::restreindreAuxStatuts($query, $filtreStatuts);
 

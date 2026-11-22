@@ -114,6 +114,41 @@ final class CommissionKpiBuckets
     }
 
     /**
+     * Même calcul que calculer(), sur les lignes légères de LecturePartsCommission::lignes()
+     * (montants déjà arrondis au centime comme le cast decimal:2), additionnées dans le même ordre.
+     *
+     * @param  iterable<object{statut: string, a_payer: float, verse: float}>  $lignes
+     * @return array{total_genere: float, en_attente_periode: float, payable: float, deja_paye: float}
+     */
+    public static function calculerLignes(iterable $lignes): array
+    {
+        $annulee = StatutCommission::ANNULEE->value;
+        $creee = StatutCommission::CREEE->value;
+        $aEncaisser = [StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value];
+        $totalGenere = $enAttente = $payable = $dejaPaye = 0;
+
+        foreach ($lignes as $l) {
+            if ($l->statut === $annulee) {
+                continue;
+            }
+            $totalGenere += $l->a_payer;
+            $dejaPaye += $l->verse;
+            if ($l->statut === $creee) {
+                $enAttente += $l->a_payer;
+            } elseif (in_array($l->statut, $aEncaisser, true)) {
+                $payable += max(0.0, $l->a_payer - $l->verse);
+            }
+        }
+
+        return [
+            'total_genere' => round((float) $totalGenere, 2),
+            'en_attente_periode' => round((float) $enAttente, 2),
+            'payable' => round((float) $payable, 2),
+            'deja_paye' => round((float) $dejaPaye, 2),
+        ];
+    }
+
+    /**
      * Fusionne plusieurs jeux de compartiments déjà calculés (ex: agrégat multi-bénéficiaires
      * pour les KPI globaux d'un écran d'index) — simple somme composante par composante.
      *
