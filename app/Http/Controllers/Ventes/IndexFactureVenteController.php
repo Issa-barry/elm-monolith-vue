@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Ventes;
 
 use App\Enums\ModePaiement;
-use App\Enums\StatutFactureVente;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
@@ -12,6 +11,7 @@ use App\Models\Site;
 use App\Services\SavedFilterService;
 use App\Services\Tresorerie\AgenceEncaissementResolver;
 use App\Support\Periodes\Periode;
+use App\Support\Ventes\ListeFactures;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -22,7 +22,13 @@ class IndexFactureVenteController extends Controller
     {
         $this->authorize('viewAny', CommandeVente::class);
 
-        $request->validate(['saved_view' => ['nullable', 'ulid']]);
+        $request->validate([
+            'saved_view' => ['nullable', 'ulid'],
+            'recherche' => ['nullable', 'string', 'max:255'],
+            'tri' => ['nullable', 'in:'.implode(',', ListeFactures::TRIS)],
+            'sens' => ['nullable', 'in:asc,desc'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
         $savedView = app(SavedFilterService::class)->applyToRequest($request, 'factures');
 
         $user = auth()->user();
@@ -42,6 +48,7 @@ class IndexFactureVenteController extends Controller
         $proprietaireRecherche = $request->input('proprietaire');
         $clientRecherche = $request->input('client');
         $referenceRecherche = $request->input('reference');
+        $rechercheMobile = trim((string) $request->input('recherche', ''));
         $livreurData = null;
         if ($livreurId) {
             $livreurModel = Livreur::where('organization_id', $orgId)->find($livreurId);
@@ -67,9 +74,9 @@ class IndexFactureVenteController extends Controller
             ->prepend(['value' => 'tous', 'label' => 'Tous les sites'])
             ->values();
 
+        // Relations lues par les lignes affichées seulement (la page en compte au plus 20).
         $query = FactureVente::with([
-            'commande.vehicule.proprietaire',
-            'commande.vehicule.equipe.membres.livreur',
+            'commande.vehicule',
             'commande.client',
             'commande.site',
             'commande.lignes:id,commande_vente_id,quantite_demandee,quantite_chargee,quantite_livree',
@@ -81,8 +88,6 @@ class IndexFactureVenteController extends Controller
         if (! $toutesAgences && $authorizedSiteIds->isNotEmpty()) {
             $query->whereHas('commande', fn ($q) => $q->whereIn('site_id', $authorizedSiteIds));
         }
-
-        $periode->appliquer($query, 'created_at');
 
         if ($statut !== 'tous') {
             $query->where('statut_facture', $statut);
@@ -142,8 +147,39 @@ class IndexFactureVenteController extends Controller
                 ->orWhere('telephone', 'like', "%{$clientRecherche}%"));
         }
 
-        $facturesTrouvees = $query->orderByDesc('created_at')->get();
-        // Agences d'encaissement de l'utilisateur, moyens et caisses : une seule résolution pour la liste.
+        // Recherche du téléphone (bloc mobile) : mêmes champs que l'ancienne recherche locale
+        // (référence, véhicule, client, site), désormais faite par le serveur sur toutes les factures.
+        if ($rechercheMobile !== '') {
+            $like = "%{$rechercheMobile}%";
+            $query->where(fn ($q) => $q
+                ->where('factures_ventes.reference', 'like', $like)
+                ->orWhereHas('commande.vehicule', fn ($v) => $v->where('nom_vehicule', 'like', $like))
+                ->orWhereHas('commande.client', fn ($c) => $c
+                    ->where('nom_complet', 'like', $like)
+                    ->orWhere('nom', 'like', $like)
+                    ->orWhere('prenom', 'like', $like))
+                ->orWhereHas('commande.site', fn ($s) => $s->where('nom', 'like', $like)));
+        }
+
+        // Suivi des sommes dues toutes périodes confondues : mêmes filtres, sans la période. Inutile
+        // quand la période est « Tout » (identique aux cartes).
+        $suiviToutesPeriodes = $periode->estBornee()
+            ? ListeFactures::suiviToutesPeriodes(clone $query)
+            : null;
+
+        $periode->appliquer($query, 'created_at');
+
+        // Totaux sur toutes les factures filtrées, jamais sur la page affichée ; le comptage sert
+        // aussi de total à la pagination.
+        ['totaux' => $totaux, 'nb_resultats' => $nbResultats] = ListeFactures::totaux($query);
+
+        $tri = $request->input('tri');
+        $sens = $request->input('sens') === 'asc' ? 'asc' : 'desc';
+        ListeFactures::trier($query, $tri, $sens);
+        $pageFactures = $query->paginate(ListeFactures::PAR_PAGE, total: $nbResultats)->withQueryString();
+        $facturesTrouvees = $pageFactures->getCollection();
+
+        // Agences d'encaissement de l'utilisateur, moyens et caisses : une seule résolution pour la page.
         $encaissementParFacture = app(AgenceEncaissementResolver::class)->pourEcran($user, $facturesTrouvees);
 
         $factures = $facturesTrouvees
@@ -189,33 +225,22 @@ class IndexFactureVenteController extends Controller
                     ->all(),
             ]);
 
-        // Totaux pour les cartes de synthèse — calculés une seule fois ici (jamais recalculés
-        // côté Vue à partir d'une recherche locale, cf. correctif du 30/08/2026 : la page ne
-        // doit exposer aucun filtre texte hors DataFilters, donc plus aucun sous-ensemble local
-        // à re-sommer).
-        $facturesActives = $factures->where('statut_facture', '!=', StatutFactureVente::ANNULEE->value);
-        $impayees = $factures->where('statut_facture', StatutFactureVente::IMPAYEE->value);
-        $partielles = $factures->where('statut_facture', StatutFactureVente::PARTIEL->value);
-        $payees = $factures->where('statut_facture', StatutFactureVente::PAYEE->value);
-
-        $totaux = [
-            'total' => $facturesActives->sum('montant_net'),
-            'nb_total' => $facturesActives->count(),
-            'total_a_encaisser' => $factures
-                ->whereNotIn('statut_facture', [StatutFactureVente::PAYEE->value, StatutFactureVente::ANNULEE->value])
-                ->sum('montant_restant'),
-            'nb_impayees' => $impayees->count(),
-            'montant_impayees' => $impayees->sum('montant_restant'),
-            'nb_partielles' => $partielles->count(),
-            'montant_partielles' => $partielles->sum('montant_restant'),
-            'nb_payees' => $payees->count(),
-            'montant_payees' => $payees->sum('montant_net'),
-        ];
-
         return Inertia::render('Factures/Index', [
             'saved_view' => $savedView,
             'factures' => $factures->values(),
+            'pagination' => [
+                'page' => $pageFactures->currentPage(),
+                'par_page' => $pageFactures->perPage(),
+                'total' => $pageFactures->total(),
+                'derniere_page' => $pageFactures->lastPage(),
+                'tri' => $tri,
+                'sens' => $tri !== null ? $sens : null,
+            ],
+            // Cartes : factures de la période filtrée (calcul SQL, ListeFactures::totaux()).
             'totaux' => $totaux,
+            // Sommes encore dues toutes périodes confondues (null quand la période est « Tout »).
+            'suivi_toutes_periodes' => $suiviToutesPeriodes,
+            'recherche' => $rechercheMobile !== '' ? $rechercheMobile : null,
             ...$periode->valeursFiltre(),
             'statut' => $statut,
             'site_ids' => $siteIds,

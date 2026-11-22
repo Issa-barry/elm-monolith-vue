@@ -16,6 +16,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF, formatQuantite } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
+import { watchDebounced } from '@vueuse/core';
 import {
     ArrowLeft,
     Building2,
@@ -28,6 +29,7 @@ import {
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
+import Paginator from 'primevue/paginator';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 import EncaisserAutreAgenceDialog from './partials/EncaisserAutreAgenceDialog.vue';
@@ -86,6 +88,23 @@ interface Totaux {
     montant_payees: number;
 }
 
+/** Sommes encore dues toutes périodes confondues (null quand la période est « Tout »). */
+interface SuiviToutesPeriodes {
+    total_a_encaisser: number;
+    nb_impayees: number;
+    montant_impayees: number;
+}
+
+/** Liste paginée et triée côté serveur. */
+interface PaginationServeur {
+    page: number;
+    par_page: number;
+    total: number;
+    derniere_page: number;
+    tri: string | null;
+    sens: 'asc' | 'desc' | null;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface SiteOption {
     value: string;
@@ -100,7 +119,10 @@ interface LivreurInfo {
 
 const props = defineProps<{
     factures: FactureItem[];
+    pagination: PaginationServeur;
     totaux: Totaux;
+    suivi_toutes_periodes: SuiviToutesPeriodes | null;
+    recherche?: string | null;
     periode: string;
     date_debut?: string | null;
     date_fin?: string | null;
@@ -223,19 +245,58 @@ const statutColor: Record<string, string> = {
     annulee: 'bg-zinc-400 dark:bg-zinc-500',
 };
 
-// ── Filtre mobile ─────────────────────────────────────────────────────────────
+// ── Pagination et tri serveur ─────────────────────────────────────────────────
+// Les filtres de l'URL sont conservés ; changer de tri revient à la première page.
+function chargerPage(page: number, tri: string | null, sens: string | null) {
+    router.reload({
+        data: {
+            page: page > 1 ? page : undefined,
+            tri: tri ?? undefined,
+            sens: tri ? (sens ?? undefined) : undefined,
+        },
+    });
+}
 
-const mobileFiltered = computed(() => {
-    const q = mobileSearch.value.toLowerCase().trim();
-    if (!q) return props.factures;
-    return props.factures.filter(
-        (f) =>
-            f.reference.toLowerCase().includes(q) ||
-            (f.vehicule_nom && f.vehicule_nom.toLowerCase().includes(q)) ||
-            (f.client_nom && f.client_nom.toLowerCase().includes(q)) ||
-            (f.site_nom && f.site_nom.toLowerCase().includes(q)),
-    );
+function changerPage(event: { page: number }) {
+    chargerPage(event.page + 1, props.pagination.tri, props.pagination.sens);
+}
+
+function changerTri(event: { sortField?: unknown; sortOrder?: number | null }) {
+    const champ =
+        typeof event.sortField === 'string' && event.sortOrder
+            ? event.sortField
+            : null;
+    chargerPage(1, champ, event.sortOrder === 1 ? 'asc' : 'desc');
+}
+
+const tableauServeur = computed(() => {
+    const p = props.pagination;
+    return {
+        lazy: true,
+        paginator: p.total > p.par_page,
+        rows: p.par_page,
+        totalRecords: p.total,
+        first: (p.page - 1) * p.par_page,
+        sortField: p.tri ?? undefined,
+        sortOrder: p.tri ? (p.sens === 'asc' ? 1 : -1) : undefined,
+    };
 });
+
+// ── Recherche mobile ──────────────────────────────────────────────────────────
+// Faite par le serveur sur toutes les factures filtrées (référence, véhicule, client, site),
+// jamais sur la seule page affichée.
+mobileSearch.value = props.recherche ?? '';
+watchDebounced(
+    mobileSearch,
+    (valeur) => {
+        const q = valeur.trim();
+        if (q === (props.recherche ?? '')) return;
+        router.reload({ data: { recherche: q || undefined, page: undefined } });
+    },
+    { debounce: 400 },
+);
+
+const mobileFiltered = computed(() => props.factures);
 
 // ── Dialog encaissement ───────────────────────────────────────────────────────
 const dialogVisible = ref(false);
@@ -375,6 +436,14 @@ function _progressPercent(f: FactureItem): number {
                     >
                         {{ formatGNF(totaux.total_a_encaisser) }}
                     </p>
+                    <p
+                        v-if="suivi_toutes_periodes"
+                        class="text-xs text-muted-foreground tabular-nums"
+                        data-testid="restant-toutes-periodes-mobile"
+                    >
+                        Toutes périodes :
+                        {{ formatGNF(suivi_toutes_periodes.total_a_encaisser) }}
+                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
                     <p class="text-xs text-muted-foreground">Impayées</p>
@@ -386,6 +455,16 @@ function _progressPercent(f: FactureItem): number {
                     <p class="text-xs text-muted-foreground">
                         {{ totaux.nb_impayees }} facture{{
                             totaux.nb_impayees > 1 ? 's' : ''
+                        }}
+                    </p>
+                    <p
+                        v-if="suivi_toutes_periodes"
+                        class="text-xs text-muted-foreground tabular-nums"
+                    >
+                        Toutes périodes :
+                        {{ formatGNF(suivi_toutes_periodes.montant_impayees) }}
+                        · {{ suivi_toutes_periodes.nb_impayees }} facture{{
+                            suivi_toutes_periodes.nb_impayees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -414,7 +493,7 @@ function _progressPercent(f: FactureItem): number {
                             url="/backoffice/factures"
                             :base-params="filterBaseParams"
                             :values="filterValues"
-                            :result-count="factures.length"
+                            :result-count="pagination.total"
                             :fields="filterFields"
                         />
                     </template>
@@ -511,6 +590,13 @@ function _progressPercent(f: FactureItem): number {
                     </div>
                 </div>
             </div>
+            <Paginator
+                v-if="pagination.total > pagination.par_page"
+                :rows="pagination.par_page"
+                :total-records="pagination.total"
+                :first="(pagination.page - 1) * pagination.par_page"
+                @page="changerPage"
+            />
 
             <!-- Empty state -->
             <div
@@ -542,7 +628,7 @@ function _progressPercent(f: FactureItem): number {
                                 url="/backoffice/factures"
                                 :base-params="filterBaseParams"
                                 :values="filterValues"
-                                :result-count="factures.length"
+                                :result-count="pagination.total"
                                 :fields="filterFields"
                             />
                         </template>
@@ -609,6 +695,14 @@ function _progressPercent(f: FactureItem): number {
                     >
                         {{ formatGNF(totaux.total_a_encaisser) }}
                     </p>
+                    <p
+                        v-if="suivi_toutes_periodes"
+                        class="mt-0.5 text-xs text-muted-foreground tabular-nums"
+                        data-testid="restant-toutes-periodes"
+                    >
+                        Toutes périodes :
+                        {{ formatGNF(suivi_toutes_periodes.total_a_encaisser) }}
+                    </p>
                 </div>
 
                 <div class="rounded-xl border bg-card p-5 shadow-sm">
@@ -621,6 +715,17 @@ function _progressPercent(f: FactureItem): number {
                     <p class="mt-0.5 text-xs text-muted-foreground">
                         {{ totaux.nb_impayees }} facture{{
                             totaux.nb_impayees > 1 ? 's' : ''
+                        }}
+                    </p>
+                    <p
+                        v-if="suivi_toutes_periodes"
+                        class="mt-0.5 text-xs text-muted-foreground tabular-nums"
+                        data-testid="impayees-toutes-periodes"
+                    >
+                        Toutes périodes :
+                        {{ formatGNF(suivi_toutes_periodes.montant_impayees) }}
+                        · {{ suivi_toutes_periodes.nb_impayees }} facture{{
+                            suivi_toutes_periodes.nb_impayees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -644,8 +749,7 @@ function _progressPercent(f: FactureItem): number {
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="factures"
-                    :paginator="factures.length > 20"
-                    :rows="20"
+                    v-bind="tableauServeur"
                     data-key="id"
                     striped-rows
                     removable-sort
@@ -656,6 +760,8 @@ function _progressPercent(f: FactureItem): number {
                         root: { class: 'w-full' },
                         tbody: { class: 'divide-y' },
                     }"
+                    @page="changerPage"
+                    @sort="changerTri"
                 >
                     <!-- Référence -->
                     <Column

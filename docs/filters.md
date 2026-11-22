@@ -491,6 +491,27 @@ par défaut, ordre du nom du véhicule.
 - Changer un filtre ou un tri revient à la première page. Les exports sont inchangés (tous les
   véhicules de l'organisation).
 
+### Pagination et tri côté serveur (Factures de vente, 22/11/2026)
+
+La liste **Factures de vente** ne charge plus toutes les factures de la période : le serveur renvoie
+une page de 20 factures (`page`), sur ordinateur comme sur mobile, triée côté serveur (`tri`,
+`sens`) sur les huit colonnes triables (référence, site, quantité, montant, encaissé, restant,
+statut, date ; par défaut les plus récentes d'abord). La période par défaut reste « Ce mois ».
+
+- Les **cartes** (Total, Restant à encaisser, Impayées, Soldées) portent toujours sur **toutes** les
+  factures filtrées, jamais sur la page affichée : calcul SQL de
+  `App\Support\Ventes\ListeFactures::totaux()`, mêmes règles que les accesseurs
+  (`FactureVente::montant_restant`, `montant_encaisse`).
+- **Suivi toutes périodes** : quand une période est choisie (tout sauf « Tout »), les cartes
+  Restant à encaisser et Impayées affichent en plus une ligne « Toutes périodes », calculée avec les
+  mêmes filtres sans la période (`ListeFactures::suiviToutesPeriodes()`). Une facture ancienne
+  encore due ne disparaît donc jamais du suivi quand le mois change. Le périmètre d'agence
+  s'applique à cette ligne comme aux cartes.
+- La **recherche du téléphone** (référence, véhicule, client, site) est faite par le serveur
+  (`recherche`) sur toutes les factures filtrées, plus sur la seule page affichée.
+- Changer un filtre, la recherche ou le tri revient à la première page. Filtres, « Mes vues »,
+  périmètre d'agence, permissions et encaissement depuis la liste sont inchangés.
+
 ---
 
 ## Réinitialisation
