@@ -130,6 +130,9 @@ const props = defineProps<{
     can_payer: boolean;
 }>();
 
+/** Code du choix « Toutes les périodes » (PerimetreParDefautLivreurs::TOUTES). */
+const TOUTES_PERIODES = 'toutes';
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Comptabilité' },
@@ -192,10 +195,15 @@ const filterFields = computed((): FilterField[] => [
         label: 'Période',
         type: 'multi-select' as const,
         searchable: true,
-        options: props.periodes_disponibles.map((p) => ({
-            value: p.code,
-            label: p.label,
-        })),
+        // Sans choix : quinzaine en cours et quinzaines non soldées (vue par défaut, calculée
+        // par le serveur) ; « Toutes les périodes » est un choix explicite.
+        options: [
+            { value: TOUTES_PERIODES, label: 'Toutes les périodes' },
+            ...props.periodes_disponibles.map((p) => ({
+                value: p.code,
+                label: p.label,
+            })),
+        ],
     },
 ]);
 
@@ -288,9 +296,13 @@ const indexSummary = computed<CommissionIndexSummary>(() => ({
     paid: props.kpis.total_verse,
 }));
 
-const periodContextLabel = computed(() =>
-    libellePeriodes(props.selected_periodes ?? [], props.periodes_disponibles),
-);
+const periodContextLabel = computed(() => {
+    const codes = props.selected_periodes ?? [];
+    if (codes.length === 0)
+        return 'Quinzaine en cours et quinzaines non soldées';
+    if (codes.includes(TOUTES_PERIODES)) return 'Toutes les périodes';
+    return libellePeriodes(codes, props.periodes_disponibles);
+});
 
 // Statut et répartition n'ont de sens que pour UNE période sélectionnée.
 const periodeUnique = computed(() =>

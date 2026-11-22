@@ -4,6 +4,7 @@ namespace App\Support\Commission;
 
 use App\Enums\StatutCommission;
 use App\Models\CommissionEnveloppePart;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -36,6 +37,50 @@ use Illuminate\Support\Collection;
  */
 final class CommissionKpiBuckets
 {
+    /**
+     * Les mêmes compartiments que calculer(), plus les trois sommes du résumé (brut, à payer,
+     * versé), calculés par la base pour chaque bénéficiaire de la requête : un seul passage, sans
+     * lire les parts une à une (sur tout l'historique, des dizaines de milliers de parts dont chaque
+     * montant décimal coûte une conversion à chaque lecture).
+     *
+     * Mêmes définitions que les accesseurs de CommissionEnveloppePart : montant_a_payer =
+     * montant_actuel s'il est renseigné, sinon montant_net ; montant_restant = max(0, à payer −
+     * versé). Compartiments arrondis au centime comme calculer().
+     *
+     * @param  Builder<CommissionEnveloppePart>  $parts  requête filtrée des parts
+     * @return Collection<string, array{montant_brut: float, montant_a_payer: float, montant_verse: float, total_genere: float, en_attente_periode: float, payable: float, deja_paye: float}>
+     */
+    public static function sommesParBeneficiaire(Builder $parts): Collection
+    {
+        $aPayer = 'COALESCE(montant_actuel, montant_net)';
+        $active = 'statut <> ?';
+        $annulee = StatutCommission::ANNULEE->value;
+
+        return (clone $parts)->setEagerLoads([])->reorder()->toBase()
+            ->select('beneficiaire_id')
+            ->selectRaw(
+                "COALESCE(SUM(montant_brut), 0) as montant_brut,
+                 COALESCE(SUM({$aPayer}), 0) as montant_a_payer,
+                 COALESCE(SUM(montant_verse), 0) as montant_verse,
+                 COALESCE(SUM(CASE WHEN {$active} THEN {$aPayer} END), 0) as total_genere,
+                 COALESCE(SUM(CASE WHEN {$active} AND statut = ? THEN {$aPayer} END), 0) as en_attente_periode,
+                 COALESCE(SUM(CASE WHEN {$active} AND statut IN (?, ?) AND {$aPayer} - montant_verse > 0 THEN {$aPayer} - montant_verse END), 0) as payable,
+                 COALESCE(SUM(CASE WHEN {$active} THEN montant_verse END), 0) as deja_paye",
+                [$annulee, $annulee, StatutCommission::CREEE->value, $annulee, StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value, $annulee],
+            )
+            ->groupBy('beneficiaire_id')
+            ->get()
+            ->mapWithKeys(fn (object $l) => [(string) $l->beneficiaire_id => [
+                'montant_brut' => (float) $l->montant_brut,
+                'montant_a_payer' => (float) $l->montant_a_payer,
+                'montant_verse' => (float) $l->montant_verse,
+                'total_genere' => round((float) $l->total_genere, 2),
+                'en_attente_periode' => round((float) $l->en_attente_periode, 2),
+                'payable' => round((float) $l->payable, 2),
+                'deja_paye' => round((float) $l->deja_paye, 2),
+            ]]);
+    }
+
     /**
      * @param  Collection<int, CommissionEnveloppePart>  $parts
      * @return array{total_genere: float, en_attente_periode: float, payable: float, deja_paye: float}

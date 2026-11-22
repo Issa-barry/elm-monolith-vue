@@ -135,8 +135,10 @@ class CommissionVenteFiltreStatutMontantsTest extends TestCase
 
     public function test_paye_ne_cumule_que_les_commissions_reglees(): void
     {
+        // « Toutes les périodes » : la quinzaine 2026-08-P1, entièrement payée, sort de la vue par
+        // défaut (quinzaine en cours et quinzaines non soldées, option B du 22/11/2026).
         $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.vente.index', ['statut' => ['paye']]))
+            ->get(route('comptabilite.commissions.vente.index', ['statut' => ['paye'], 'periode' => ['toutes']]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('beneficiaires', 1)
@@ -166,8 +168,9 @@ class CommissionVenteFiltreStatutMontantsTest extends TestCase
 
     public function test_sans_filtre_statut_les_montants_restent_cumules_sur_toutes_les_commissions(): void
     {
+        // Choix explicite « Toutes les périodes » (la vue par défaut écarte 2026-08-P1, soldée).
         $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.vente.index'))
+            ->get(route('comptabilite.commissions.vente.index', ['periode' => ['toutes']]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('beneficiaires', 2)

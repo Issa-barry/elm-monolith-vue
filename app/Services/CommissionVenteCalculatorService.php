@@ -62,9 +62,25 @@ class CommissionVenteCalculatorService
      */
     public static function fraisDepensesSurPeriodesDesParts(string $orgId, Collection $partsParLivreur, ?array $siteIds = null): array
     {
-        $codesParLivreur = $partsParLivreur
-            ->mapWithKeys(fn (Collection $parts, $livreurId) => [(string) $livreurId => $parts
-                ->pluck('enveloppe.earned_at')
+        return self::fraisDepensesSurPeriodes(
+            $orgId,
+            $partsParLivreur->map(fn (Collection $parts) => $parts->pluck('enveloppe.earned_at')),
+            $siteIds,
+        );
+    }
+
+    /**
+     * Même calcul que fraisDepensesSurPeriodesDesParts(), à partir des seules dates d'acquisition
+     * des commissions de chaque livreur (sans relire les parts).
+     *
+     * @param  Collection<string, iterable<mixed>>  $datesParLivreur  dates earned_at par livreur
+     * @param  array<int, string>|null  $siteIds  Filtre Agence optionnel — sans effet si vide.
+     * @return array<string, float>
+     */
+    public static function fraisDepensesSurPeriodes(string $orgId, Collection $datesParLivreur, ?array $siteIds = null): array
+    {
+        $codesParLivreur = $datesParLivreur
+            ->mapWithKeys(fn (iterable $dates, $livreurId) => [(string) $livreurId => collect($dates)
                 ->filter()
                 ->map(fn ($date) => PeriodeComptableService::codeForLivreur(Carbon::parse($date)))
                 ->unique()
