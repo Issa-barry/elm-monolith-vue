@@ -66,8 +66,33 @@ final class LecturePartsCommission
      */
     public static function enveloppes(QueryBuilder $enveloppeIds): array
     {
-        return DB::table('commission_enveloppes as e')
-            ->leftJoin('commission_processus as pr', 'pr.id', '=', 'e.processus_id')
+        $query = DB::table('commission_enveloppes as e')
+            ->leftJoin('commission_processus as pr', 'pr.id', '=', 'e.processus_id');
+        $agence = self::joindreAgence($query);
+
+        return $query
+            ->leftJoin('sites as ss', fn ($j) => $j->on('ss.id', '=', DB::raw('COALESCE(cv.site_id, t.site_source_id)'))
+                ->whereNull('ss.deleted_at'))
+            ->whereIn('e.id', $enveloppeIds)
+            ->select('e.id', 'e.earned_at', 'pr.code', 'v.id as vehicule_id', 'v.nom_vehicule as vehicule_nom', 'v.immatriculation as vehicule_immatriculation',
+                'ss.id as source_site_id', 'ss.nom as source_site_nom')
+            ->selectRaw("{$agence} as site_id")
+            ->get()
+            ->keyBy('id')
+            ->all();
+    }
+
+    /**
+     * Joint à la requête la vente (`cv`) ou le transfert (`t`) de la commission `e` et son véhicule
+     * (`v`), et renvoie l'expression SQL de son agence (site responsable) : même règle que
+     * CommissionEnveloppe::siteResponsableId() et CommissionSiteResponsableFilter, en jointures
+     * plutôt qu'en sous-requêtes corrélées. Une source supprimée n'a pas d'agence.
+     *
+     * @param  Builder<CommissionEnveloppePart>|QueryBuilder  $query  requête qui contient `commission_enveloppes as e`
+     */
+    public static function joindreAgence(Builder|QueryBuilder $query): string
+    {
+        $query
             ->leftJoin('commandes_ventes as cv', fn ($j) => $j->on('cv.id', '=', 'e.source_id')
                 ->where('e.source_type', '=', CommandeVente::class)
                 ->whereNull('cv.deleted_at'))
@@ -75,16 +100,9 @@ final class LecturePartsCommission
                 ->where('e.source_type', '=', TransfertLogistique::class)
                 ->whereNull('t.deleted_at'))
             ->leftJoin('vehicules as v', fn ($j) => $j->on('v.id', '=', DB::raw('COALESCE(cv.vehicule_id, t.vehicule_id)'))
-                ->whereNull('v.deleted_at'))
-            ->leftJoin('sites as ss', fn ($j) => $j->on('ss.id', '=', DB::raw('COALESCE(cv.site_id, t.site_source_id)'))
-                ->whereNull('ss.deleted_at'))
-            ->whereIn('e.id', $enveloppeIds)
-            ->select('e.id', 'e.earned_at', 'pr.code', 'v.id as vehicule_id', 'v.nom_vehicule as vehicule_nom', 'v.immatriculation as vehicule_immatriculation',
-                'ss.id as source_site_id', 'ss.nom as source_site_nom')
-            ->selectRaw('CASE WHEN cv.id IS NOT NULL THEN COALESCE(v.site_id, cv.site_id) WHEN t.id IS NOT NULL THEN COALESCE(v.site_id, t.site_source_id) END as site_id')
-            ->get()
-            ->keyBy('id')
-            ->all();
+                ->whereNull('v.deleted_at'));
+
+        return 'CASE WHEN cv.id IS NOT NULL THEN COALESCE(v.site_id, cv.site_id) WHEN t.id IS NOT NULL THEN COALESCE(v.site_id, t.site_source_id) END';
     }
 
     /**

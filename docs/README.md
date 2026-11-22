@@ -86,6 +86,7 @@ Chaque document technique indique en tête son **statut** :
 **Commissions**
 
 - [Commissions : vente et logistique](commissions.md)
+- [Tableau de bord des commissions](tableau-de-bord-commissions.md)
 
 **Achats et dépenses**
 

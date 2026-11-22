@@ -245,7 +245,9 @@ dérogation valide + commande autorisée → **avertissement**, pas danger.
   besoin semble évident : le proposer dans le compte rendu et attendre la réponse.
 - Cartes de synthèse : `resources/js/components/KpiCard.vue` ; bouton d'information :
   `resources/js/components/InfoTooltip.vue`. Tailles, grilles et variante compacte :
-  [ui-cartes-et-informations.md](../ui-cartes-et-informations.md).
+  [ui-cartes-et-informations.md](../ui-cartes-et-informations.md). Exception : les tableaux de bord
+  Stat-Ventes et Stat-Commissions reproduisent les cartes du template Apollo
+  ([même document](../ui-cartes-et-informations.md#exception--tableaux-de-bord-reproduits-dapollo)).
 - Tableaux : les statuts dans les cellules suivent A1, les filtres A2. Aucune autre règle propre
   aux tableaux n'est fixée à ce jour.
 - Réutiliser les composants partagés et les styles existants avant d'en créer de nouveaux.

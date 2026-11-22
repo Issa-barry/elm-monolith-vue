@@ -9,10 +9,18 @@
 
 /*
  * Poppins — police du template Apollo, chargée UNIQUEMENT par les éléments qui utilisent la classe
- * `font-apollo` (cartes KPI de Trésorerie > Supports) : le navigateur ne télécharge un fichier que
- * si un texte l'utilise. Le reste de l'application reste en Instrument Sans (`font-sans`).
- * Licence : resources/fonts/poppins/LICENSE.txt (SIL OFL 1.1).
+ * `font-apollo` (cartes KPI de Trésorerie > Supports, tableau de bord des commissions) : le
+ * navigateur ne télécharge un fichier que si un texte l'utilise. Le reste de l'application reste en
+ * Instrument Sans (`font-sans`). Licence : resources/fonts/poppins/LICENSE.txt (SIL OFL 1.1).
  */
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../fonts/poppins/poppins-v20-latin-regular.woff2') format('woff2');
+}
+
 @font-face {
     font-family: 'Poppins';
     font-style: normal;

@@ -53,8 +53,7 @@ final class CommissionKpiBuckets
     public static function sommesParBeneficiaire(Builder $parts): Collection
     {
         $aPayer = 'COALESCE(montant_actuel, montant_net)';
-        $active = 'statut <> ?';
-        $annulee = StatutCommission::ANNULEE->value;
+        [$compartiments, $liaisons] = self::compartimentsSql();
 
         return (clone $parts)->setEagerLoads([])->reorder()->toBase()
             ->select('beneficiaire_id')
@@ -62,11 +61,8 @@ final class CommissionKpiBuckets
                 "COALESCE(SUM(montant_brut), 0) as montant_brut,
                  COALESCE(SUM({$aPayer}), 0) as montant_a_payer,
                  COALESCE(SUM(montant_verse), 0) as montant_verse,
-                 COALESCE(SUM(CASE WHEN {$active} THEN {$aPayer} END), 0) as total_genere,
-                 COALESCE(SUM(CASE WHEN {$active} AND statut = ? THEN {$aPayer} END), 0) as en_attente_periode,
-                 COALESCE(SUM(CASE WHEN {$active} AND statut IN (?, ?) AND {$aPayer} - montant_verse > 0 THEN {$aPayer} - montant_verse END), 0) as payable,
-                 COALESCE(SUM(CASE WHEN {$active} THEN montant_verse END), 0) as deja_paye",
-                [$annulee, $annulee, StatutCommission::CREEE->value, $annulee, StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value, $annulee],
+                 {$compartiments}",
+                $liaisons,
             )
             ->groupBy('beneficiaire_id')
             ->get()
@@ -79,6 +75,29 @@ final class CommissionKpiBuckets
                 'payable' => round((float) $l->payable, 2),
                 'deja_paye' => round((float) $l->deja_paye, 2),
             ]]);
+    }
+
+    /**
+     * Sommes SQL des quatre compartiments (total_genere, en_attente_periode, payable, deja_paye),
+     * mêmes définitions que calculer(). `$table` préfixe les colonnes des parts quand la requête
+     * joint commission_enveloppes, qui a aussi `statut` et `montant_verse`.
+     *
+     * @return array{0: string, 1: list<string>} expression SELECT et ses liaisons
+     */
+    public static function compartimentsSql(string $table = ''): array
+    {
+        $p = $table === '' ? '' : $table.'.';
+        $aPayer = "COALESCE({$p}montant_actuel, {$p}montant_net)";
+        $active = "{$p}statut <> ?";
+        $annulee = StatutCommission::ANNULEE->value;
+
+        return [
+            "COALESCE(SUM(CASE WHEN {$active} THEN {$aPayer} END), 0) as total_genere,
+                 COALESCE(SUM(CASE WHEN {$active} AND {$p}statut = ? THEN {$aPayer} END), 0) as en_attente_periode,
+                 COALESCE(SUM(CASE WHEN {$active} AND {$p}statut IN (?, ?) AND {$aPayer} - {$p}montant_verse > 0 THEN {$aPayer} - {$p}montant_verse END), 0) as payable,
+                 COALESCE(SUM(CASE WHEN {$active} THEN {$p}montant_verse END), 0) as deja_paye",
+            [$annulee, $annulee, StatutCommission::CREEE->value, $annulee, StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value, $annulee],
+        ];
     }
 
     /**

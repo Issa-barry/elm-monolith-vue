@@ -268,6 +268,44 @@ final class Periode
             : $query->where($colonne, '>=', $this->debut->toDateTimeString())->where($colonne, '<', $this->finExclue()->toDateTimeString());
     }
 
+    /**
+     * Période de comparaison d'une évolution en % (tableau de bord des commissions) : celle qui
+     * précède immédiatement, de même durée. Une période en mois entiers recule d'autant de mois
+     * (« Ce mois » → mois précédent, T1 → T4 de l'année précédente, « Cette année » → année
+     * précédente) ; une autre recule d'autant de jours (semaine → semaine précédente, jour → veille,
+     * dates libres → les jours qui précèdent).
+     *
+     * Une période en cours n'est comparée qu'à la même durée écoulée : « Ce mois » au 22 → du 1er au
+     * 22 du mois précédent, jamais un mois entier contre un mois commencé. null pour « Toutes les
+     * périodes » et pour une période qui n'a pas commencé.
+     */
+    public function precedente(?CarbonImmutable $maintenant = null): ?self
+    {
+        $maintenant ??= CarbonImmutable::now();
+
+        if (! $this->estBornee() || $this->debut->greaterThan($maintenant)) {
+            return null;
+        }
+
+        if ($this->debut->day === 1 && $this->fin->isLastOfMonth()) {
+            $mois = ($this->fin->year - $this->debut->year) * 12 + $this->fin->month - $this->debut->month + 1;
+            $debut = $this->debut->subMonthsNoOverflow($mois);
+            $fin = $debut->addMonthsNoOverflow($mois - 1)->endOfMonth();
+        } else {
+            $jours = (int) round($this->debut->diffInDays($this->fin->startOfDay())) + 1;
+            $debut = $this->debut->subDays($jours);
+            $fin = $this->debut->subDay()->endOfDay();
+        }
+
+        if ($this->fin->greaterThan($maintenant)) {
+            $joursEcoules = (int) round($this->debut->diffInDays($maintenant->startOfDay())) + 1;
+            $finEcoulee = $debut->addDays($joursEcoules - 1)->endOfDay();
+            $fin = $finEcoulee->lessThan($fin) ? $finEcoulee : $fin;
+        }
+
+        return new self(self::PERSONNALISEE, $debut, $fin);
+    }
+
     /** Même règle que appliquer(), pour des lignes déjà chargées en PHP. */
     public function contient(?CarbonInterface $date): bool
     {
