@@ -11,6 +11,10 @@ import type {
 import PaymentCard from '@/components/payment/PaymentCard.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import {
+    usePaginationServeur,
+    type PaginationServeur,
+} from '@/composables/usePaginationServeur';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF, formatQuantite } from '@/lib/utils';
@@ -93,16 +97,6 @@ interface SuiviToutesPeriodes {
     total_a_encaisser: number;
     nb_impayees: number;
     montant_impayees: number;
-}
-
-/** Liste paginée et triée côté serveur. */
-interface PaginationServeur {
-    page: number;
-    par_page: number;
-    total: number;
-    derniere_page: number;
-    tri: string | null;
-    sens: 'asc' | 'desc' | null;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -246,41 +240,9 @@ const statutColor: Record<string, string> = {
 };
 
 // ── Pagination et tri serveur ─────────────────────────────────────────────────
-// Les filtres de l'URL sont conservés ; changer de tri revient à la première page.
-function chargerPage(page: number, tri: string | null, sens: string | null) {
-    router.reload({
-        data: {
-            page: page > 1 ? page : undefined,
-            tri: tri ?? undefined,
-            sens: tri ? (sens ?? undefined) : undefined,
-        },
-    });
-}
-
-function changerPage(event: { page: number }) {
-    chargerPage(event.page + 1, props.pagination.tri, props.pagination.sens);
-}
-
-function changerTri(event: { sortField?: unknown; sortOrder?: number | null }) {
-    const champ =
-        typeof event.sortField === 'string' && event.sortOrder
-            ? event.sortField
-            : null;
-    chargerPage(1, champ, event.sortOrder === 1 ? 'asc' : 'desc');
-}
-
-const tableauServeur = computed(() => {
-    const p = props.pagination;
-    return {
-        lazy: true,
-        paginator: p.total > p.par_page,
-        rows: p.par_page,
-        totalRecords: p.total,
-        first: (p.page - 1) * p.par_page,
-        sortField: p.tri ?? undefined,
-        sortOrder: p.tri ? (p.sens === 'asc' ? 1 : -1) : undefined,
-    };
-});
+const { changerPage, changerTri, tableauServeur } = usePaginationServeur(
+    () => props.pagination,
+);
 
 // ── Recherche mobile ──────────────────────────────────────────────────────────
 // Faite par le serveur sur toutes les factures filtrées (référence, véhicule, client, site),

@@ -18,9 +18,9 @@ use Carbon\CarbonInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
+use Tests\Feature\Concerns\HasListePagineeDeuxAgences;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
@@ -31,23 +31,12 @@ use Tests\TestCase;
  */
 class ListeFacturesPagineeTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
-
-    private Site $agenceA;
-
-    private Site $agenceB;
-
-    private string $varianteId;
-
-    private int $sequence = 0;
+    use HasAdminSetup, HasListePagineeDeuxAgences, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['ventes.read']);
-        $this->agenceA = Site::where('organization_id', $this->org->id)->firstOrFail();
-        $this->agenceB = Site::create(['organization_id' => $this->org->id, 'nom' => 'Agence B', 'type' => 'depot', 'localisation' => 'Kindia']);
-        $this->varianteId = $this->makeProduitAvecVariante($this->org)->variantes()->first()->id;
+        $this->preparerDeuxAgences();
     }
 
     /**
@@ -175,21 +164,10 @@ class ListeFacturesPagineeTest extends TestCase
         return array_map(fn ($v) => is_float($v) ? round($v, 2) : $v, $totaux);
     }
 
-    private function vendeurAgenceA(): User
-    {
-        Role::firstOrCreate(['name' => 'vendeur_test', 'guard_name' => 'web']);
-        $vendeur = User::factory()->create(['organization_id' => $this->org->id]);
-        $vendeur->assignRole('vendeur_test');
-        $vendeur->givePermissionTo('ventes.read');
-        $vendeur->sites()->attach($this->agenceA->id, ['role' => 'employe', 'is_default' => true]);
-
-        return $vendeur;
-    }
-
     /** @return array<string, mixed> */
     private function page(User $user, array $params = []): array
     {
-        return $this->actingAs($user)->get(route('factures.index', $params))->assertOk()->viewData('page')['props'];
+        return $this->props($user, 'factures.index', $params);
     }
 
     /** @return Collection<int, FactureVente> */
