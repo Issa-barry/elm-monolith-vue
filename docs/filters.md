@@ -511,6 +511,9 @@ statut, date ; par défaut les plus récentes d'abord). La période par défaut 
   (`recherche`) sur toutes les factures filtrées, plus sur la seule page affichée.
 - Changer un filtre, la recherche ou le tri revient à la première page. Filtres, « Mes vues »,
   périmètre d'agence, permissions et encaissement depuis la liste sont inchangés.
+- Côté page, la pagination et le tri passent par le composable partagé
+  `resources/js/composables/usePaginationServeur.ts` (DataTable PrimeVue en mode lazy, rechargement
+  Inertia), aussi utilisé par la liste Véhicules.
 
 ---
 
