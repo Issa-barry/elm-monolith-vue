@@ -1,7 +1,8 @@
 # Déploiement sur Hostinger
 
-> **Statut** : en place (hébergement actuel) · **Dernière vérification** : 15/11/2026, d'après les
-> workflows `deploy-hostinger-admin.yml` et `deploy-hostinger-formation.yml`
+> **Statut** : en place (hébergement actuel) · **Dernière vérification** : 22/11/2026, d'après les
+> workflows `deploy-hostinger-admin.yml` et `deploy-hostinger-formation.yml`, et hPanel (cron,
+> configuration PHP) sur les deux sites
 >
 > Remplace `DEPLOY-HOSTINGER-CICD.md` et les sections « Déploiement » de l'ancien README. Un
 > passage sur VPS est envisagé : tant qu'il n'est pas fait, cette procédure reste la référence.
@@ -111,14 +112,61 @@ au lieu d'être recréée.
 
 ## Tâches planifiées et files d'attente
 
-- Les tâches planifiées exigent une tâche cron Hostinger chaque minute :
-  `php artisan schedule:run` (voir [controle-encaissements.md](../controle-encaissements.md)).
-- L'hébergement mutualisé n'offre **pas de worker permanent** pour les files d'attente.
-  **À vérifier dans hPanel** : l'existence et la commande exacte des tâches cron du planificateur
-  et de la file d'attente sur chaque site.
-- Pour cette raison, l'import flotte (Paramètres → Import en masse) est traité pendant la requête,
-  limité à 500 lignes (`ImportFlotteParser::MAX_LIGNES`). Un import échoué peut être relancé
-  depuis sa fiche sans double création : il s'exécute dans une transaction.
+Les tâches planifiées (dont le contrôle horaire des encaissements, voir
+[controle-encaissements.md](../controle-encaissements.md)) exigent une tâche cron par site, chaque
+minute. hPanel → **Avancé** → **Tâches Cron**, type **PHP** :
+
+| Site | Fréquence | Commande |
+|---|---|---|
+| fello (production) | `* * * * *` | `domains/fello.eau-la-maman.com/public_html/artisan schedule:run` |
+| formation | `* * * * *` | `domains/formation.eau-la-maman.com/public_html/artisan schedule:run` |
+
+État constaté le 22/11/2026 : ces deux lignes existent et répondent « No scheduled commands are
+ready to run » entre deux tâches, ce qui est le fonctionnement normal.
+
+Pièges constatés le 22/11/2026 :
+
+- **La liste des tâches cron est commune au compte Hostinger** : fello et formation affichent les
+  mêmes lignes. Ne jamais supprimer une ligne depuis un site en pensant qu'elle ne concerne que
+  lui.
+- **En type PHP, pas de redirection** : hPanel passe la commande à `artisan` sans shell, donc
+  `>> fichier 2>&1` arrive comme argument et la commande échoue (« No arguments expected for
+  "schedule:run" command, got ">>" »). C'est ce qui empêchait le planificateur de production de
+  tourner avant le 22/11/2026. Pour rediriger la sortie, utiliser le type **Personnalisé** avec le
+  binaire PHP complet.
+- hPanel n'alerte pas en cas d'échec : seul **Afficher le résultat** montre la sortie, et
+  uniquement celle de la dernière exécution. L'écran Contrôle des encaissements signale
+  l'absence de contrôle planifié depuis 2 h 30.
+
+L'hébergement mutualisé n'offre **pas de worker permanent** pour les files d'attente. **À vérifier
+dans hPanel** : l'existence d'une tâche cron pour la file d'attente (aucune n'est en place au
+22/11/2026).
+
+Pour cette raison, l'import flotte (Paramètres → Import en masse) est traité pendant la requête,
+limité à 500 lignes (`ImportFlotteParser::MAX_LIGNES`). Un import échoué peut être relancé depuis
+sa fiche sans double création : il s'exécute dans une transaction.
+
+## Version PHP du serveur
+
+Les deux sites sont en **PHP 8.4** depuis le 22/11/2026 (hPanel → **Avancé** → **Configuration
+PHP**), comme la CI et le déploiement. Le déploiement utilise `/opt/alt/php84/usr/bin/php`.
+
+Changer de version PHP dans hPanel a deux effets à corriger aussitôt :
+
+1. **Les options PHP reviennent aux valeurs par défaut** (OPcache, `memory_limit`,
+   `max_execution_time`, `max_input_vars`…). Les noter avant le changement et les ressaisir. Les
+   extensions, elles, sont conservées.
+2. **`proc_open` est désactivée par défaut en 8.4** (`disable_functions`). Le déploiement en a
+   besoin (`composer install` lance `@php artisan package:discover`, qui échoue avec « The Process
+   class relies on proc_open »), ainsi que le planificateur (`->command()` passe par Symfony
+   Process). La faire retirer de `disable_functions` par le support Hostinger, site par site, en
+   gardant les autres restrictions. Fait pour formation et fello le 22/11/2026.
+
+Vérifier ensuite : un déploiement relancé à la main passe, `/up` répond 200, et l'écran Contrôle
+des encaissements affiche un contrôle planifié dans l'heure.
+
+La traduction automatique de Chrome casse les listes déroulantes de hPanel : la désactiver avant
+de modifier la configuration.
 
 ## Règles à respecter
 
