@@ -190,7 +190,7 @@ thead th.col-ben, tbody td.col-ben { padding-left: 12pt; padding-right: 10pt; }
 .col-sta  { width: 7%; }
 .col-sig  { width: 7%; }
 
-/* Colonnes supplémentaires propres à l'export Commission vente. Les largeurs
+/* Colonnes supplémentaires propres à l'export Commissions des livreurs. Les largeurs
    historiques des exports Logistique/Propriétaire restent inchangées. */
 .validation-columns .col-ben { width: 23%; }
 .validation-columns .col-veh { width: 11%; }

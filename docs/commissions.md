@@ -592,6 +592,23 @@ processus, nombre de commandes, première échéance et dates de commission sont
 de départ du transfert ; dépenses avec un filtre Statut via
 `CommissionVenteCalculatorService::fraisDepensesSurPeriodes()`. Les exports ne changent pas.
 
+**Écrans Propriétaires et Sites (22/11/2026, performance, lot 9)** : même principe. Les parts sont
+lues en lignes légères (`App\Support\Commission\LecturePartsCommission`, partagée avec l'écran
+Livreurs) au lieu d'être chargées avec leur vente, leur véhicule, leur site et, pour les sites,
+toutes les lignes de leur commission. Les montants sont additionnés en PHP dans le même ordre
+qu'avant (`CommissionKpiBuckets::calculerLignes()`), donc identiques à l'octet près ; véhicules et
+sites des ventes, agences, processus et catégories (catégorie supprimée exclue) suivent les mêmes
+règles que les relations des modèles. Aucune règle de calcul, de dépense, de statut, de filtre ou
+de paiement ne change ; « Toutes les périodes » reste la vue par défaut de ces deux écrans. Les
+exports de ces écrans ne changent pas. Test :
+`tests/Feature/Performance/CommissionsProprietairesSitesTest.php`.
+
+**Nom des exports Livreurs (22/11/2026)** : l'écran couvre tous les processus depuis le
+02/09/2026 ; ses exports s'appellent `commissions-livreurs-AAAA-MM-JJ.csv` / `.pdf` (au lieu de
+`commissions-vente-…`) et le PDF est titré « Commissions des livreurs ». L'URL historique
+`/comptabilite/commissions/vente` et les noms internes (`CommissionVenteController`,
+`CommissionVente/Index`) sont conservés pour ne casser ni favoris ni liens.
+
 ### Commissions des livreurs — vue par défaut : quinzaine en cours et quinzaines non soldées (22/11/2026)
 
 **Constat** : l'écran s'ouvrait sur tout l'historique de chaque livreur, quinzaines soldées
