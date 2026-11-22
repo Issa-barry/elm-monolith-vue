@@ -39,8 +39,9 @@ Le workflow `branch-flow.yml` refuse toute pull request qui ne respecte pas ce f
 
 - `lint.yml` : Pint, cohérence de la documentation OpenAPI, Prettier, ESLint, vérification
   TypeScript, tests Vitest et contrôle des standards d'interface (`npm run lint:standards`).
-- PHPUnit tourne en parallèle. Un code déjà validé à une étape précédente du flux n'est pas
-  retesté : son empreinte est mémorisée dans la variable de dépôt `PHPUNIT_PASSED_FINGERPRINTS`.
+- PHPUnit tourne sur 4 machines (shards), chacune en parallèle. Un code déjà validé à une étape précédente du flux n'est pas
+  retesté : son empreinte est marquée par un artefact `phpunit-passed-<empreinte>`
+  ([ci-cd.md](ci-cd.md#testsyml)). Un nouveau push annule le run de tests encore en cours.
 - Les E2E ne tournent que si la pull request modifie autre chose que de la documentation.
 - Contrôles **exigés** pour fusionner : `quality` et `PHPUnit` partout, plus `E2E smoke` vers
   `production`. `enforce-flow` et `E2E full` ne sont pas exigés.

@@ -80,7 +80,7 @@ async function verifierCommissionVisible(page: Page): Promise<void> {
         page.getByRole('menuitem', { name: 'Exporter en Excel' }).click(),
     ]);
     expect(excelDownload.suggestedFilename()).toMatch(
-        /commissions-vente.*\.csv$/,
+        /commissions-livreurs.*\.csv$/,
     );
     const excelPath = await excelDownload.path();
     expect(excelPath).not.toBeNull();
@@ -94,7 +94,7 @@ async function verifierCommissionVisible(page: Page): Promise<void> {
         page.getByRole('menuitem', { name: 'Exporter en PDF' }).click(),
     ]);
     expect(pdfDownload.suggestedFilename()).toMatch(
-        /commissions-vente.*\.pdf$/,
+        /commissions-livreurs.*\.pdf$/,
     );
     const pdfPath = await pdfDownload.path();
     expect(pdfPath).not.toBeNull();

@@ -525,7 +525,8 @@ class EquipeLivraisonTransfertLivreurTest extends TestCase
         $this->configurerPartage($equipeB, CommissionProcessus::CODE_VENTE, $categorie, [$z->id => 100]);
 
         // La part du parrain est versée au livreur restant : refusé (la ligne du parrain manque).
-        $reponse = $this->actingAs($this->user)->post(route('equipes-livraison.transfert.store', $x->id), [
+        // En JSON : le motif de l'abort(422) figure dans `message` sans dépendre du mode debug.
+        $reponse = $this->actingAs($this->user)->postJson(route('equipes-livraison.transfert.store', $x->id), [
             'nouveau_vehicule_id' => $vehiculeB->id,
             'role' => 'chauffeur',
             'partages_depart' => [[
