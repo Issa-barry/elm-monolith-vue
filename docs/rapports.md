@@ -371,13 +371,30 @@ séparé du lot 1 : le tableau de bord applique le même périmètre que les rap
 
 - **Administrateur** (super admin, administrateur entreprise) : toute l'organisation, inchangé.
 - **Autre utilisateur** : uniquement ses agences (`user_sites`) — statistiques de factures, encaissé,
-  reste à encaisser, évolutions mensuelle et quotidienne, CA par site, par processus, par type de
-  véhicule et par produit (agence de la commande). Une ligne « Chiffres de vos agences : … » l'indique sous l'en-tête.
+  reste à encaisser, évolution, CA par site, par processus, par type de véhicule et par produit
+  (agence de la commande). La ligne de période sous l'en-tête ajoute « chiffres de vos agences : … ».
 - Une facture sans agence n'apparaît que dans la vue organisation.
 - Pas de filtre Agence sur le tableau de bord : le périmètre découle des droits.
 
 **Changement visible** dès la mise en production : un responsable qui voyait l'organisation entière
 ne voit plus que ses agences.
+
+## Tableau de bord — filtre de période unique (2026-11-23)
+
+Stat-Ventes et Stat-Commissions partagent le même filtre (`SelecteurPeriode.vue`, choix
+`Periode::TABLEAU_DE_BORD`, [periodes.md](periodes.md)) : périodes rapides, trimestres, semestres,
+« Toutes les périodes » et **Période personnalisée** (dates de début et de fin, bornes incluses,
+saisies dans une fenêtre contextuelle avec « Appliquer »).
+Défaut : **Ce mois**. Le libellé de la période appliquée s'affiche sous l'en-tête.
+
+- Ce filtre est la **seule** période de la page : cartes, graphique « Évolution CA Payées vs
+  Impayées » et répartitions (catégorie de véhicule, processus, site, produit) portent toujours sur
+  la même période. Le graphique n'a plus de sélecteur propre (il pouvait afficher « Mois dernier »
+  sur des données chargées pour « Ce mois », donc vide).
+- Graphique : une barre par jour jusqu'à 31 jours, par mois au-delà, jusqu'à aujourd'hui ; pour
+  « Toutes les périodes », du premier au dernier mois qui a des factures (auparavant : l'année en
+  cours seulement). Tranches calculées par le serveur (`TranchesPeriode`) en une requête par jour,
+  au lieu de deux (mensuelle et 60 derniers jours).
 
 ## Tableau de bord — ventes par processus (2026-10-06)
 

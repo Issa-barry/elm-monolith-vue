@@ -6,6 +6,7 @@ use App\Features\ModuleFeature;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
+use App\Support\Periodes\Periode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route as RouteDefinition;
 use Illuminate\Support\Carbon;
@@ -54,14 +55,18 @@ class RegistreFiltresPeriodeTest extends TestCase
         'rapports.agences.export' => 'Rapport par agence — export',
         'ma-situation' => 'Ma situation',
         'ma-situation.export' => 'Ma situation — export',
+        'dashboard' => 'Tableau de bord (Stat-Ventes)',
+        'dashboard.commissions' => 'Tableau de bord des commissions (Stat-Commissions)',
         'absences.index' => 'Absences des salariés',
     ];
 
-    /** Écrans à périodes rapides seulement : des dates libres sont refusées. @var array<string, string> */
-    public const REGISTRE_SANS_DATES = [
-        'dashboard' => 'Tableau de bord',
-        'dashboard.commissions' => 'Tableau de bord des commissions',
-    ];
+    /**
+     * Écrans à périodes rapides seulement : des dates libres sont refusées. Aucun depuis que les
+     * tableaux de bord proposent la période personnalisée (23/11/2026).
+     *
+     * @var array<string, string>
+     */
+    public const REGISTRE_SANS_DATES = [];
 
     /** Routes à paramètre, couvertes par leur propre test. @var array<string, string> */
     public const COUVERTES_AILLEURS = [
@@ -146,34 +151,31 @@ class RegistreFiltresPeriodeTest extends TestCase
             ->assertSessionHasNoErrors();
     }
 
-    public function test_tableau_de_bord_periodes_rapides_trimestres_et_refus_des_dates(): void
+    /**
+     * Les deux tableaux de bord proposent le même filtre : périodes rapides, trimestres, semestres,
+     * toutes les périodes et dates libres (Periode::TABLEAU_DE_BORD).
+     */
+    public function test_les_tableaux_de_bord_proposent_les_memes_periodes_et_les_dates_libres(): void
     {
-        foreach (['hier', 't1', 's2', 'annee_precedente', 'mois_dernier'] as $cle) {
-            $this->actingAs($this->admin)->get(route('dashboard', ['periode' => $cle]))->assertOk();
+        foreach (['dashboard', 'dashboard.commissions'] as $route) {
+            foreach (['hier', 't1', 's2', 'annee_precedente', 'mois_dernier', 'tout'] as $cle) {
+                $this->actingAs($this->admin)->get(route($route, ['periode' => $cle]))->assertOk()->assertSessionHasNoErrors();
+            }
+
+            $this->actingAs($this->admin)
+                ->get(route($route, ['date_debut' => '2026-10-01', 'date_fin' => '2026-11-04']))
+                ->assertOk()
+                ->assertSessionHasNoErrors()
+                ->assertInertia(fn ($page) => $page
+                    ->where('periode.cle', Periode::PERSONNALISEE)
+                    ->where('periode.date_debut', '2026-10-01')
+                    ->where('periode.date_fin', '2026-11-04')
+                    ->where('periode.options', Periode::options(Periode::TABLEAU_DE_BORD)));
+
+            $this->actingAs($this->admin)
+                ->get(route($route, ['periode' => 'trimestre_dernier']))
+                ->assertSessionHasErrors(['periode' => 'Période inconnue.']);
         }
-
-        $this->actingAs($this->admin)
-            ->get(route('dashboard', ['date_debut' => '2026-11-01', 'date_fin' => '2026-11-04']))
-            ->assertSessionHasErrors(['date_debut' => 'Cet écran ne propose pas de dates libres : choisissez une période.']);
-
-        $this->actingAs($this->admin)
-            ->get(route('dashboard', ['periode' => 'trimestre_dernier']))
-            ->assertSessionHasErrors(['periode' => 'Période inconnue.']);
-    }
-
-    public function test_tableau_de_bord_des_commissions_periodes_rapides_trimestres_et_refus_des_dates(): void
-    {
-        foreach (['hier', 't1', 's2', 'annee_precedente', 'mois_dernier', 'tout'] as $cle) {
-            $this->actingAs($this->admin)->get(route('dashboard.commissions', ['periode' => $cle]))->assertOk();
-        }
-
-        $this->actingAs($this->admin)
-            ->get(route('dashboard.commissions', ['date_debut' => '2026-11-01', 'date_fin' => '2026-11-04']))
-            ->assertSessionHasErrors(['date_debut' => 'Cet écran ne propose pas de dates libres : choisissez une période.']);
-
-        $this->actingAs($this->admin)
-            ->get(route('dashboard.commissions', ['periode' => 'trimestre_dernier']))
-            ->assertSessionHasErrors(['periode' => 'Période inconnue.']);
     }
 
     /** Bug corrigé : `subMonth()` débordait et « Mois dernier » affichait octobre un 31 octobre. */
@@ -185,13 +187,9 @@ class RegistreFiltresPeriodeTest extends TestCase
             ->get(route('dashboard', ['periode' => 'mois_dernier']))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('periode', 'mois_precedent')
-                ->where('periodes', fn ($options) => collect($options)->firstWhere('value', 'mois_precedent') === [
-                    'value' => 'mois_precedent',
-                    'label' => 'Mois dernier',
-                    'date_debut' => '2026-09-01',
-                    'date_fin' => '2026-09-30',
-                ]));
+                ->where('periode.cle', 'mois_precedent')
+                ->where('periode.date_debut', '2026-09-01')
+                ->where('periode.date_fin', '2026-09-30'));
     }
 
     public function test_historique_d_une_entite_refuse_une_periode_invalide_en_json(): void

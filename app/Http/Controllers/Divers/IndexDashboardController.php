@@ -15,6 +15,7 @@ use App\Services\Client\QrPayloadResolver;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SiteScopeService;
 use App\Support\Periodes\Periode;
+use App\Support\Periodes\TranchesPeriode;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,8 +29,8 @@ class IndexDashboardController extends Controller
         private readonly SiteScopeService $siteScope,
     ) {}
 
-    /** Périodes du tableau de bord : le standard sans dates libres, plus trimestres et semestres (ADR 0057). */
-    private const PERIODES = [...Periode::RAPIDES, ...Periode::TRIMESTRES_SEMESTRES, Periode::TOUT];
+    /** Périodes du tableau de bord : le standard (dates libres comprises), plus trimestres et semestres (ADR 0057). */
+    private const PERIODES = Periode::TABLEAU_DE_BORD;
 
     public function __invoke(Request $request): Response
     {
@@ -79,68 +80,40 @@ class IndexDashboardController extends Controller
 
         $resteAEncaisser = max(0, (float) $row->montant_actif - (float) $encaisseActif);
 
-        // ── Évolution mensuelle (année courante) ───────────────────────────────
-        // MONTH() n'existe pas sous SQLite (tests CI) → strftime('%m', ...) à la place
-        $monthExpr = DB::connection()->getDriverName() === 'sqlite'
-            ? "CAST(strftime('%m', created_at) AS INTEGER)"
-            : 'MONTH(created_at)';
+        // ── Évolution : une barre par jour, ou par mois au-delà de 31 jours (TranchesPeriode) ──
+        // Une seule requête, regroupée par jour sur la période choisie ; les mois sont formés en PHP
+        // (DATE() existe sous MySQL et SQLite).
+        $decoupage = TranchesPeriode::pour($periode);
+        $evolutionQuery = $perimetre(FactureVente::where('organization_id', $orgId), 'site_id');
+        $periode->appliquer($evolutionQuery, 'created_at');
 
-        $monthlyQuery = $perimetre(FactureVente::where('organization_id', $orgId), 'site_id');
-        if ($periode->estBornee()) {
-            $periode->appliquer($monthlyQuery, 'created_at');
-        } else {
-            Periode::rapide('cette_annee', CarbonImmutable::now())->appliquer($monthlyQuery, 'created_at');
-        }
-
-        $monthly = $monthlyQuery
+        $parTranche = [];
+        $evolutionQuery
             ->selectRaw("
-                {$monthExpr} as mois,
+                DATE(created_at) as jour,
                 COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
                 COALESCE(SUM(CASE WHEN statut_facture = 'partiel' THEN montant_net ELSE 0 END), 0) as partielles,
                 COALESCE(SUM(CASE WHEN statut_facture = 'impayee' THEN montant_net ELSE 0 END), 0) as impayees
             ")
-            ->groupBy(DB::raw($monthExpr))
+            ->groupBy('jour')
+            ->toBase()
             ->get()
-            ->keyBy('mois');
+            ->each(function ($r) use ($decoupage, &$parTranche) {
+                $cle = $decoupage->cle((string) $r->jour);
+                foreach (['payees', 'partielles', 'impayees'] as $serie) {
+                    $parTranche[$cle][$serie] = ($parTranche[$cle][$serie] ?? 0.0) + (float) $r->{$serie};
+                }
+            });
 
-        $evolutionMensuelle = collect(range(1, 12))->map(fn ($m) => [
-            'payees' => (float) ($monthly->get($m)?->payees ?? 0),
-            'partielles' => (float) ($monthly->get($m)?->partielles ?? 0),
-            'impayees' => (float) ($monthly->get($m)?->impayees ?? 0),
-        ])->values()->toArray();
-
-        // ── Évolution journalière (60 derniers jours) ─────────────────────────
-        // Couvre aujourd'hui, hier, cette semaine, semaine préc., ce mois, mois préc.
-        $dailyQuery = $perimetre(FactureVente::where('organization_id', $orgId), 'site_id');
-        if ($periode->estBornee()) {
-            $periode->appliquer($dailyQuery, 'created_at');
-        } else {
-            $dailyQuery->where('created_at', '>=', now()->subDays(59)->startOfDay());
-        }
-
-        $dailyRows = $dailyQuery
-            ->selectRaw("
-                DATE(created_at) as date,
-                COALESCE(SUM(CASE WHEN statut_facture = 'payee'   THEN montant_net ELSE 0 END), 0) as payees,
-                COALESCE(SUM(CASE WHEN statut_facture = 'partiel' THEN montant_net ELSE 0 END), 0) as partielles,
-                COALESCE(SUM(CASE WHEN statut_facture = 'impayee' THEN montant_net ELSE 0 END), 0) as impayees
-            ")
-            ->groupBy('date')
-            ->get()
-            ->keyBy('date');
-
-        // index 0 = il y a 59 jours, index 59 = aujourd'hui
-        $evolutionQuotidienne = collect(range(59, 0))->map(function ($daysAgo) use ($dailyRows) {
-            $date = now()->subDays($daysAgo)->toDateString();
-            $row = $dailyRows->get($date);
-
-            return [
-                'date' => $date,
-                'payees' => (float) ($row?->payees ?? 0),
-                'partielles' => (float) ($row?->partielles ?? 0),
-                'impayees' => (float) ($row?->impayees ?? 0),
-            ];
-        })->values()->toArray();
+        $evolution = [
+            'granularite' => $decoupage->granularite(),
+            'tranches' => array_map(fn (array $tranche) => [
+                ...$tranche,
+                'payees' => round($parTranche[$tranche['cle']]['payees'] ?? 0.0, 2),
+                'partielles' => round($parTranche[$tranche['cle']]['partielles'] ?? 0.0, 2),
+                'impayees' => round($parTranche[$tranche['cle']]['impayees'] ?? 0.0, 2),
+            ], $decoupage->tranches($periode, array_map('strval', array_keys($parTranche)), CarbonImmutable::now())),
+        ];
 
         // ── CA par site (factures non annulées, site renseigné) ───────────────
         $caParSite = $perimetre(FactureVente::where('factures_ventes.organization_id', $orgId), 'factures_ventes.site_id')
@@ -260,9 +233,8 @@ class IndexDashboardController extends Controller
             ->toArray();
 
         return Inertia::render('Dashboard', [
-            'periode' => $periode->cle,
-            // Bornes de chaque choix, résolues ici : le graphique ne recalcule aucune date.
-            'periodes' => Periode::optionsAvecBornes(self::PERIODES),
+            // Filtre unique de la page : cartes, graphiques et répartitions portent sur cette période.
+            'periode' => [...$periode->pourFront(self::PERIODES), 'libelle' => $periode->libelle()],
             // null = toute l'organisation ; sinon les agences auxquelles les chiffres sont limités.
             'agences' => $siteIds === null
                 ? null
@@ -282,8 +254,7 @@ class IndexDashboardController extends Controller
                 'annulees_count' => (int) $row->annulees_count,
                 'reste_a_encaisser' => $resteAEncaisser,
             ],
-            'evolution_mensuelle' => $evolutionMensuelle,
-            'evolution_quotidienne' => $evolutionQuotidienne,
+            'evolution' => $evolution,
             'ca_par_site' => $caParSite,
             'ca_par_type_vehicule' => $caParTypeVehicule,
             'ca_par_produit' => $caParProduit,

@@ -1,47 +1,25 @@
 <script setup lang="ts">
 import IdentityQrBadge from '@/components/identity/IdentityQrBadge.vue';
+import SelecteurPeriode from '@/components/periodes/SelecteurPeriode.vue';
 import ScannerModal from '@/components/scanner/ScannerModal.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { formatPhoneDisplay } from '@/lib/utils';
-import type { PeriodeOption } from '@/types/periode';
-import { router, usePage } from '@inertiajs/vue3';
+import { dashboard } from '@/routes';
+import type { PeriodeFiltre } from '@/types/periode';
+import { usePage } from '@inertiajs/vue3';
 import Button from 'primevue/button';
-import Select from 'primevue/select';
 import Tooltip from 'primevue/tooltip';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 const vTooltip = Tooltip;
 const page = usePage();
-const props = defineProps<{
-    periode?: string;
-    periodes?: PeriodeOption[];
+defineProps<{
+    /** Filtre unique de la page (Periode, ADR 0057) : toutes les cartes et tous les graphiques. */
+    periode?: PeriodeFiltre;
     qrPayload?: string | null;
 }>();
 
 const scannerVisible = ref(false);
-
-// Choix et bornes résolus par le serveur (Periode, ADR 0057).
-const periodOptions = computed(() => props.periodes ?? []);
-
-const selectedPeriod = ref<PeriodeOption | undefined>(
-    periodOptions.value.find((p) => p.value === props.periode),
-);
-
-function changePeriod() {
-    router.get(
-        '/backoffice/dashboard',
-        { periode: selectedPeriod.value?.value },
-        { preserveState: true, preserveScroll: true },
-    );
-}
-
-watch(
-    () => props.periode,
-    (val) => {
-        const found = periodOptions.value.find((p) => p.value === val);
-        if (found) selectedPeriod.value = found;
-    },
-);
 
 const user = computed(() => page.props.auth.user);
 const defaultSite = computed(() => page.props.auth.default_site ?? null);
@@ -142,7 +120,7 @@ const initials = computed(() =>
                 </div>
             </div>
 
-            <div class="ml-auto flex items-center gap-2">
+            <div class="ml-auto flex items-start gap-2">
                 <Button
                     type="button"
                     v-tooltip.bottom="'Telecharger'"
@@ -158,12 +136,10 @@ const initials = computed(() =>
                     rounded
                     class="!h-10 !w-10"
                 />
-                <Select
-                    v-model="selectedPeriod"
-                    :options="periodOptions"
-                    option-label="label"
-                    class="min-w-56 text-sm"
-                    @change="changePeriod"
+                <SelecteurPeriode
+                    v-if="periode"
+                    :url="dashboard().url"
+                    :periode="periode"
                 />
             </div>
         </div>

@@ -363,15 +363,14 @@ class PeriodeTest extends TestCase
         $this->assertSame(['periode' => 'personnalisee', 'date_debut' => '2026-09-01', 'date_fin' => '2026-09-05'], $perso->valeursFiltre());
     }
 
-    public function test_options_avec_bornes_pour_un_filtrage_dans_le_navigateur(): void
+    public function test_les_tableaux_de_bord_proposent_le_standard_plus_trimestres_et_semestres(): void
     {
-        $options = Periode::optionsAvecBornes(['hier', 't1', Periode::TOUT], $this->maintenant());
-
-        $this->assertSame([
-            ['value' => 'hier', 'label' => 'Hier', 'date_debut' => '2026-09-15', 'date_fin' => '2026-09-15'],
-            ['value' => 't1', 'label' => 'T1', 'date_debut' => '2026-01-01', 'date_fin' => '2026-03-31'],
-            ['value' => 'tout', 'label' => 'Toutes les périodes', 'date_debut' => null, 'date_fin' => null],
-        ], $options);
+        $this->assertSame(
+            ['aujourd_hui', 'hier', 'cette_semaine', 'semaine_precedente', 'ce_mois', 'mois_precedent',
+                't1', 't2', 't3', 't4', 's1', 's2', 'cette_annee', 'annee_precedente', 'tout', 'personnalisee'],
+            array_column(Periode::options(Periode::TABLEAU_DE_BORD), 'value'),
+        );
+        $this->assertSame([], array_diff(Periode::STANDARD, Periode::TABLEAU_DE_BORD));
     }
 
     /** @return array<string, array{0: string, 1: string, 2: string}> */

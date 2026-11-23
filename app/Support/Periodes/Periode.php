@@ -48,11 +48,17 @@ final class Periode
         'annee_precedente',
     ];
 
-    /** Périodes de l'année en cours, proposées seulement par le tableau de bord. */
+    /** Périodes de l'année en cours, proposées seulement par les tableaux de bord. */
     public const TRIMESTRES_SEMESTRES = ['t1', 't2', 't3', 't4', 's1', 's2'];
 
     /** Choix standard d'un filtre de période : périodes rapides, toutes les périodes, dates libres. */
     public const STANDARD = [...self::RAPIDES, self::TOUT, self::PERSONNALISEE];
+
+    /**
+     * Choix des tableaux de bord (Stat-Ventes, Stat-Commissions) : le standard plus les trimestres et
+     * semestres de l'année en cours. Un seul filtre pilote toute la page.
+     */
+    public const TABLEAU_DE_BORD = [...self::RAPIDES, ...self::TRIMESTRES_SEMESTRES, self::TOUT, self::PERSONNALISEE];
 
     private const LIBELLES = [
         'aujourd_hui' => "Aujourd'hui",
@@ -158,7 +164,7 @@ final class Periode
         $cles ??= self::STANDARD;
         $acceptees = self::clesAcceptees($cles);
 
-        // Écran sans dates libres (ex. tableau de bord) : des dates sont refusées, jamais ignorées.
+        // Écran sans dates libres : des dates sont refusées, jamais ignorées.
         if (! self::datesPermises($cles)) {
             return [
                 $parametre => ['nullable', 'string', Rule::in($acceptees)],
@@ -269,7 +275,7 @@ final class Periode
     }
 
     /**
-     * Période de comparaison d'une évolution en % (tableau de bord des commissions) : celle qui
+     * Période de comparaison d'une évolution en % (Stat-Commissions) : celle qui
      * précède immédiatement, de même durée. Une période en mois entiers recule d'autant de mois
      * (« Ce mois » → mois précédent, T1 → T4 de l'année précédente, « Cette année » → année
      * précédente) ; une autre recule d'autant de jours (semaine → semaine précédente, jour → veille,
@@ -380,27 +386,6 @@ final class Periode
             array_keys($libelles),
             $libelles,
         );
-    }
-
-    /**
-     * Options avec leurs bornes résolues, pour un écran qui filtre côté navigateur des données déjà
-     * chargées (graphique du tableau de bord) sans recalculer les dates avec l'horloge du navigateur.
-     *
-     * @param  list<string>  $cles
-     * @return list<array{value: string, label: string, date_debut: ?string, date_fin: ?string}>
-     */
-    public static function optionsAvecBornes(array $cles, ?CarbonImmutable $maintenant = null): array
-    {
-        $maintenant ??= CarbonImmutable::now();
-
-        return array_map(function (array $option) use ($maintenant) {
-            $periode = self::rapide($option['value'], $maintenant);
-
-            return $option + [
-                'date_debut' => $periode?->debut->toDateString(),
-                'date_fin' => $periode?->fin->toDateString(),
-            ];
-        }, self::options($cles));
     }
 
     /**
