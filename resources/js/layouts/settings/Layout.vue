@@ -100,6 +100,10 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
             { title: 'Fonctions RH', href: '/backoffice/fonctions-rh' },
             { title: 'Services RH', href: '/backoffice/services-rh' },
             {
+                title: 'Motifs d’absence',
+                href: '/backoffice/motifs-absence',
+            },
+            {
                 title: 'Modèles de contrat',
                 href: '/backoffice/modeles-contrat',
             },

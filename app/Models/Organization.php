@@ -6,6 +6,7 @@ use App\Enums\DomaineActivite;
 use App\Services\Comptabilite\PlanComptableBootstrapService;
 use App\Support\Contacts\CategoriesLibresParDefaut;
 use App\Support\Contacts\SousCategoriesSysteme;
+use App\Support\Rh\MotifsAbsenceParDefaut;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -72,6 +73,19 @@ class Organization extends Model
                 CategoriesLibresParDefaut::initialiserPour($org->id);
             } catch (\Throwable $e) {
                 Log::error('Initialisation du référentiel Contacts échouée', [
+                    'organization_id' => $org->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        });
+
+        // Motifs d'absence par défaut (docs/rh-absences.md) : rejouable, non bloquant pour la même
+        // raison. Les organisations antérieures sont initialisées par la migration 2026_11_23_100200.
+        static::created(function (Organization $org) {
+            try {
+                MotifsAbsenceParDefaut::initialiserPour($org->id);
+            } catch (\Throwable $e) {
+                Log::error('Initialisation des motifs d\'absence échouée', [
                     'organization_id' => $org->id,
                     'error' => $e->getMessage(),
                 ]);

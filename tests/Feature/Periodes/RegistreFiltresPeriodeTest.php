@@ -54,6 +54,7 @@ class RegistreFiltresPeriodeTest extends TestCase
         'rapports.agences.export' => 'Rapport par agence — export',
         'ma-situation' => 'Ma situation',
         'ma-situation.export' => 'Ma situation — export',
+        'absences.index' => 'Absences des salariés',
     ];
 
     /** Écrans à périodes rapides seulement : des dates libres sont refusées. @var array<string, string> */

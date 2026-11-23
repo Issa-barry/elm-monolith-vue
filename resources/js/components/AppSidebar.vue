@@ -136,6 +136,8 @@ const rhItems = computed((): NavItem[] => {
         sub.push({ title: 'Employés', href: '/backoffice/employes' });
     if (can('rh-contrats.read'))
         sub.push({ title: 'Contrats', href: '/backoffice/contrats' });
+    if (can('rh-absences.read'))
+        sub.push({ title: 'Absences', href: '/backoffice/absences' });
     if (can('rh-transmissions-paie.read'))
         sub.push({
             title: 'Transmission de paie',
