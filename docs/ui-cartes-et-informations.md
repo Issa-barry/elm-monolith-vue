@@ -56,6 +56,14 @@ sans réduire la police. La variante normale reste la référence des autres éc
 Toujours `value` sans unité (`formatQuantite`) et `unit="GNF"` : jamais `formatGNF` dans `value`,
 sinon « GNF » s'affiche deux fois.
 
+### Exception : tableaux de bord reproduits d'Apollo
+
+Les tableaux de bord (Stat-Ventes, Stat-Commissions) reprennent à l'identique des pages du template
+Apollo (`_template/apollo-vue-6.2.0`) au lieu de `KpiCard` : cartes Banking pour les ventes, cartes
+Ecommerce (mini-courbe, flèche d'évolution, Knob) pour les commissions — demande du 22/11/2026, cf.
+[tableau-de-bord-commissions.md](tableau-de-bord-commissions.md#reprise-du-template-apollo). Même
+conversion des tailles (rem Apollo × 14 px). Les autres écrans gardent `KpiCard`.
+
 ## Bouton d'information
 
 Utiliser `resources/js/components/InfoTooltip.vue` à côté du titre :

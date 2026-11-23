@@ -469,7 +469,7 @@ Route::prefix('backoffice')->group(function () {
         Route::patch('saved-filters/{scope}/{id}', UpdateSavedFilterController::class)->name('saved-filters.update');
         Route::delete('saved-filters/{scope}/{id}', DestroySavedFilterController::class)->name('saved-filters.destroy');
 
-        // Tableau de bord Commissions — écran en préparation, même droit de lecture que les écrans commissions.
+        // Tableau de bord Commissions — même droit de lecture et mêmes périmètres d'agence que les écrans commissions.
         Route::get('tableau-de-bord/commissions', IndexDashboardCommissionsController::class)
             ->middleware('module:'.ModuleFeature::COMPTABILITE)
             ->name('dashboard.commissions');

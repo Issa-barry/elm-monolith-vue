@@ -156,14 +156,31 @@ class AgencePayeuseCommissionService
      */
     public function perimetreLecture(User $user, string $type): ?array
     {
+        return $this->perimetresLecture($user, [$type])[$type];
+    }
+
+    /**
+     * perimetreLecture() pour plusieurs types, en ne lisant qu'une fois les agences de
+     * l'utilisateur (tableau de bord des commissions).
+     *
+     * @param  list<string>  $types
+     * @return array<string, array<int, string>|null>
+     */
+    public function perimetresLecture(User $user, array $types): array
+    {
         if ($user->voitToutesLesAgences()) {
-            return null;
+            return array_fill_keys($types, null);
         }
 
         $siteIds = $this->siteScope->accessibleSiteIds($user)->map(fn ($id) => (string) $id)->all();
-        $impose = $this->siteImpose($user->organization_id, $type);
 
-        return $impose !== null && in_array($impose, $siteIds, true) ? null : $siteIds;
+        $perimetres = [];
+        foreach ($types as $type) {
+            $impose = $this->siteImpose($user->organization_id, $type);
+            $perimetres[$type] = $impose !== null && in_array($impose, $siteIds, true) ? null : $siteIds;
+        }
+
+        return $perimetres;
     }
 
     /**

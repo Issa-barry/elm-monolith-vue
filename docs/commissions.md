@@ -487,6 +487,11 @@ exécute ce déplacement comme une opération unique :
 
 ## Reporting Comptabilité — cloisonnement par processus
 
+**Tableau de bord** (Tableau de bord → Stat-Commissions, 22/11/2026) : vue consolidée, tous
+processus et tous bénéficiaires confondus, avec les mêmes compartiments (`CommissionKpiBuckets`) et
+les mêmes périmètres d'agence que les écrans ci-dessous — cf.
+[tableau-de-bord-commissions.md](tableau-de-bord-commissions.md).
+
 Les 4 écrans bénéficiaires (`Comptabilite\CommissionVenteController` + Site/Proprietaire/Consultant)
 partagent le même risque : leur source `CommissionEnveloppePart` est interrogée par
 `beneficiaire_type` seul, qui ne distingue pas Vente/Distribution client/Transfert logistique (les
