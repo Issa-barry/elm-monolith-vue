@@ -374,6 +374,50 @@ class PeriodeTest extends TestCase
         ], $options);
     }
 
+    /** @return array<string, array{0: string, 1: string, 2: string}> */
+    public static function periodesDeComparaison(): array
+    {
+        // Mercredi 16 septembre 2026 : période en cours → même durée écoulée.
+        return [
+            'ce_mois → 1er au 16 du mois précédent' => ['ce_mois', '2026-08-01 00:00:00', '2026-08-16 23:59:59'],
+            'mois_precedent → mois entier avant' => ['mois_precedent', '2026-07-01 00:00:00', '2026-07-31 23:59:59'],
+            'cette_semaine → lundi à mercredi précédents' => ['cette_semaine', '2026-09-07 00:00:00', '2026-09-09 23:59:59'],
+            'semaine_precedente → semaine entière avant' => ['semaine_precedente', '2026-08-31 00:00:00', '2026-09-06 23:59:59'],
+            'aujourd_hui → hier' => ['aujourd_hui', '2026-09-15 00:00:00', '2026-09-15 23:59:59'],
+            'hier → avant-hier' => ['hier', '2026-09-14 00:00:00', '2026-09-14 23:59:59'],
+            'cette_annee → même date l’an dernier' => ['cette_annee', '2025-01-01 00:00:00', '2025-09-16 23:59:59'],
+            'annee_precedente → année entière avant' => ['annee_precedente', '2024-01-01 00:00:00', '2024-12-31 23:59:59'],
+            't1 → T4 de l’année précédente' => ['t1', '2025-10-01 00:00:00', '2025-12-31 23:59:59'],
+            // 78 jours écoulés depuis le 1er juillet → 78 jours depuis le 1er avril.
+            't3 en cours → même nombre de jours de T2' => ['t3', '2026-04-01 00:00:00', '2026-06-17 23:59:59'],
+            's1 → S2 de l’année précédente' => ['s1', '2025-07-01 00:00:00', '2025-12-31 23:59:59'],
+        ];
+    }
+
+    #[DataProvider('periodesDeComparaison')]
+    public function test_periode_de_comparaison(string $cle, string $debut, string $fin): void
+    {
+        $precedente = Periode::rapide($cle, $this->maintenant())->precedente($this->maintenant());
+
+        $this->assertSame($debut, $precedente->debut->toDateTimeString());
+        $this->assertSame($fin, $precedente->fin->toDateTimeString());
+    }
+
+    public function test_periode_de_comparaison_des_dates_libres_et_cas_sans_comparaison(): void
+    {
+        $perso = Periode::depuisRequete($this->requete(['date_debut' => '2026-09-01', 'date_fin' => '2026-09-05']), $this->maintenant());
+        $precedente = $perso->precedente($this->maintenant());
+        $this->assertSame(['2026-08-27', '2026-08-31'], [$precedente->debut->toDateString(), $precedente->fin->toDateString()]);
+
+        // Un mois plus long que le précédent : la durée écoulée s'arrête à la fin du mois précédent.
+        $finMars = $this->maintenant('2026-03-31 18:00:00');
+        $mars = Periode::rapide('ce_mois', $finMars)->precedente($finMars);
+        $this->assertSame(['2026-02-01', '2026-02-28'], [$mars->debut->toDateString(), $mars->fin->toDateString()]);
+
+        $this->assertNull(Periode::depuisRequete($this->requete(['periode' => 'tout']))->precedente($this->maintenant()));
+        $this->assertNull(Periode::rapide('t4', $this->maintenant())->precedente($this->maintenant()), 'T4 n’a pas commencé.');
+    }
+
     public function test_libelles(): void
     {
         $this->assertSame('Cette semaine (du 14/09/2026 au 20/09/2026)', Periode::rapide('cette_semaine', $this->maintenant())->libelle());

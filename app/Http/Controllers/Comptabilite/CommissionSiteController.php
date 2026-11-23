@@ -27,17 +27,21 @@ use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSourceSiteFilter;
 use App\Support\Commission\CommissionStatutFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
+use App\Support\Commission\LecturePartsCommission;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Écran "Commission sites" — mirroring CommissionVenteController, source CommissionEnveloppePart
+ * (lue en lignes légères, LecturePartsCommission : mêmes règles et même ordre d'addition)
  * filtrée sur beneficiaire_type=site ET enveloppe.cible_type=site (jamais un simple
  * beneficiaire_type=site seul, cf. convention déjà établie pour proprietaire/livreur). Le
  * bénéficiaire EST le site métier de l'opération — jamais un gérant, un employé, ou une équipe :
@@ -307,11 +311,10 @@ class CommissionSiteController extends Controller
         $toutesAgences = $user->voitToutesLesAgences();
         $filtreSiteIds = $toutesAgences ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
-        $query = CommissionEnveloppePart::with([
-            'enveloppe.source.site:id,nom,code,type',
-            'enveloppe.lignes.categorieSnapshot:id,nom',
-            'enveloppe.processus',
-        ])
+        // Requête filtrée des parts : jamais chargée en entier, lue en lignes légères
+        // (LecturePartsCommission) — charger chaque part avec sa vente, son site et toutes les
+        // lignes de sa commission sur tout l'historique faisait l'essentiel du temps de la page.
+        $query = CommissionEnveloppePart::query()
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_SITE)
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
             ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriodes) {
@@ -342,12 +345,11 @@ class CommissionSiteController extends Controller
             CommissionSourceSiteFilter::appliquer($query, fn ($q) => $q->where('type', $filtreSiteType));
         }
 
-        $allParts = $query->get();
-        $partsParSite = $allParts->groupBy('beneficiaire_id');
-
-        $categoriesParSite = $partsParSite->map(fn ($parts) => $parts
-            ->flatMap(fn (CommissionEnveloppePart $p) => $p->enveloppe->lignes->pluck('categorieSnapshot.nom'))
-            ->filter()->unique()->sort()->values());
+        // Parts dans l'ordre de la requête (ordre des additions inchangé), avec le processus de
+        // leur commission ; catégories (snapshot des lignes, catégorie non supprimée) lues en SQL.
+        $partsParSite = collect(LecturePartsCommission::lignes($query))->groupBy('beneficiaire_id');
+        $enveloppes = $partsParSite->isEmpty() ? [] : LecturePartsCommission::enveloppes(LecturePartsCommission::enveloppeIds($query));
+        $categoriesParSite = $this->categoriesParSite($query);
 
         $allSiteIds = $partsParSite->keys()->map(fn ($id) => (string) $id)->all();
         $fraisDepensesParSite = $this->fraisDepensesParSite($orgId, $allSiteIds, $filtrePeriodes);
@@ -355,24 +357,24 @@ class CommissionSiteController extends Controller
         $fichesPayables = FichePayableResolver::pourBeneficiaires($user, CommissionEnveloppePart::TYPE_SITE, $allSiteIds, $filtrePeriodes);
 
         $beneficiaires = $partsParSite->map(function (Collection $parts, string $siteId) use (
-            $categoriesParSite, $fraisDepensesParSite, $sitesById, $fichesPayables,
+            $categoriesParSite, $fraisDepensesParSite, $sitesById, $fichesPayables, $enveloppes,
         ) {
             $site = $sitesById->get($siteId);
             $fraisDepenses = $fraisDepensesParSite[$siteId] ?? 0.0;
 
             $partsPayables = $parts->filter(
-                fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE
+                fn (object $p) => $p->statut !== StatutCommission::CREEE->value
             );
 
             $resume = CommissionVenteCalculatorService::calculerResume(
-                (float) $partsPayables->sum('montant_brut'),
+                (float) $partsPayables->sum('brut'),
                 0.0,
-                (float) $partsPayables->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+                (float) $partsPayables->sum('a_payer'),
                 $fraisDepenses,
-                (float) $partsPayables->sum('montant_verse'),
+                (float) $partsPayables->sum('verse'),
             );
 
-            $buckets = CommissionKpiBuckets::calculer($parts);
+            $buckets = CommissionKpiBuckets::calculerLignes($parts);
 
             $statutGlobal = $partsPayables->isEmpty() && $buckets['en_attente_periode'] > 0.009
                 ? StatutCommission::CREEE->value
@@ -398,7 +400,9 @@ class CommissionSiteController extends Controller
                 'payable' => $buckets['payable'],
                 // Toujours exposé, même filtré sur un seul processus (décision produit du
                 // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
-                'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
+                'processus_labels' => CommissionProcessusFilter::labelsPourCodes($parts
+                    ->map(fn (object $part) => $enveloppes[$part->enveloppe_id]->code ?? null)
+                    ->filter()->unique()->all()),
                 // Payable uniquement via la fiche due de la période, cf. docblock de classe.
                 'can_pay' => $fichesPayables->has($siteId),
                 'fiche_a_payer' => $fichesPayables->get($siteId),
@@ -429,6 +433,25 @@ class CommissionSiteController extends Controller
             'filtre_processus' => $filtreProcessus,
             'site_types' => $siteTypes,
         ]];
+    }
+
+    /**
+     * Catégories (noms, triés, sans doublon) des lignes des commissions de chaque site, comme
+     * la relation enveloppe.lignes.categorieSnapshot : une catégorie supprimée n'est pas reprise.
+     *
+     * @param  Builder<CommissionEnveloppePart>  $parts
+     * @return Collection<string, Collection<int, string>>
+     */
+    private function categoriesParSite(Builder $parts): Collection
+    {
+        return DB::table('commission_enveloppe_lignes as l')
+            ->join('categories as c', fn ($j) => $j->on('c.id', '=', 'l.categorie_id_snapshot')->whereNull('c.deleted_at'))
+            ->joinSub((clone $parts)->setEagerLoads([])->toBase()
+                ->select('commission_enveloppe_parts.beneficiaire_id', 'commission_enveloppe_parts.enveloppe_id')->distinct(), 'p', 'p.enveloppe_id', '=', 'l.enveloppe_id')
+            ->distinct()
+            ->get(['p.beneficiaire_id', 'c.nom'])
+            ->groupBy(fn (object $l) => (string) $l->beneficiaire_id)
+            ->map(fn (Collection $lignes) => $lignes->pluck('nom')->filter()->unique()->sort()->values());
     }
 
     private function statutLabel(string $statut): string

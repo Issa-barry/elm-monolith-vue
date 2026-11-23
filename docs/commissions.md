@@ -487,6 +487,11 @@ exécute ce déplacement comme une opération unique :
 
 ## Reporting Comptabilité — cloisonnement par processus
 
+**Tableau de bord** (Tableau de bord → Stat-Commissions, 22/11/2026) : vue consolidée, tous
+processus et tous bénéficiaires confondus, avec les mêmes compartiments (`CommissionKpiBuckets`) et
+les mêmes périmètres d'agence que les écrans ci-dessous — cf.
+[tableau-de-bord-commissions.md](tableau-de-bord-commissions.md).
+
 Les 4 écrans bénéficiaires (`Comptabilite\CommissionVenteController` + Site/Proprietaire/Consultant)
 partagent le même risque : leur source `CommissionEnveloppePart` est interrogée par
 `beneficiaire_type` seul, qui ne distingue pas Vente/Distribution client/Transfert logistique (les
@@ -591,6 +596,23 @@ processus, nombre de commandes, première échéance et dates de commission sont
 (comparé sur tous les filtres Statut) : agence = site du véhicule, sinon site de la vente ou site
 de départ du transfert ; dépenses avec un filtre Statut via
 `CommissionVenteCalculatorService::fraisDepensesSurPeriodes()`. Les exports ne changent pas.
+
+**Écrans Propriétaires et Sites (22/11/2026, performance, lot 9)** : même principe. Les parts sont
+lues en lignes légères (`App\Support\Commission\LecturePartsCommission`, partagée avec l'écran
+Livreurs) au lieu d'être chargées avec leur vente, leur véhicule, leur site et, pour les sites,
+toutes les lignes de leur commission. Les montants sont additionnés en PHP dans le même ordre
+qu'avant (`CommissionKpiBuckets::calculerLignes()`), donc identiques à l'octet près ; véhicules et
+sites des ventes, agences, processus et catégories (catégorie supprimée exclue) suivent les mêmes
+règles que les relations des modèles. Aucune règle de calcul, de dépense, de statut, de filtre ou
+de paiement ne change ; « Toutes les périodes » reste la vue par défaut de ces deux écrans. Les
+exports de ces écrans ne changent pas. Test :
+`tests/Feature/Performance/CommissionsProprietairesSitesTest.php`.
+
+**Nom des exports Livreurs (22/11/2026)** : l'écran couvre tous les processus depuis le
+02/09/2026 ; ses exports s'appellent `commissions-livreurs-AAAA-MM-JJ.csv` / `.pdf` (au lieu de
+`commissions-vente-…`) et le PDF est titré « Commissions des livreurs ». L'URL historique
+`/comptabilite/commissions/vente` et les noms internes (`CommissionVenteController`,
+`CommissionVente/Index`) sont conservés pour ne casser ni favoris ni liens.
 
 ### Commissions des livreurs — vue par défaut : quinzaine en cours et quinzaines non soldées (22/11/2026)
 

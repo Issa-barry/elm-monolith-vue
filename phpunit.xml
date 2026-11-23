@@ -19,6 +19,11 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!-- Sans debug : chaque réponse d'erreur (403, 404, 422…) construisait la page d'exception
+             de Laravel avant que bootstrap/app.php ne la remplace, ~20 s par test concerné
+             (mesuré le 22/11/2026 : AccountValidationTest 21,2 s → 0,7 s). -->
+        <env name="APP_DEBUG" value="false" force="true"/>
+        <env name="INERTIA_SSR_ENABLED" value="false" force="true"/>
         <env name="APP_LOCALE" value="fr"/>
         <env name="APP_FALLBACK_LOCALE" value="fr"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>

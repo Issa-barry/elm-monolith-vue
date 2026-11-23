@@ -7,17 +7,28 @@ on:
       - production
       - main
 
+# Un nouveau push sur la PR rend le run en cours obsolète : on l'annule au lieu de laisser
+# tourner deux PHPUnit (~45 min) et deux fois les 4 shards E2E en parallèle (constaté sur la
+# PR #585 le 22/11/2026 : runs 45030025588 et 45030036902 lancés à 8 s d'écart).
+concurrency:
+  group: tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
-  ci:
-    name: PHPUnit
+  # ── PHPUnit ─────────────────────────────────────────────────────────────────────────────
+  # Trois jobs : `phpunit-empreinte` décide s'il faut tester, `phpunit` (4 shards) teste,
+  # `phpunit-gate` porte le statut « PHPUnit » exigé par les rulesets pre-prod, production
+  # et main (un job matrix n'expose pas de nom fixe, cf. e2e-full-gate plus bas).
+  phpunit-empreinte:
+    name: PHPUnit — empreinte
     runs-on: ubuntu-latest
-    # contents: read suffit : la dernière étape (mise à jour de la variable de dépôt
-    # PHPUNIT_PASSED_FINGERPRINTS) utilise un PAT dédié (secret PHPUNIT_FP_PAT), pas
-    # GITHUB_TOKEN — cf. commentaire sur cette étape pour pourquoi actions: write ne
-    # suffirait pas.
+    # actions: read : recherche de l'artefact témoin d'une validation précédente. Aucun PAT.
     permissions:
       contents: read
-
+      actions: read
+    outputs:
+      fp: ${{ steps.fp.outputs.fp }}
+      skip: ${{ steps.skip_check.outputs.skip }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,32 +52,55 @@ jobs:
       # actions/cache ne peut PAS servir ici : un cache créé pendant une PR est scopé à
       # `refs/pull/N/merge` et n'est restaurable que par des re-runs de CETTE PR (doc
       # GitHub "Restrictions for accessing a cache") — inutilisable pour partager un
-      # résultat entre la PR dev→pre-prod et la PR pre-prod→production suivante. On
-      # utilise donc une variable de dépôt (repository variable), visible par toutes les
-      # branches sans restriction de scope.
+      # résultat entre la PR dev→pre-prod et la PR pre-prod→production suivante.
+      # Un artefact, lui, se liste dans tout le dépôt avec GITHUB_TOKEN (actions: read).
+      # Le succès est donc marqué par un artefact `phpunit-passed-<empreinte>` (job
+      # phpunit-gate). Remplace la variable de dépôt PHPUNIT_PASSED_FINGERPRINTS, qui
+      # exigeait un PAT (secret PHPUNIT_FP_PAT) jamais créé : le saut n'a jamais fonctionné
+      # et chaque promotion relançait toute la suite (constaté le 22/11/2026, `GH_TOKEN`
+      # vide). Seuls les artefacts produits depuis ce dépôt comptent (pas ceux d'un fork) et
+      # une erreur d'API ne fait jamais sauter les tests.
       - name: Check if this exact code was already validated
         id: skip_check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if echo '${{ vars.PHPUNIT_PASSED_FINGERPRINTS }}' | grep -q "${{ steps.fp.outputs.fp }}"; then
+          COUNT=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=phpunit-passed-${{ steps.fp.outputs.fp }}&per_page=100" \
+            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_repository_id == ${{ github.repository_id }})] | length' \
+            2>/dev/null || echo 0)
+          if [ "${COUNT:-0}" -gt 0 ]; then
             echo "Empreinte déjà validée par une étape précédente du flux dev→pre-prod→production→main — PHPUnit sauté."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # NOTE sur tous les `if:` de ce job : un `if:` personnalisé sur une step GitHub Actions
-      # SUPPRIME le garde-fou implicite success() (documenté : "the moment you write a custom
-      # if, that implicit check is dropped") — sans le `success() &&` explicite ci-dessous, un
-      # échec de composer/npm laisserait quand même tourner les steps suivantes.
+  phpunit:
+    name: PHPUnit (shard ${{ matrix.shard }}/4)
+    needs: phpunit-empreinte
+    if: needs.phpunit-empreinte.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    # Délai de sécurité : un shard dure ~12 min (4 × moins que l'ancien job unique de 35 à
+    # 75 min) ; au-delà, un test est bloqué.
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup PHP
-        if: success() && steps.skip_check.outputs.skip != 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: 8.4
           tools: composer:v2
 
       - name: Cache Composer dependencies
-        if: success() && steps.skip_check.outputs.skip != 'true'
         uses: actions/cache@v4
         with:
           path: vendor
@@ -74,41 +108,40 @@ jobs:
           restore-keys: composer-
 
       - name: Setup Node
-        if: success() && steps.skip_check.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install Node dependencies
-        if: success() && steps.skip_check.outputs.skip != 'true'
         run: npm ci
 
       - name: Install PHP dependencies
-        if: success() && steps.skip_check.outputs.skip != 'true'
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
       - name: Copy environment file
-        if: success() && steps.skip_check.outputs.skip != 'true'
         run: cp .env.example .env
 
       - name: Generate application key
-        if: success() && steps.skip_check.outputs.skip != 'true'
         run: php artisan key:generate
 
       # Requis avant les tests : certaines pages Inertia rendues en Feature test
       # (@vite dans resources/views/app.blade.php) ont besoin de public/build/manifest.json.
       - name: Build assets
-        if: success() && steps.skip_check.outputs.skip != 'true'
         run: npm run build
 
-      # Suite complète (3727 tests) parallélisée sur les 4 vCPU du runner via paratest
-      # (auparavant : phpunit mono-processus, ~47 min à chaque run — cf. run #33674536588).
-      # sqlite :memory: isole nativement chaque process paratest : aucune config DB par
-      # worker n'est nécessaire. Coverage retiré de ce gate (pcov ajoutait du surcoût à
-      # chaque run et coverage/clover.xml n'était consommé par aucun outil — ni Codecov ni
-      # Sonar ne sont configurés dans ce dépôt) ; à réintroduire séparément (job dédié, non
-      # bloquant) si un besoin de suivi de couverture apparaît.
+      # Répartition déterministe des fichiers de test (tests/Unit + tests/Feature) entre les
+      # 4 shards, chaque fichier dans exactement un shard : cf. scripts/ci/phpunit-shard.php.
+      - name: Select this shard's test files
+        run: php scripts/ci/phpunit-shard.php ${{ matrix.shard }} 4 phpunit.shard.xml
+
+      # Suite complète (7352 tests au 22/11/2026) répartie sur 4 machines (shards), chacune
+      # parallélisée sur ses 4 vCPU via paratest. Avant le 22/11/2026 : une seule machine,
+      # 35 à 75 min par run. sqlite :memory: isole nativement chaque process paratest : aucune
+      # config DB par worker n'est nécessaire. Coverage retiré de ce gate (pcov ajoutait du
+      # surcoût à chaque run et coverage/clover.xml n'était consommé par aucun outil — ni
+      # Codecov ni Sonar ne sont configurés dans ce dépôt) ; à réintroduire séparément (job
+      # dédié, non bloquant) si un besoin de suivi de couverture apparaît.
       #
       # continue-on-error : validé le 2026-09-04, la parallélisation expose un problème
       # PRÉEXISTANT de non-isolation entre tests (au moins un test mute un état process-wide,
@@ -122,10 +155,12 @@ jobs:
       # sont rejoués en série (1 process, isolation garantie) avant de faire échouer le gate.
       - name: Run PHPUnit (parallel)
         id: parallel_run
-        if: success() && steps.skip_check.outputs.skip != 'true'
         continue-on-error: true
-        run: php artisan test --parallel --processes=4 --log-junit=storage/logs/paratest-junit.xml
+        run: php artisan test --parallel --processes=4 --configuration=phpunit.shard.xml --log-junit=storage/logs/paratest-junit.xml
 
+      # NOTE sur les `if:` suivants : un `if:` personnalisé sur une step GitHub Actions
+      # SUPPRIME le garde-fou implicite success() (documenté : "the moment you write a custom
+      # if, that implicit check is dropped") — d'où le `success() &&` explicite.
       - name: Extract failed tests from parallel run
         id: failed_tests
         if: success() && steps.parallel_run.outcome == 'failure'
@@ -151,36 +186,57 @@ jobs:
             echo "Le run parallèle a échoué sans échec de test individuel identifiable (crash/erreur infra) — gate en échec."
             exit 1
           fi
-          php artisan test --filter='${{ steps.failed_tests.outputs.filter }}'
+          php artisan test --configuration=phpunit.shard.xml --filter='${{ steps.failed_tests.outputs.filter }}'
 
-      # Enregistre l'empreinte comme validée pour que les PR de promotion suivantes
-      # (pre-prod→production, production→main) sautent PHPUnit sur ce même code. success()
-      # ici couvre les deux cas légitimes (run parallèle direct OK, ou rejeu en série des
-      # échecs OK) puisqu'une vraie panne à n'importe quelle étape précédente (pas de
-      # continue-on-error sur le rejeu série) rend success() faux.
-      #
-      # continue-on-error : garde-fou de robustesse. Cette étape a échoué en continu le
-      # 2026-09-04 (run #33915634101, 403 "Resource not accessible by integration") tant
-      # qu'elle utilisait GITHUB_TOKEN : l'API REST "repos/.../actions/variables" exclut
-      # délibérément ce token, même avec `actions: write` déclaré et
-      # default_workflow_permissions=write au niveau du dépôt — seul un PAT (ou une GitHub
-      # App dédiée) peut écrire une variable de dépôt. D'où PHPUNIT_FP_PAT ci-dessous : un
-      # fine-grained PAT scopé à ce repo avec la permission "Variables: write" (à créer
-      # dans Settings > Developer settings > Personal access tokens, puis à stocker comme
-      # secret de dépôt). continue-on-error reste en place au cas où ce PAT expire ou est
-      # révoqué : dans ce cas, seule la déduplication inter-étapes est perdue pour ce run,
-      # pas le gate PHPUnit lui-même (les tests ont déjà tourné à l'étape précédente).
-      - name: Record fingerprint as validated
-        if: success() && steps.skip_check.outputs.skip != 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.PHPUNIT_FP_PAT }}
+  # Statut « PHPUnit » exigé par les rulesets. Réussi si les 4 shards ont réussi, ou si les
+  # tests ont été sautés parce que l'empreinte était déjà validée. `!cancelled()` : ce job rend
+  # un statut même quand les shards échouent ou sont sautés (sinon la ruleset resterait bloquée
+  # en « Waiting ») ; seul un run annulé (remplacé par un push plus récent, cf. concurrency)
+  # n'en rend pas.
+  phpunit-gate:
+    name: PHPUnit
+    needs: [phpunit-empreinte, phpunit]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Vérifie le résultat agrégé des shards
+        id: verdict
         run: |
-          CURRENT='${{ vars.PHPUNIT_PASSED_FINGERPRINTS }}'
-          NEW=$(echo "${CURRENT:-[]}" | jq -c --arg fp "${{ steps.fp.outputs.fp }}" '(. + [$fp]) | unique | .[-30:]')
-          if ! gh api -X PATCH "repos/${{ github.repository }}/actions/variables/PHPUNIT_PASSED_FINGERPRINTS" -f value="$NEW"; then
-            gh api -X POST "repos/${{ github.repository }}/actions/variables" -f name="PHPUNIT_PASSED_FINGERPRINTS" -f value="$NEW"
+          empreinte="${{ needs.phpunit-empreinte.result }}"
+          skip="${{ needs.phpunit-empreinte.outputs.skip }}"
+          shards="${{ needs.phpunit.result }}"
+          echo "empreinte=$empreinte skip=$skip shards=$shards"
+          if [ "$empreinte" != "success" ]; then
+            exit 1
           fi
+          if [ "$skip" = "true" ] && [ "$shards" = "skipped" ]; then
+            echo "Code déjà validé à une étape précédente : PHPUnit sauté."
+            echo "record=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$shards" != "success" ]; then
+            exit 1
+          fi
+          echo "record=true" >> "$GITHUB_OUTPUT"
+
+      # Marque l'empreinte comme validée (artefact témoin lu par phpunit-empreinte) pour que
+      # les PR de promotion suivantes (pre-prod→production, production→main) sautent PHPUnit
+      # sur ce même code. continue-on-error : si l'upload échoue, seule la déduplication
+      # inter-étapes est perdue pour ce run, pas le gate (les tests ont déjà tourné).
+      - name: Write validated fingerprint marker
+        if: success() && steps.verdict.outputs.record == 'true'
+        run: echo "${{ needs.phpunit-empreinte.outputs.fp }}" > phpunit-passed.txt
+
+      - name: Record fingerprint as validated
+        if: success() && steps.verdict.outputs.record == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpunit-passed-${{ needs.phpunit-empreinte.outputs.fp }}
+          path: phpunit-passed.txt
+          retention-days: 30
 
   # Fail-safe partagé par e2e-full et e2e-smoke : le E2E tourne par défaut, il n'est
   # skippé que si TOUS les fichiers modifiés sont de la doc (README.md, docs/**, **/*.md).

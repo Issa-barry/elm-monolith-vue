@@ -45,8 +45,17 @@ identiques (`cleAffichee()`, `valeursFiltre($parametre, $cles)`, `pourFront($cle
 seule (fin ouverte) n'est jamais une date précise. Hors `STANDARD` : proposée seulement par les écrans
 qui la listent (aujourd'hui les rapports, `RapportPerimetreResolver::PERIODES`).
 
-Extension réservée au tableau de bord : `t1`–`t4` (trimestres) et `s1`, `s2` (semestres) de l'année en
-cours (`Periode::TRIMESTRES_SEMESTRES`).
+Extension réservée aux tableaux de bord (ventes et commissions) : `t1`–`t4` (trimestres) et `s1`,
+`s2` (semestres) de l'année en cours (`Periode::TRIMESTRES_SEMESTRES`).
+
+**Période de comparaison** (22/11/2026, tableau de bord des commissions) : `$periode->precedente()`
+renvoie la période qui précède, de même durée — autant de mois pour une période en mois entiers
+(« Ce mois » → mois précédent, T1 → T4 de l'année précédente, « Cette année » → année précédente),
+autant de jours sinon (semaine, jour, dates libres). Une période **en cours** n'est comparée qu'à la
+même durée écoulée : « Ce mois » au 22 → du 1er au 22 du mois précédent (78 jours de T3 → 78 jours
+de T2), arrêtée à la fin de la période précédente si elle est plus courte (31 mars → février entier).
+`null` pour « Toutes les périodes » et une période pas encore commencée. Comme toute borne, elle se
+calcule uniquement ici.
 
 Anciennes clés encore acceptées (liens et vues enregistrées) : `today`, `week`, `month`, `all`,
 `semaine_derniere`, `mois_dernier`, et `date_from`/`date_to` pour les dates. Ne plus les produire.
@@ -73,7 +82,8 @@ Anciennes clés encore acceptées (liens et vues enregistrées) : `today`, `week
 8. **Même résolution partout** : liste, statistiques, exports Excel/CSV et impression d'un écran
    appellent la même méthode avec la même requête.
 9. **Défaut propre à l'écran** : sans choix, chaque écran garde son défaut (Factures `ce_mois`,
-   tableau de bord `ce_mois`, rapport d'activité `aujourd_hui`, autres listes `tout`).
+   tableaux de bord des ventes et des commissions `ce_mois`, rapport d'activité `aujourd_hui`,
+   autres listes `tout`).
 10. **Périodes métier à part** : quinzaines P1/P2, mois comptable et périodes de paie ne passent pas
     par `Periode` (voir § 5).
 

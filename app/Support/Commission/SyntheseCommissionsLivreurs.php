@@ -3,12 +3,9 @@
 namespace App\Support\Commission;
 
 use App\Enums\StatutCommission;
-use App\Models\CommandeVente;
 use App\Models\CommissionEnveloppePart;
-use App\Models\TransfertLogistique;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Ce que l'écran Commissions des livreurs lit sur les parts de chaque livreur (véhicules, agences,
@@ -40,7 +37,7 @@ final class SyntheseCommissionsLivreurs
             return [];
         }
 
-        $enveloppes = self::enveloppes((clone $base)->toBase()->select('commission_enveloppe_parts.enveloppe_id'));
+        $enveloppes = LecturePartsCommission::enveloppes(LecturePartsCommission::enveloppeIds($base));
         $aEcheance = [StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value];
         $creee = StatutCommission::CREEE->value;
 
@@ -82,30 +79,5 @@ final class SyntheseCommissionsLivreurs
             'site_ids' => array_keys($r['sites']),
             'dates' => $r['dates'],
         ], $brut);
-    }
-
-    /**
-     * Commission de chaque part : date, processus, véhicule et agence de sa source.
-     *
-     * @return array<string, object{earned_at: ?string, code: ?string, vehicule_id: ?string, site_id: ?string}>
-     */
-    private static function enveloppes(\Illuminate\Database\Query\Builder $enveloppeIds): array
-    {
-        return DB::table('commission_enveloppes as e')
-            ->leftJoin('commission_processus as pr', 'pr.id', '=', 'e.processus_id')
-            ->leftJoin('commandes_ventes as cv', fn ($j) => $j->on('cv.id', '=', 'e.source_id')
-                ->where('e.source_type', '=', CommandeVente::class)
-                ->whereNull('cv.deleted_at'))
-            ->leftJoin('transferts_logistiques as t', fn ($j) => $j->on('t.id', '=', 'e.source_id')
-                ->where('e.source_type', '=', TransfertLogistique::class)
-                ->whereNull('t.deleted_at'))
-            ->leftJoin('vehicules as v', fn ($j) => $j->on('v.id', '=', DB::raw('COALESCE(cv.vehicule_id, t.vehicule_id)'))
-                ->whereNull('v.deleted_at'))
-            ->whereIn('e.id', $enveloppeIds)
-            ->select('e.id', 'e.earned_at', 'pr.code', 'v.id as vehicule_id')
-            ->selectRaw('CASE WHEN cv.id IS NOT NULL THEN COALESCE(v.site_id, cv.site_id) WHEN t.id IS NOT NULL THEN COALESCE(v.site_id, t.site_source_id) END as site_id')
-            ->get()
-            ->keyBy('id')
-            ->all();
     }
 }

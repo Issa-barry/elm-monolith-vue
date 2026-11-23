@@ -53,8 +53,7 @@ final class CommissionKpiBuckets
     public static function sommesParBeneficiaire(Builder $parts): Collection
     {
         $aPayer = 'COALESCE(montant_actuel, montant_net)';
-        $active = 'statut <> ?';
-        $annulee = StatutCommission::ANNULEE->value;
+        [$compartiments, $liaisons] = self::compartimentsSql();
 
         return (clone $parts)->setEagerLoads([])->reorder()->toBase()
             ->select('beneficiaire_id')
@@ -62,11 +61,8 @@ final class CommissionKpiBuckets
                 "COALESCE(SUM(montant_brut), 0) as montant_brut,
                  COALESCE(SUM({$aPayer}), 0) as montant_a_payer,
                  COALESCE(SUM(montant_verse), 0) as montant_verse,
-                 COALESCE(SUM(CASE WHEN {$active} THEN {$aPayer} END), 0) as total_genere,
-                 COALESCE(SUM(CASE WHEN {$active} AND statut = ? THEN {$aPayer} END), 0) as en_attente_periode,
-                 COALESCE(SUM(CASE WHEN {$active} AND statut IN (?, ?) AND {$aPayer} - montant_verse > 0 THEN {$aPayer} - montant_verse END), 0) as payable,
-                 COALESCE(SUM(CASE WHEN {$active} THEN montant_verse END), 0) as deja_paye",
-                [$annulee, $annulee, StatutCommission::CREEE->value, $annulee, StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value, $annulee],
+                 {$compartiments}",
+                $liaisons,
             )
             ->groupBy('beneficiaire_id')
             ->get()
@@ -79,6 +75,29 @@ final class CommissionKpiBuckets
                 'payable' => round((float) $l->payable, 2),
                 'deja_paye' => round((float) $l->deja_paye, 2),
             ]]);
+    }
+
+    /**
+     * Sommes SQL des quatre compartiments (total_genere, en_attente_periode, payable, deja_paye),
+     * mêmes définitions que calculer(). `$table` préfixe les colonnes des parts quand la requête
+     * joint commission_enveloppes, qui a aussi `statut` et `montant_verse`.
+     *
+     * @return array{0: string, 1: list<string>} expression SELECT et ses liaisons
+     */
+    public static function compartimentsSql(string $table = ''): array
+    {
+        $p = $table === '' ? '' : $table.'.';
+        $aPayer = "COALESCE({$p}montant_actuel, {$p}montant_net)";
+        $active = "{$p}statut <> ?";
+        $annulee = StatutCommission::ANNULEE->value;
+
+        return [
+            "COALESCE(SUM(CASE WHEN {$active} THEN {$aPayer} END), 0) as total_genere,
+                 COALESCE(SUM(CASE WHEN {$active} AND {$p}statut = ? THEN {$aPayer} END), 0) as en_attente_periode,
+                 COALESCE(SUM(CASE WHEN {$active} AND {$p}statut IN (?, ?) AND {$aPayer} - {$p}montant_verse > 0 THEN {$aPayer} - {$p}montant_verse END), 0) as payable,
+                 COALESCE(SUM(CASE WHEN {$active} THEN {$p}montant_verse END), 0) as deja_paye",
+            [$annulee, $annulee, StatutCommission::CREEE->value, $annulee, StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value, $annulee],
+        ];
     }
 
     /**
@@ -110,6 +129,41 @@ final class CommissionKpiBuckets
             'en_attente_periode' => round($enAttentePeriode, 2),
             'payable' => round($payable, 2),
             'deja_paye' => round($dejaPaye, 2),
+        ];
+    }
+
+    /**
+     * Même calcul que calculer(), sur les lignes légères de LecturePartsCommission::lignes()
+     * (montants déjà arrondis au centime comme le cast decimal:2), additionnées dans le même ordre.
+     *
+     * @param  iterable<object{statut: string, a_payer: float, verse: float}>  $lignes
+     * @return array{total_genere: float, en_attente_periode: float, payable: float, deja_paye: float}
+     */
+    public static function calculerLignes(iterable $lignes): array
+    {
+        $annulee = StatutCommission::ANNULEE->value;
+        $creee = StatutCommission::CREEE->value;
+        $aEncaisser = [StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value];
+        $totalGenere = $enAttente = $payable = $dejaPaye = 0;
+
+        foreach ($lignes as $l) {
+            if ($l->statut === $annulee) {
+                continue;
+            }
+            $totalGenere += $l->a_payer;
+            $dejaPaye += $l->verse;
+            if ($l->statut === $creee) {
+                $enAttente += $l->a_payer;
+            } elseif (in_array($l->statut, $aEncaisser, true)) {
+                $payable += max(0.0, $l->a_payer - $l->verse);
+            }
+        }
+
+        return [
+            'total_genere' => round((float) $totalGenere, 2),
+            'en_attente_periode' => round((float) $enAttente, 2),
+            'payable' => round((float) $payable, 2),
+            'deja_paye' => round((float) $dejaPaye, 2),
         ];
     }
 

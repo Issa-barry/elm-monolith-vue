@@ -59,6 +59,7 @@ class RegistreFiltresPeriodeTest extends TestCase
     /** Écrans à périodes rapides seulement : des dates libres sont refusées. @var array<string, string> */
     public const REGISTRE_SANS_DATES = [
         'dashboard' => 'Tableau de bord',
+        'dashboard.commissions' => 'Tableau de bord des commissions',
     ];
 
     /** Routes à paramètre, couvertes par leur propre test. @var array<string, string> */
@@ -156,6 +157,21 @@ class RegistreFiltresPeriodeTest extends TestCase
 
         $this->actingAs($this->admin)
             ->get(route('dashboard', ['periode' => 'trimestre_dernier']))
+            ->assertSessionHasErrors(['periode' => 'Période inconnue.']);
+    }
+
+    public function test_tableau_de_bord_des_commissions_periodes_rapides_trimestres_et_refus_des_dates(): void
+    {
+        foreach (['hier', 't1', 's2', 'annee_precedente', 'mois_dernier', 'tout'] as $cle) {
+            $this->actingAs($this->admin)->get(route('dashboard.commissions', ['periode' => $cle]))->assertOk();
+        }
+
+        $this->actingAs($this->admin)
+            ->get(route('dashboard.commissions', ['date_debut' => '2026-11-01', 'date_fin' => '2026-11-04']))
+            ->assertSessionHasErrors(['date_debut' => 'Cet écran ne propose pas de dates libres : choisissez une période.']);
+
+        $this->actingAs($this->admin)
+            ->get(route('dashboard.commissions', ['periode' => 'trimestre_dernier']))
             ->assertSessionHasErrors(['periode' => 'Période inconnue.']);
     }
 
