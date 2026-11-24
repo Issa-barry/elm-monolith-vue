@@ -12,11 +12,9 @@ import type {
     TrancheCommissions,
 } from '@/types/dashboard-commissions';
 import { mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 
-const { routerGet } = vi.hoisted(() => ({ routerGet: vi.fn() }));
-vi.mock('@inertiajs/vue3', () => ({ router: { get: routerGet } }));
 vi.mock('@/composables/useChartTheme', async () => {
     const { computed, ref } = await import('vue');
 
@@ -42,14 +40,7 @@ const KnobStub = defineComponent({
         h('div', { 'data-knob': props.modelValue }, props.valueTemplate),
 });
 
-const SelectStub = defineComponent({
-    name: 'SelectStub',
-    props: ['modelValue', 'options', 'optionLabel', 'loading'],
-    emits: ['update:modelValue', 'change'],
-    setup: () => () => h('select'),
-});
-
-const stubs = { Chart: ChartStub, Knob: KnobStub, Select: SelectStub };
+const stubs = { Chart: ChartStub, Knob: KnobStub };
 
 const indicateurs: IndicateursCommissions = {
     total_genere: { montant: 53_420_000, evolution: 12.5 },
@@ -182,16 +173,9 @@ describe('CommissionsStatsWidget', () => {
 });
 
 describe('CommissionsEvolutionWidget', () => {
-    beforeEach(() => routerGet.mockClear());
-
-    const periodes = [
-        { value: 'ce_mois', label: 'Ce mois' },
-        { value: 'cette_annee', label: 'Cette année' },
-    ];
-
     it('dessine les commissions générées et payées par tranche', () => {
         const wrapper = mount(CommissionsEvolutionWidget, {
-            props: { tranches, periode: 'ce_mois', periodes },
+            props: { tranches },
             global: { stubs },
         });
 
@@ -210,26 +194,14 @@ describe('CommissionsEvolutionWidget', () => {
         ]);
     });
 
-    it('recharge la page avec la période choisie', async () => {
+    it('n’a pas de période propre : le filtre de la page est la seule source', () => {
         const wrapper = mount(CommissionsEvolutionWidget, {
-            props: { tranches, periode: 'ce_mois', periodes },
+            props: { tranches },
             global: { stubs },
         });
 
-        const select = wrapper.findComponent(SelectStub);
-        await select.vm.$emit('update:modelValue', periodes[1]);
-        await select.vm.$emit('change');
-
-        expect(routerGet).toHaveBeenCalledWith(
-            expect.stringMatching(
-                /\/backoffice\/tableau-de-bord\/commissions$/,
-            ),
-            { periode: 'cette_annee' },
-            expect.objectContaining({
-                preserveState: true,
-                preserveScroll: true,
-            }),
-        );
+        expect(wrapper.find('select').exists()).toBe(false);
+        expect(wrapper.find('[aria-label="Période"]').exists()).toBe(false);
     });
 });
 

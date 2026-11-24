@@ -66,6 +66,12 @@ final class PermissionCatalog
         'rh-transmissions-paie.preparer' => 'Transmission de paie — préparer, recalculer, abandonner un brouillon, ouvrir une nouvelle version',
         'rh-transmissions-paie.valider' => 'Transmission de paie — valider (figer) une version',
         'rh-transmissions-paie.transmettre' => 'Transmission de paie — transmettre une version validée à la Comptabilité',
+        // Absences des salariés (docs/rh-absences.md, ADR 0070). Hors matrice CRUD car une absence ne
+        // se supprime jamais : elle s'annule. Limitées aux agences de rattachement (PerimetreEmploye).
+        'rh-absences.read' => 'Absences — consulter les absences des salariés (ses agences, ou toutes avec la vision 360°)',
+        'rh-absences.create' => 'Absences — enregistrer une absence pour un salarié de ses agences',
+        'rh-absences.update' => 'Absences — modifier une absence (motif, dates, commentaire, justificatif)',
+        'rh-absences.annuler' => 'Absences — annuler une absence (conservée avec le statut « Annulée »)',
         'imports-flotte.create' => 'Import flotte — lancer un import',
         'imports-flotte.read' => 'Import flotte — consulter les imports',
         'imports-vehicules-maj.create' => 'Import véhicules — lancer une mise à jour en masse',
@@ -286,6 +292,7 @@ final class PermissionCatalog
                 'Dossier salarié' => ['rh-employes.donnees_sensibles', 'rh-remunerations.read', 'rh-referentiels.gerer'],
                 'Primes et avantages' => ['rh-types-remuneration.valider', 'rh-affectations-remuneration.valider'],
                 'Transmission de paie' => ['rh-transmissions-paie.read', 'rh-transmissions-paie.preparer', 'rh-transmissions-paie.valider', 'rh-transmissions-paie.transmettre'],
+                'Absences' => ['rh-absences.read', 'rh-absences.create', 'rh-absences.update', 'rh-absences.annuler'],
                 'Import RH' => ['imports-rh.create', 'imports-rh.read'],
                 'Paie' => ['rh-paie.validate', 'rh-paie.pay', 'rh-paie.close'],
             ],

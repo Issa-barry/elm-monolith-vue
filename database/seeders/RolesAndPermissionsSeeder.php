@@ -166,6 +166,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-affectations-remuneration.create', 'rh-affectations-remuneration.read',
             'rh-affectations-remuneration.update', 'rh-affectations-remuneration.delete',
             'rh-transmissions-paie.read', 'rh-transmissions-paie.preparer',
+            // Absences des salariés (docs/rh-absences.md).
+            'rh-absences.read',         'rh-absences.create',     'rh-absences.update',       'rh-absences.annuler',
             // Administration
             'users.create',             'users.read',             'users.update',
             'communications.read',      'communications.manage',
@@ -237,6 +239,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.create',           'rh-paie.read',           'rh-paie.update',
             'rh-paie.validate',         'rh-paie.pay',
             'rh-remunerations.read',
+            // Absences : responsable d'agence, limité à ses agences (PerimetreEmploye).
+            'rh-absences.read',         'rh-absences.create',     'rh-absences.update',       'rh-absences.annuler',
             // Administration
             'users.read',
             'communications.read',

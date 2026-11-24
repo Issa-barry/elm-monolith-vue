@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { useChartTheme } from '@/composables/useChartTheme';
-import { commissions } from '@/routes/dashboard';
 import type { TrancheCommissions } from '@/types/dashboard-commissions';
-import type { PeriodeOption } from '@/types/periode';
-import { router } from '@inertiajs/vue3';
 import Chart from 'primevue/chart';
-import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
 import {
     CARTE_APOLLO,
@@ -16,44 +12,15 @@ import {
 
 // Port de RevenueOverviewWidget.vue (Apollo) : barres de 12 px aux coins arrondis, primary-500 et
 // primary-200, légende en bas, hauteur 300. Les séries Revenue/Profit deviennent Générées/Payées,
-// une barre par jour ou par mois selon la période (découpage fait par le serveur).
+// une barre par jour ou par mois selon la période (découpage fait par le serveur, TranchesPeriode).
 //
-// Le sélecteur d'Apollo (« Last Week / This Week ») devient le choix de période de la page : il
-// recharge les données du serveur (cartes, graphique, répartition dépendent toutes de la période).
+// Le graphique n'a pas de période propre : il suit le filtre unique de la page (SelecteurPeriode).
+// Le sélecteur d'Apollo (« Last Week / This Week ») est retiré, sa hauteur rendue (33 px) est conservée.
 const props = defineProps<{
     tranches: TrancheCommissions[];
-    periode: string;
-    periodes: PeriodeOption[];
 }>();
 
 const { getPrimary, getSurface, isDarkTheme } = useChartTheme();
-
-const periodeChoisie = ref<PeriodeOption | undefined>(
-    props.periodes.find((p) => p.value === props.periode),
-);
-const chargement = ref(false);
-
-watch(
-    () => props.periode,
-    (valeur) => {
-        periodeChoisie.value = props.periodes.find((p) => p.value === valeur);
-    },
-);
-
-function changerPeriode() {
-    if (!periodeChoisie.value) return;
-
-    router.get(
-        commissions().url,
-        { periode: periodeChoisie.value.value },
-        {
-            preserveState: true,
-            preserveScroll: true,
-            onStart: () => (chargement.value = true),
-            onFinish: () => (chargement.value = false),
-        },
-    );
-}
 
 const barData = ref({});
 const barOptions = ref({});
@@ -166,21 +133,12 @@ watch(
 
 <template>
     <div :class="CARTE_APOLLO">
-        <div class="mb-[42px] flex items-start justify-between gap-4">
+        <div
+            class="mb-[42px] flex min-h-[33px] items-start justify-between gap-4"
+        >
             <span :class="TITRE_GRAPHIQUE_APOLLO"
                 >Évolution des commissions</span
             >
-            <!-- Select `w-40` d'Apollo : 140 px, champ 7 × 10,5 px, flèche 35 px (base 14 px). -->
-            <Select
-                v-model="periodeChoisie"
-                :options="periodes"
-                option-label="label"
-                :loading="chargement"
-                class="w-[140px] shrink-0 [&_.p-select-dropdown]:w-[35px]! [&_.p-select-label]:px-[10.5px]! [&_.p-select-label]:py-[7px]!"
-                aria-label="Période"
-                data-testid="periode-commissions"
-                @change="changerPeriode"
-            />
         </div>
         <Chart
             type="bar"

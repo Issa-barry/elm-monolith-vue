@@ -46,9 +46,13 @@ seule (fin ouverte) n'est jamais une date précise. Hors `STANDARD` : proposée 
 qui la listent (aujourd'hui les rapports, `RapportPerimetreResolver::PERIODES`).
 
 Extension réservée aux tableaux de bord (ventes et commissions) : `t1`–`t4` (trimestres) et `s1`,
-`s2` (semestres) de l'année en cours (`Periode::TRIMESTRES_SEMESTRES`).
+`s2` (semestres) de l'année en cours (`Periode::TRIMESTRES_SEMESTRES`). Choix complets des deux
+tableaux de bord (23/11/2026) : `Periode::TABLEAU_DE_BORD` = `STANDARD` (dates libres comprises) +
+trimestres et semestres. Un seul filtre par tableau de bord (`SelecteurPeriode.vue`) pilote toutes
+les cartes et tous les graphiques ; le découpage du graphique (un jour par barre jusqu'à 31 jours, un
+mois au-delà, jamais après aujourd'hui) est calculé par `TranchesPeriode`.
 
-**Période de comparaison** (22/11/2026, tableau de bord des commissions) : `$periode->precedente()`
+**Période de comparaison** (22/11/2026, Stat-Commissions) : `$periode->precedente()`
 renvoie la période qui précède, de même durée — autant de mois pour une période en mois entiers
 (« Ce mois » → mois précédent, T1 → T4 de l'année précédente, « Cette année » → année précédente),
 autant de jours sinon (semaine, jour, dates libres). Une période **en cours** n'est comparée qu'à la
@@ -129,9 +133,14 @@ return Inertia::render('Module/Index', [
   dates n'apparaissent qu'après le choix « Période personnalisée ».
 - Toute liste PrimeVue du panneau (modal) porte `append-to="self"` : ouverte dans `body`, ses choix
   ne sont pas cliquables.
-- Un écran qui filtre des données déjà chargées (graphique du tableau de bord) reçoit les bornes de
-  chaque choix (`Periode::optionsAvecBornes()`) : le navigateur ne lit jamais son horloge pour une
-  période.
+- Tableaux de bord (Stat-Ventes, Stat-Commissions) : `components/periodes/SelecteurPeriode.vue`
+  reçoit la période résolue (`pourFront()` + `libelle()`), recharge la page avec `periode=<clé>` ou,
+  pour « Période personnalisée », avec `date_debut` + `date_fin` saisies dans une fenêtre
+  contextuelle (Popover) au clic sur « Appliquer » (bloqué sans les deux dates ou si la fin précède
+  le début), qui affiche aussi l'erreur du serveur. La liste affiche ensuite les dates appliquées
+  (« 01/11/2026 – 30/11/2026 ») ; la ligne de filtres ne s'élargit jamais. Aucun graphique
+  n'a de période propre ni ne filtre des données dans le navigateur : les tranches viennent du
+  serveur (`TranchesPeriode`).
 
 ### Front Nuxt et mobile
 

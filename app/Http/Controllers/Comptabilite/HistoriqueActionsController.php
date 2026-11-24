@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Comptabilite;
 
 use App\Enums\AuditEvent;
 use App\Http\Controllers\Controller;
+use App\Models\Absence;
 use App\Models\AuditLog;
 use App\Models\Site;
 use App\Models\User;
@@ -29,6 +30,27 @@ class HistoriqueActionsController extends Controller
         'rh_transmissions_paie' => 'Transmission de paie',
     ];
 
+    /**
+     * Journaux RH confidentiels, jamais affichés dans l'historique comptable (docs/rh-absences.md,
+     * ADR 0070) : motif médical et commentaire d'une absence. Ils restent consultables dans le module
+     * RH (historique de chaque absence). Libellés gardés ici pour transformLog(), partagé avec RH.
+     */
+    private const MODULES_HORS_COMPTABILITE = [
+        'rh_absences' => 'Absences',
+    ];
+
+    /**
+     * Entités dont le journal est exclu de l'historique comptable, quel que soit le module
+     * renseigné dans les métadonnées. Une incidence future d'une absence sur la paie sera
+     * journalisée par la paie, sur ses propres entités, sans motif ni commentaire.
+     *
+     * @return list<string>
+     */
+    private static function typesExclus(): array
+    {
+        return [(new Absence)->getMorphClass()];
+    }
+
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
@@ -43,6 +65,7 @@ class HistoriqueActionsController extends Controller
         $search = trim((string) $request->input('search', ''));
 
         $query = AuditLog::where('organization_id', $orgId)
+            ->whereNotIn('auditable_type', self::typesExclus())
             ->orderByDesc('created_at');
 
         $periode->appliquer($query, 'created_at');
@@ -119,6 +142,8 @@ class HistoriqueActionsController extends Controller
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         abort_if($auditableType === '' || $auditableId === '', 400);
+        // Historique d'une absence : seulement depuis le module RH (absences.historique).
+        abort_if(in_array($auditableType, self::typesExclus(), true), 403);
 
         $query = AuditLog::where('organization_id', $orgId)
             ->where('auditable_type', $auditableType)
@@ -155,7 +180,7 @@ class HistoriqueActionsController extends Controller
             'auditable_type_label' => class_basename($log->auditable_type ?? ''),
             'auditable_id' => $log->auditable_id,
             'module' => $log->meta['module'] ?? null,
-            'module_label' => self::MODULES[$log->meta['module'] ?? ''] ?? ($log->meta['module'] ?? '—'),
+            'module_label' => (self::MODULES + self::MODULES_HORS_COMPTABILITE)[$log->meta['module'] ?? ''] ?? ($log->meta['module'] ?? '—'),
             'description' => $log->meta['description'] ?? null,
             'old_values' => $log->old_values,
             'new_values' => $log->new_values,
