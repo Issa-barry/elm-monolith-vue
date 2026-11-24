@@ -10,7 +10,7 @@ import VentesParProcessusWidget from '@/components/dashboard/ventes/VentesParPro
 import AppLayout from '@/layouts/AppLayout.vue';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
-import type { PeriodeOption } from '@/types/periode';
+import type { PeriodeFiltre } from '@/types/periode';
 import { Head } from '@inertiajs/vue3';
 
 interface StatsFactures {
@@ -24,14 +24,10 @@ interface StatsFactures {
     reste_a_encaisser: number;
 }
 
-interface MoisData {
-    payees: number;
-    partielles: number;
-    impayees: number;
-}
-
-interface JourData {
-    date: string;
+/** Une barre du graphique : un jour, ou un mois au-delà de 31 jours (calculé par le serveur). */
+interface TrancheVentes {
+    cle: string;
+    label: string;
     payees: number;
     partielles: number;
     impayees: number;
@@ -61,14 +57,13 @@ interface ProduitData {
 
 defineProps<{
     stats_factures: StatsFactures;
-    evolution_mensuelle: MoisData[];
-    evolution_quotidienne: JourData[];
+    evolution: { granularite: 'jour' | 'mois'; tranches: TrancheVentes[] };
     ca_par_site: SiteData[];
     ca_par_type_vehicule: TypeVehiculeData[];
     ca_par_produit: ProduitData[];
     ca_par_processus: ProcessusData[];
-    periode: string;
-    periodes: PeriodeOption[];
+    /** Filtre unique de la page : cartes, graphique et répartitions portent sur cette période. */
+    periode: PeriodeFiltre;
     qr_payload: string | null;
     /** null = toute l'organisation ; sinon agences auxquelles les chiffres sont limités. */
     agences: string[] | null;
@@ -87,19 +82,17 @@ const breadcrumbs: BreadcrumbItem[] = [
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 p-4 sm:p-6">
-            <HeaderWidget
-                :periode="periode"
-                :periodes="periodes"
-                :qr-payload="qr_payload"
-            />
+            <HeaderWidget :periode="periode" :qr-payload="qr_payload" />
 
             <p
-                v-if="agences !== null"
                 class="text-xs text-muted-foreground"
-                data-testid="dashboard-agences"
+                data-testid="dashboard-periode"
             >
-                Chiffres de vos agences :
-                {{ agences.length > 0 ? agences.join(', ') : 'aucune' }}
+                {{ periode.libelle }}
+                <template v-if="agences !== null">
+                    — chiffres de vos agences :
+                    {{ agences.length > 0 ? agences.join(', ') : 'aucune' }}
+                </template>
             </p>
 
             <div class="mt-4">
@@ -108,12 +101,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
             <div class="hidden grid-cols-12 gap-8 sm:grid">
                 <div class="col-span-12 xl:col-span-8">
-                    <EvolutionCAWidget
-                        :evolution-mensuelle="evolution_mensuelle"
-                        :evolution-quotidienne="evolution_quotidienne"
-                        :periode="periode"
-                        :periodes="periodes"
-                    />
+                    <EvolutionCAWidget :evolution="evolution" />
                 </div>
                 <div class="col-span-12 xl:col-span-4">
                     <VehiculeCategoryWidget

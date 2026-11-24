@@ -231,6 +231,13 @@ use App\Http\Controllers\Rapports\IndexMaSituationController;
 use App\Http\Controllers\Rapports\IndexRapportActiviteController;
 use App\Http\Controllers\Rapports\IndexRapportAgencesController;
 use App\Http\Controllers\ReceptionValidationAdminController;
+use App\Http\Controllers\Rh\Absences\AnnulerAbsenceController;
+use App\Http\Controllers\Rh\Absences\HistoriqueAbsenceController;
+use App\Http\Controllers\Rh\Absences\IndexAbsenceController;
+use App\Http\Controllers\Rh\Absences\JustificatifAbsenceController;
+use App\Http\Controllers\Rh\Absences\ShowAbsenceController;
+use App\Http\Controllers\Rh\Absences\StoreAbsenceController;
+use App\Http\Controllers\Rh\Absences\UpdateAbsenceController;
 use App\Http\Controllers\Rh\AffectationRemunerationController;
 use App\Http\Controllers\Rh\Contrats\EnregistrerSignatureContratController;
 use App\Http\Controllers\Rh\Contrats\GenererDocumentContratController;
@@ -254,6 +261,7 @@ use App\Http\Controllers\Rh\ModelesContrat\ChangerStatutModeleContratController;
 use App\Http\Controllers\Rh\ModelesContrat\EditModeleContratController;
 use App\Http\Controllers\Rh\ModelesContrat\IndexModeleContratController;
 use App\Http\Controllers\Rh\ModelesContrat\UpdateModeleContratController;
+use App\Http\Controllers\Rh\MotifsAbsence\MotifAbsenceController;
 use App\Http\Controllers\Rh\SaisieRemunerationController;
 use App\Http\Controllers\Rh\Services\IndexServiceRhController;
 use App\Http\Controllers\Rh\Services\StoreServiceRhController;
@@ -1030,6 +1038,21 @@ Route::prefix('backoffice')->group(function () {
             Route::post('services-rh', StoreServiceRhController::class)->name('services-rh.store');
             Route::put('services-rh/{serviceRh}', UpdateServiceRhController::class)->name('services-rh.update');
             Route::patch('services-rh/{serviceRh}/toggle', ToggleServiceRhController::class)->name('services-rh.toggle');
+            // Motifs d'absence : référentiel par organisation (permission rh-referentiels.gerer, docs/rh-absences.md).
+            Route::get('motifs-absence', [MotifAbsenceController::class, 'index'])->name('motifs-absence.index');
+            Route::post('motifs-absence', [MotifAbsenceController::class, 'store'])->name('motifs-absence.store');
+            Route::put('motifs-absence/{motifAbsence}', [MotifAbsenceController::class, 'update'])->name('motifs-absence.update');
+            Route::patch('motifs-absence/{motifAbsence}/toggle', [MotifAbsenceController::class, 'toggle'])->name('motifs-absence.toggle');
+            // Absences des salariés : saisie, modification, annulation logique (docs/rh-absences.md, ADR 0070).
+            Route::prefix('absences')->name('absences.')->group(function () {
+                Route::get('/', IndexAbsenceController::class)->name('index');
+                Route::post('/', StoreAbsenceController::class)->name('store');
+                Route::get('{absence}', ShowAbsenceController::class)->name('show');
+                Route::put('{absence}', UpdateAbsenceController::class)->name('update');
+                Route::patch('{absence}/annuler', AnnulerAbsenceController::class)->name('annuler');
+                Route::get('{absence}/historique', HistoriqueAbsenceController::class)->name('historique');
+                Route::get('{absence}/justificatif', JustificatifAbsenceController::class)->name('justificatif');
+            });
             // Primes et avantages : référentiel par organisation (docs/primes-avantages.md, ADR 0038).
             Route::prefix('types-remuneration')->name('types-remuneration.')->group(function () {
                 Route::get('/', IndexTypeRemunerationController::class)->name('index');

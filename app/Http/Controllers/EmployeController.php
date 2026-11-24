@@ -7,6 +7,7 @@ use App\Enums\StatutContrat;
 use App\Enums\StatutEmploye;
 use App\Enums\TypeContrat;
 use App\Enums\TypeEmploye;
+use App\Models\Absence;
 use App\Models\AffectationRemuneration;
 use App\Models\Employe;
 use App\Models\EmployeCoordonneesPaiement;
@@ -16,6 +17,7 @@ use App\Models\ServiceRh;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\MatriculeService;
+use App\Services\Rh\AbsenceService;
 use App\Services\Rh\AffectationRemunerationService;
 use App\Services\Rh\DepartEmployeService;
 use App\Services\Rh\EmployeAffectationService;
@@ -23,6 +25,7 @@ use App\Services\Rh\PdgService;
 use App\Services\Rh\RechercheEmployeParTelephone;
 use App\Services\Rh\RemunerationMensuelleService;
 use App\Services\SiteScopeService;
+use App\Support\Rh\AbsencePresenter;
 use App\Support\Rh\AffectationRemunerationPresenter;
 use App\Support\Rh\LiensContactUrgence;
 use App\Support\Rh\Nationalites;
@@ -450,7 +453,41 @@ class EmployeController extends Controller
             'primes' => $this->primes($employe),
             'primes_options' => $this->primesOptions($employe),
             'remuneration' => $this->remuneration($employe),
+            ...$this->absences($employe),
         ]);
+    }
+
+    /**
+     * Bloc « Absences » de la fiche (docs/rh-absences.md) : toutes les absences du salarié, annulées
+     * comprises, seulement avec `rh-absences.read` — sinon null, jamais envoyé. L'agence est déjà
+     * contrôlée par show() (PerimetreEmploye::peutConsulter).
+     *
+     * @return array{absences: list<array<string, mixed>>|null, absences_options: array<string, mixed>|null}
+     */
+    private function absences(Employe $employe): array
+    {
+        $user = auth()->user();
+        if (! $user->can('rh-absences.read')) {
+            return ['absences' => null, 'absences_options' => null];
+        }
+
+        $presenter = new AbsencePresenter($user);
+        $peutSaisir = AbsenceService::peutSaisirPour($user, $employe);
+
+        return [
+            'absences' => Absence::where('employe_id', $employe->id)
+                ->with(AbsencePresenter::RELATIONS)
+                ->orderByDesc('date_debut')
+                ->orderByDesc('created_at')
+                ->get()
+                ->map(fn (Absence $a) => $presenter->ligne($a))
+                ->values()
+                ->all(),
+            'absences_options' => [
+                'peut_saisir' => $peutSaisir,
+                'motifs' => $peutSaisir || $user->can('rh-absences.update') ? AbsencePresenter::motifsSaisissables($employe->organization_id) : [],
+            ],
+        ];
     }
 
     /**

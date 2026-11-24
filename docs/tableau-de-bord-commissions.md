@@ -13,7 +13,9 @@ aucun recalcul d'enveloppe ou de répartition).
 | Agrégations | `app/Services/Commission/TableauDeBordCommissionsService.php` |
 | Page | `resources/js/pages/DashboardCommissions.vue` |
 | Cartes, graphique, répartition | `resources/js/components/dashboard/commissions/` |
-| Tests | `tests/Feature/DashboardCommissionsTest.php`, `tests/Unit/Periodes/PeriodeTest.php`, `resources/js/components/dashboard/commissions/__tests__/` |
+| Filtre de période (partagé avec Stat-Ventes) | `resources/js/components/periodes/SelecteurPeriode.vue`, `app/Support/Periodes/TranchesPeriode.php` |
+| Filtre agence | `resources/js/components/filters/SelecteurAgence.vue`, `resources/js/lib/periodes.ts` |
+| Tests | `tests/Feature/DashboardCommissionsTest.php`, `tests/Unit/Periodes/PeriodeTest.php`, `tests/Unit/Periodes/TranchesPeriodeTest.php`, `tests/Feature/Periodes/RegistreFiltresPeriodeTest.php`, `resources/js/components/dashboard/commissions/__tests__/`, `resources/js/components/periodes/__tests__/` |
 
 ## Accès et périmètre
 
@@ -31,21 +33,60 @@ aucun recalcul d'enveloppe ou de répartition).
 | Tout type | aucune restriction pour l'utilisateur rattaché à l'agence qui paie **toutes** les fiches de ce type |
 
   Un utilisateur sans agence ne voit rien. Les types sans écran (employé) ne sont visibles que d'un
-  utilisateur qui voit toutes les agences. Sous la ligne de période, l'écran rappelle « chiffres de
-  vos agences : … » quand les chiffres sont limités.
+  utilisateur qui voit toutes les agences.
+
+### Filtre agence (23/11/2026)
+
+- Sélecteur en tête de page, à gauche du filtre de période (`components/filters/SelecteurAgence.vue`,
+  même style) : **Toutes les agences** (par défaut) ou une agence. Paramètre `site_id`.
+- **Toutes les agences** = les agences du périmètre de l'utilisateur, pas forcément toute
+  l'organisation : un administrateur voit toute l'organisation, un responsable de Matoto et Coyah
+  voit Matoto et Coyah (tableau ci-dessus).
+- Agences proposées (`TableauDeBordCommissionsService::agencesProposees()`) : toutes celles de
+  l'organisation pour un utilisateur qui voit toutes les agences, sinon les siennes. Le sélecteur
+  n'apparaît qu'à partir de deux agences.
+- **Contrôle serveur à chaque requête** : un `site_id` hors de cette liste (autre agence, autre
+  organisation, identifiant inconnu) est refusé avec le message « Agence inconnue ou hors de votre
+  périmètre. », jamais ignoré ni cru sur parole.
+- Une agence choisie restreint chaque type de bénéficiaire à l'intersection de son périmètre et de
+  cette agence, avec la même règle d'agence que le tableau ci-dessus (agence de l'opération, ou site
+  bénéficiaire). Les types sans agence (employé) n'y figurent pas. Le filtre s'applique dans les
+  deux requêtes SQL, sans requête supplémentaire.
+- Il pilote les quatre cartes, les mini-courbes, les deux graphiques et la **période de
+  comparaison** (même agence pour les deux périodes). Il se combine avec la période : chacun des deux
+  sélecteurs conserve l'autre en rechargeant la page.
+- La tête de page indique le périmètre affiché : « Agence : Matoto », « Toutes vos agences : … » ou
+  « Toutes les agences ».
 
 ## Période et comparaison
 
-- Moteur commun (ADR 0057, [periodes.md](periodes.md)) : périodes rapides, trimestres, semestres et
-  « Toutes les périodes », **sans dates libres** (comme le tableau de bord des ventes) ; défaut
-  **Ce mois**. Une période invalide est refusée avec un message.
+- **Un seul filtre pilote toute la page** (23/11/2026) : le sélecteur en tête de page,
+  `SelecteurPeriode.vue`, le même que sur Stat-Ventes. Les quatre cartes, les mini-courbes, le
+  graphique d'évolution et la répartition portent toujours sur la même période ; aucun graphique n'a
+  de période propre. Le sélecteur d'Apollo dans l'en-tête du graphique est retiré, sa hauteur
+  (33 px rendus) est conservée.
+- Moteur commun (ADR 0057, [periodes.md](periodes.md)) : `Periode::TABLEAU_DE_BORD` — périodes
+  rapides, trimestres, semestres, « Toutes les périodes » et **Période personnalisée** (du … au …,
+  bornes incluses) ; défaut **Ce mois**.
+- **Période personnalisée** (23/11/2026) : la ligne de filtres ne contient que les deux listes
+  (agence, période). Choisir « Période personnalisée » ouvre une fenêtre contextuelle (Popover
+  PrimeVue) sous la liste : date de début, date de fin (côte à côte sur bureau, l'une sous l'autre sur
+  mobile) et « Appliquer ». Les cartes et graphiques ne bougent pas. Les deux dates sont obligatoires
+  et la fin doit suivre le début (« Appliquer » bloqué sinon) ; une période refusée par le serveur
+  affiche son message dans la fenêtre, qui reste ouverte avec la saisie. Fermée sans appliquer, la
+  fenêtre ne change rien. Une fois appliquée, la liste affiche « 01/11/2026 – 30/11/2026 » ;
+  rechoisir « Période personnalisée » rouvre la fenêtre pour modifier les dates.
+- Le libellé de la période appliquée s'affiche en tête de page (« Ce mois (du 01/11/2026 au
+  30/11/2026) », « Du 01/10/2026 au 23/11/2026 »).
 - Une part appartient à la période de sa commission : `commission_enveloppes.earned_at`, comme dans
-  les listes de commissions.
-- Le choix se fait dans l'en-tête du graphique (emplacement du sélecteur d'Apollo) et recharge toute
-  la page : cartes, graphique et répartition dépendent tous de la période.
+  les listes de commissions. Les quatre cartes utilisent cette même date (décision du 23/11/2026) :
+  leur état (en attente, à payer, payé) est l'état actuel des commissions générées sur la période,
+  ce qui garde la partition exacte et le taux de paiement juste. Les versements faits pendant une
+  période, quelle que soit la date des commissions, relèvent de la Trésorerie.
 - **Évolution en %** : comparée à `Periode::precedente()` — la période précédente de même durée,
   ramenée à la même durée écoulée si la période est en cours (« Ce mois » au 22 → du 1er au 22 du
-  mois précédent). La ligne sous le fil d'Ariane indique les deux périodes.
+  mois précédent). Dates libres : les jours qui précèdent, autant que la période choisie (du 02/11
+  au 05/11 → du 29/10 au 01/11). La période affichée est en tête de page ; la période de comparaison est dans la bulle d'information (icône « i ») à côté.
 - **Aucune tendance inventée** : sans période de comparaison (« Toutes les périodes ») ou si la
   période de comparaison vaut 0, la carte affiche « — » en gris, sans flèche.
 
@@ -75,7 +116,8 @@ Partition exacte du total, la même que les écrans Comptabilité → Commission
 
 Barres **Générées** et **Payées** par tranche : un jour par barre jusqu'à 31 jours, un mois par barre
 au-delà ; jusqu'à aujourd'hui pour une période en cours ; du premier au dernier mois qui a des
-commissions pour « Toutes les périodes ». Les tranches sont calculées par le serveur.
+commissions pour « Toutes les périodes ». Les tranches sont calculées par le serveur
+(`TranchesPeriode`, partagé avec Stat-Ventes).
 
 ## Graphique « Répartition des commissions »
 
@@ -95,7 +137,7 @@ Category ». Le tableau de bord Banking n'a ni ces cartes ni ces graphiques.
 | Apollo | ELM | Adaptation |
 |---|---|---|
 | `StatsEcommerceWidget` (Sales, Revenue, Visitors, Stock) | `CommissionsStatsWidget` | libellés, montants GNF, évolutions réelles, mini-courbes tracées avec les montants (mêmes viewBox 258×96 et 115×41, traits 2 px et 1 px), Knob = taux de paiement |
-| `RevenueOverviewWidget` | `CommissionsEvolutionWidget` | titre, séries Générées/Payées, sélecteur = période de la page |
+| `RevenueOverviewWidget` | `CommissionsEvolutionWidget` | titre, séries Générées/Payées ; sélecteur retiré (le filtre de la page est la seule période), hauteur de l'en-tête conservée |
 | `SalesByCategoryWidget` | `CommissionsRepartitionWidget` | titre, types de bénéficiaires, état vide |
 | `RecentSalesWidget`, `TopProductsWidget` | — | non repris (demande du 22/11/2026) |
 
@@ -104,7 +146,7 @@ Category ». Le tableau de bord Banking n'a ni ces cartes ni ces graphiques.
 - Apollo fixe `html { font-size: 14px }`, ELM garde 16 px : chaque taille Apollo en rem est reprise en
   px (rem × 14), comme `KpiCard.vue` — carte : padding 28 px, rayon 12 px, ombre
   `0 4px 30px rgba(221,224,255,.54)` (aucune en sombre) ; titre de carte 15,75 px / 600 ; chiffre
-  31,5 px / 700 ; titre de graphique 17,5 px / 600 ; gouttière 28 px ; sélecteur 140 px. Constantes
+  31,5 px / 700 ; titre de graphique 17,5 px / 600 ; gouttière 28 px. Constantes
   dans `components/dashboard/commissions/apollo.ts`.
 - Police Poppins (classe `font-apollo`, graisses 400 à 700), couleurs des tokens PrimeVue (primaire,
   surfaces, `--p-green-500` en hausse, `--p-pink-500` en baisse) : le rendu suit le thème et le mode

@@ -91,5 +91,6 @@ amende ou remplace.
 | [0067](0067-colonne-primes-et-avantages-transmission-paie.md) | Colonne « Primes et avantages » de la transmission de paie | 2026-11-17 | Accepté |
 | [0068](0068-paiement-groupe-des-fiches-de-commission.md) | Paiement groupé des fiches de commission | 2026-11-19 | Accepté |
 | [0069](0069-idempotence-des-paiements-de-fiche.md) | Idempotence des paiements de fiche | 2026-11-20 | Accepté |
+| [0070](0070-absences-des-salaries.md) | Absences des salariés, distinctes des congés | 2026-11-23 | Accepté |
 
-Dernier numéro attribué : **0069**. Le prochain ADR sera le **0070**.
+Dernier numéro attribué : **0070**. Le prochain ADR sera le **0071**.

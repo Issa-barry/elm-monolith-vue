@@ -68,6 +68,17 @@ return [
             'report' => false,
         ],
 
+        // Justificatifs d'absence des salariés (docs/rh-absences.md) : données de santé possibles.
+        // Disque privé, jamais lié au symlink public/storage ; servi uniquement par
+        // Rh\Absences\JustificatifAbsenceController après contrôle des droits et de l'agence.
+        'absences_rh' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/absences-rh'),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

@@ -6,6 +6,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
+import { type AbsenceRow } from '@/types/absence';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     Briefcase,
@@ -24,6 +25,9 @@ import {
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import { computed, ref } from 'vue';
+import AbsencesSalarie, {
+    type AbsencesOptions,
+} from './partials/AbsencesSalarie.vue';
 import {
     CARTE_FICHE,
     ENTETE_CARTE_FICHE,
@@ -123,6 +127,9 @@ const props = defineProps<{
     primes_options: PrimesOptions | null;
     // null sans rh-remunerations.read ET la lecture des primes (jamais envoyé)
     remuneration?: Remuneration | null;
+    // null sans la permission rh-absences.read (jamais envoyé)
+    absences?: AbsenceRow[] | null;
+    absences_options?: AbsencesOptions | null;
 }>();
 
 const { can } = usePermissions();
@@ -541,6 +548,17 @@ function dateFr(iso: string | null): string {
                         :employe-id="employe.id"
                         :primes="primes"
                         :options="primes_options"
+                    />
+
+                    <!-- Absences : transmis seulement avec rh-absences.read -->
+                    <AbsencesSalarie
+                        v-if="absences && absences_options"
+                        :key="`absences-${employe.id}`"
+                        :employe-id="employe.id"
+                        :employe-nom="employe.nom_complet"
+                        :absences="absences"
+                        :options="absences_options"
+                        :afficher-flash="primes === null"
                     />
 
                     <section

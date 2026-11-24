@@ -4,10 +4,12 @@ namespace App\Services\Commission;
 
 use App\Enums\StatutCommission;
 use App\Models\CommissionEnveloppePart;
+use App\Models\Site;
 use App\Models\User;
 use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\LecturePartsCommission;
 use App\Support\Periodes\Periode;
+use App\Support\Periodes\TranchesPeriode;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -27,11 +29,8 @@ use Illuminate\Support\Facades\DB;
  */
 class TableauDeBordCommissionsService
 {
-    /** Périodes proposées : celles du tableau de bord des ventes (sans dates libres). */
-    public const PERIODES = [...Periode::RAPIDES, ...Periode::TRIMESTRES_SEMESTRES, Periode::TOUT];
-
-    /** Au-delà de ce nombre de jours, l'évolution est présentée mois par mois. */
-    private const JOURS_MAX_PAR_JOUR = 31;
+    /** Périodes proposées : celles de Stat-Ventes, dates libres comprises. */
+    public const PERIODES = Periode::TABLEAU_DE_BORD;
 
     private const COMPARTIMENTS = ['total_genere', 'en_attente_periode', 'payable', 'deja_paye'];
 
@@ -46,33 +45,37 @@ class TableauDeBordCommissionsService
         CommissionEnveloppePart::TYPE_PRESTATAIRE,
     ];
 
-    private const MOIS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
-
     public function __construct(
         private readonly AgencePayeuseCommissionService $agencesPayeuses,
     ) {}
 
     /**
+     * @param  list<array{value: string, label: string}>  $agences  agences proposées (agencesProposees())
+     * @param  ?string  $agence  agence choisie, déjà vérifiée parmi $agences ; null = toutes les agences
+     *                           du périmètre de l'utilisateur
      * @return array{
-     *     periode: string,
-     *     periodes: list<array{value: string, label: string}>,
-     *     libelle_periode: string,
+     *     periode: array{cle: string, date_debut: ?string, date_fin: ?string, options: list<array{value: string, label: string}>, libelle: string},
      *     libelle_comparaison: ?string,
-     *     agences: list<string>|null,
+     *     agences: list<array{value: string, label: string}>,
+     *     agence: ?string,
+     *     perimetre_limite: bool,
      *     indicateurs: array<string, array{montant: float, evolution: ?float}>,
      *     taux_paiement: ?int,
      *     evolution: array{granularite: string, tranches: list<array<string, mixed>>},
      *     repartition: list<array{type: string, label: string, montant: float}>,
      * }
      */
-    public function calculer(User $user, Periode $periode, ?CarbonImmutable $maintenant = null): array
+    public function calculer(User $user, Periode $periode, array $agences, ?string $agence = null, ?CarbonImmutable $maintenant = null): array
     {
         $maintenant ??= CarbonImmutable::now();
         $precedente = $periode->precedente($maintenant);
-        $parMois = ! $periode->estBornee()
-            || $periode->debut->diffInDays($periode->fin->startOfDay()) + 1 > self::JOURS_MAX_PAR_JOUR;
+        $decoupage = TranchesPeriode::pour($periode);
 
+        // Même périmètre pour la période affichée et la période de comparaison.
         $perimetres = $this->perimetres($user);
+        if ($agence !== null) {
+            $perimetres = $this->limiterAUneAgence($perimetres, $agence);
+        }
 
         $totaux = array_fill_keys(self::COMPARTIMENTS, 0.0);
         $parTranche = [];
@@ -80,7 +83,7 @@ class TableauDeBordCommissionsService
 
         foreach ($this->sommes($user, $perimetres, $periode, true) as $ligne) {
             // Jour de la commission (Y-m-d, quel que soit le stockage de la colonne date).
-            $tranche = substr((string) $ligne->jour, 0, $parMois ? 7 : 10);
+            $tranche = $decoupage->cle((string) $ligne->jour);
             foreach (self::COMPARTIMENTS as $c) {
                 $totaux[$c] += (float) $ligne->{$c};
                 $parTranche[$tranche][$c] = ($parTranche[$tranche][$c] ?? 0.0) + (float) $ligne->{$c};
@@ -106,19 +109,21 @@ class TableauDeBordCommissionsService
         }
 
         return [
-            'periode' => $periode->cle,
-            'periodes' => Periode::options(self::PERIODES),
-            'libelle_periode' => $periode->libelle(),
+            // Filtre unique de la page : cartes, graphique et répartition portent sur cette période.
+            'periode' => [...$periode->pourFront(self::PERIODES), 'libelle' => $periode->libelle()],
             'libelle_comparaison' => $precedente?->libelle(),
-            'agences' => $this->agencesVisibles($user),
+            // Filtre agence : « Toutes les agences » = celles du périmètre de l'utilisateur.
+            'agences' => $agences,
+            'agence' => $agence,
+            'perimetre_limite' => ! $user->voitToutesLesAgences(),
             'indicateurs' => $indicateurs,
             // Part du généré déjà payée, en % entier ; null sans commission sur la période.
             'taux_paiement' => round($totaux['total_genere'], 2) > 0
                 ? (int) round($totaux['deja_paye'] / $totaux['total_genere'] * 100)
                 : null,
             'evolution' => [
-                'granularite' => $parMois ? 'mois' : 'jour',
-                'tranches' => $this->tranches($periode, $parTranche, $parMois, $maintenant),
+                'granularite' => $decoupage->granularite(),
+                'tranches' => $this->tranches($periode, $decoupage, $parTranche, $maintenant),
             ],
             'repartition' => $this->repartition($parType),
         ];
@@ -232,51 +237,20 @@ class TableauDeBordCommissionsService
     }
 
     /**
-     * Tranches du graphique, dans l'ordre, sans trou : chaque jour (ou mois) de la période jusqu'à
-     * aujourd'hui ; pour « Toutes les périodes », du premier au dernier mois qui a des commissions.
+     * Tranches du graphique (TranchesPeriode) avec les quatre compartiments de chacune.
      *
      * @param  array<string, array<string, float>>  $parTranche
      * @return list<array<string, mixed>>
      */
-    private function tranches(Periode $periode, array $parTranche, bool $parMois, CarbonImmutable $maintenant): array
+    private function tranches(Periode $periode, TranchesPeriode $decoupage, array $parTranche, CarbonImmutable $maintenant): array
     {
-        if ($periode->estBornee()) {
-            $debut = $periode->debut;
-            $fin = $periode->fin->lessThan($maintenant) ? $periode->fin : $maintenant;
-        } elseif ($parTranche !== []) {
-            ksort($parTranche);
-            $debut = CarbonImmutable::parse(array_key_first($parTranche).'-01');
-            $fin = CarbonImmutable::parse(array_key_last($parTranche).'-01');
-        } else {
-            return [];
-        }
-
-        $cles = [];
-        if ($parMois) {
-            for ($mois = $debut->day(1)->startOfDay(); $mois->lessThanOrEqualTo($fin); $mois = $mois->addMonthNoOverflow()) {
-                $cles[] = $mois;
-            }
-        } else {
-            for ($jour = $debut->startOfDay(); $jour->lessThanOrEqualTo($fin); $jour = $jour->addDay()) {
-                $cles[] = $jour;
-            }
-        }
-
-        $plusieursAnnees = $cles !== [] && $cles[0]->year !== end($cles)->year;
-
-        return array_map(function (CarbonImmutable $date) use ($parTranche, $parMois, $plusieursAnnees) {
-            $cle = $date->format($parMois ? 'Y-m' : 'Y-m-d');
-            $label = $parMois
-                ? self::MOIS[$date->month - 1].($plusieursAnnees ? ' '.$date->format('y') : '')
-                : $date->format('d/m');
-
-            $tranche = ['cle' => $cle, 'label' => $label];
+        return array_map(function (array $tranche) use ($parTranche) {
             foreach (self::COMPARTIMENTS as $c) {
-                $tranche[$c] = round($parTranche[$cle][$c] ?? 0.0, 2);
+                $tranche[$c] = round($parTranche[$tranche['cle']][$c] ?? 0.0, 2);
             }
 
             return $tranche;
-        }, $cles);
+        }, $decoupage->tranches($periode, array_map('strval', array_keys($parTranche)), $maintenant));
     }
 
     /**
@@ -303,18 +277,37 @@ class TableauDeBordCommissionsService
     }
 
     /**
-     * null = toute l'organisation ; sinon les agences de l'utilisateur, affichées sous le titre
-     * comme sur le tableau de bord des ventes.
+     * Agences que l'utilisateur peut choisir dans le filtre : toutes celles de l'organisation s'il
+     * voit toutes les agences, sinon les siennes (mêmes agences que
+     * SiteScopeService::accessibleSiteIds()). Seule liste acceptée pour `site_id`.
      *
-     * @return list<string>|null
+     * @return list<array{value: string, label: string}>
      */
-    private function agencesVisibles(User $user): ?array
+    public function agencesProposees(User $user): array
     {
-        if ($user->voitToutesLesAgences()) {
-            return null;
+        $sites = $user->voitToutesLesAgences()
+            ? Site::query()->where('organization_id', $user->organization_id)->orderBy('nom')->get(['id', 'nom'])
+            : $user->sites()->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+
+        return $sites->map(fn (Site $s) => ['value' => (string) $s->id, 'label' => $s->nom])->values()->all();
+    }
+
+    /**
+     * Périmètres restreints à une agence choisie : pour chaque type, l'intersection de son périmètre
+     * de lecture (null = toutes les agences) avec cette agence. Les types sans agence (employé) ne
+     * sont plus visibles.
+     *
+     * @param  array<string, array<int, string>|null>|null  $perimetres
+     * @return array<string, array<int, string>>
+     */
+    private function limiterAUneAgence(?array $perimetres, string $agence): array
+    {
+        $limites = [];
+        foreach ([...self::TYPES_AGENCE_DE_L_OPERATION, CommissionEnveloppePart::TYPE_SITE] as $type) {
+            $perimetre = $perimetres === null ? null : $perimetres[$type];
+            $limites[$type] = $perimetre === null || in_array($agence, $perimetre, true) ? [$agence] : [];
         }
 
-        // Mêmes agences que SiteScopeService::accessibleSiteIds(), lues avec leur nom.
-        return $user->sites()->orderBy('sites.nom')->pluck('sites.nom')->values()->all();
+        return $limites;
     }
 }

@@ -14,10 +14,12 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Support\Periodes\Periode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -181,6 +183,30 @@ class DashboardCommissionsTest extends TestCase
         return $response->viewData('page')['props'];
     }
 
+    /**
+     * Les six éléments de la page portent sur la même période : la somme des tranches du graphique
+     * redonne chaque carte, la répartition redonne le total généré.
+     *
+     * @param  array<string, mixed>  $props
+     */
+    private function assertCoherent(array $props): void
+    {
+        foreach (['total_genere', 'en_attente_periode', 'payable', 'deja_paye'] as $c) {
+            $this->assertEqualsWithDelta(
+                $props['indicateurs'][$c]['montant'],
+                array_sum(array_column($props['evolution']['tranches'], $c)),
+                0.01,
+                "Le graphique et la carte « {$c} » divergent.",
+            );
+        }
+        $this->assertEqualsWithDelta(
+            $props['indicateurs']['total_genere']['montant'],
+            array_sum(array_column($props['repartition'], 'montant')),
+            0.01,
+            'La répartition et la carte « Commissions générées » divergent.',
+        );
+    }
+
     // ── Accès ─────────────────────────────────────────────────────────────────
 
     public function test_les_invites_sont_rediriges_vers_la_connexion(): void
@@ -225,7 +251,7 @@ class DashboardCommissionsTest extends TestCase
 
         $props = $this->props($this->admin());
 
-        $this->assertSame('ce_mois', $props['periode']);
+        $this->assertSame('ce_mois', $props['periode']['cle']);
         $i = $props['indicateurs'];
         $this->assertEquals(600_000, $i['total_genere']['montant']);
         $this->assertEquals(100_000, $i['en_attente_periode']['montant']);
@@ -246,6 +272,7 @@ class DashboardCommissionsTest extends TestCase
         $this->assertNull($props['taux_paiement']);
         $this->assertSame([], $props['repartition']);
         $this->assertEquals(0, $props['indicateurs']['total_genere']['montant']);
+        $this->assertCoherent($props);
     }
 
     public function test_l_evolution_compare_a_la_meme_duree_ecoulee_de_la_periode_precedente(): void
@@ -279,6 +306,130 @@ class DashboardCommissionsTest extends TestCase
         // Du premier au dernier mois qui a des commissions, sans trou.
         $this->assertSame(['Sep', 'Oct', 'Nov'], array_column($props['evolution']['tranches'], 'label'));
         $this->assertEquals([400_000, 0, 600_000], array_column($props['evolution']['tranches'], 'total_genere'));
+    }
+
+    // ── Filtre de période (unique pour toute la page) ────────────────────────
+
+    public function test_le_filtre_propose_les_periodes_de_stat_ventes_et_les_dates_libres(): void
+    {
+        $props = $this->props($this->admin());
+
+        $this->assertSame(
+            ['aujourd_hui', 'hier', 'cette_semaine', 'semaine_precedente', 'ce_mois', 'mois_precedent',
+                't1', 't2', 't3', 't4', 's1', 's2', 'cette_annee', 'annee_precedente', 'tout', 'personnalisee'],
+            array_column($props['periode']['options'], 'value'),
+        );
+        $this->assertSame('ce_mois', $props['periode']['cle']);
+        $this->assertSame('2026-11-01', $props['periode']['date_debut']);
+        $this->assertSame('2026-11-30', $props['periode']['date_fin']);
+        $this->assertSame('Ce mois (du 01/11/2026 au 30/11/2026)', $props['periode']['libelle']);
+    }
+
+    public function test_une_periode_personnalisee_pilote_les_cartes_et_les_graphiques_bornes_incluses(): void
+    {
+        // Hors période, juste avant et juste après.
+        $this->part('2026-11-01', 7_000, 'impaye');
+        $this->part('2026-11-06', 9_000_000, 'impaye');
+        // Bornes incluses.
+        $this->part('2026-11-02', 100_000, 'creee');
+        $this->part('2026-11-05', 300_000, 'partiel', verse: 100_000, type: CommissionEnveloppePart::TYPE_PROPRIETAIRE);
+
+        $props = $this->props($this->admin(), ['date_debut' => '2026-11-02', 'date_fin' => '2026-11-05']);
+
+        $this->assertSame('personnalisee', $props['periode']['cle']);
+        $this->assertSame('2026-11-02', $props['periode']['date_debut']);
+        $this->assertSame('2026-11-05', $props['periode']['date_fin']);
+        $this->assertSame('Du 02/11/2026 au 05/11/2026', $props['periode']['libelle']);
+
+        $i = $props['indicateurs'];
+        $this->assertEquals(400_000, $i['total_genere']['montant']);
+        $this->assertEquals(100_000, $i['en_attente_periode']['montant']);
+        $this->assertEquals(200_000, $i['payable']['montant']);
+        $this->assertEquals(100_000, $i['deja_paye']['montant']);
+        $this->assertSame(25, $props['taux_paiement']);
+
+        $this->assertSame('jour', $props['evolution']['granularite']);
+        $this->assertSame(['02/11', '03/11', '04/11', '05/11'], array_column($props['evolution']['tranches'], 'label'));
+        $this->assertSame(['Propriétaires', 'Livreurs'], array_column($props['repartition'], 'label'));
+        $this->assertCoherent($props);
+
+        // Comparée aux quatre jours qui précèdent : seule la part du 1er novembre y figure.
+        $this->assertSame('Du 29/10/2026 au 01/11/2026', $props['libelle_comparaison']);
+        $this->assertSame(round((400_000 - 7_000) / 7_000 * 100, 1), $i['total_genere']['evolution']);
+    }
+
+    public function test_une_periode_personnalisee_de_plus_de_31_jours_est_mois_par_mois_jusqu_a_aujourd_hui(): void
+    {
+        $this->part('2026-10-01', 100_000, 'impaye');
+        $this->part('2026-11-22', 50_000, 'paye', verse: 50_000);
+        $this->part('2026-08-20', 80_000, 'impaye');
+
+        $props = $this->props($this->admin(), ['date_debut' => '2026-10-01', 'date_fin' => '2026-11-23']);
+
+        $this->assertSame('mois', $props['evolution']['granularite']);
+        $this->assertSame(['Oct', 'Nov'], array_column($props['evolution']['tranches'], 'label'));
+        $this->assertEquals(150_000, $props['indicateurs']['total_genere']['montant']);
+        $this->assertCoherent($props);
+        // 54 jours choisis, 53 écoulés au 22/11 : comparés aux 53 jours qui précèdent le 1er octobre.
+        $this->assertSame('Du 08/08/2026 au 29/09/2026', $props['libelle_comparaison']);
+        $this->assertSame(round((150_000 - 80_000) / 80_000 * 100, 1), $props['indicateurs']['total_genere']['evolution']);
+    }
+
+    /** @return array<string, array{0: string}> */
+    public static function periodesPredefinies(): array
+    {
+        $cles = array_values(array_diff(Periode::TABLEAU_DE_BORD, [Periode::PERSONNALISEE]));
+
+        return array_combine($cles, array_map(fn (string $cle) => [$cle], $cles));
+    }
+
+    #[DataProvider('periodesPredefinies')]
+    public function test_chaque_periode_predefinie_pilote_toute_la_page(string $cle): void
+    {
+        $this->part('2026-01-15', 10_000, 'impaye');
+        $this->part('2026-11-16', 20_000, 'creee');
+        $this->part('2026-11-20', 40_000, 'partiel', verse: 10_000, type: CommissionEnveloppePart::TYPE_PROPRIETAIRE);
+        $this->part('2026-11-22', 80_000, 'paye', verse: 80_000);
+        $this->part('2025-12-31', 160_000, 'impaye');
+
+        $props = $this->props($this->admin(), ['periode' => $cle]);
+
+        $this->assertSame($cle, $props['periode']['cle']);
+        $this->assertCoherent($props);
+    }
+
+    public function test_une_periode_invalide_est_refusee_avec_un_message(): void
+    {
+        $admin = $this->admin();
+        $depuis = route('dashboard.commissions');
+
+        $this->actingAs($admin)->from($depuis)
+            ->get(route('dashboard.commissions', ['periode' => 'trimestre_dernier']))
+            ->assertRedirect($depuis)
+            ->assertSessionHasErrors(['periode' => 'Période inconnue.']);
+
+        $this->actingAs($admin)->from($depuis)
+            ->get(route('dashboard.commissions', ['date_debut' => '2026-11-05', 'date_fin' => '2026-11-02']))
+            ->assertSessionHasErrors(['date_fin' => 'La date de fin doit être postérieure ou égale à la date de début.']);
+
+        $this->actingAs($admin)->from($depuis)
+            ->get(route('dashboard.commissions', ['date_debut' => '2026-02-31', 'date_fin' => '2026-03-02']))
+            ->assertSessionHasErrors(['date_debut' => 'La date de début est invalide.']);
+
+        $this->actingAs($admin)->from($depuis)
+            ->get(route('dashboard.commissions', ['periode' => 'ce_mois', 'date_debut' => '2026-11-02', 'date_fin' => '2026-11-05']))
+            ->assertSessionHasErrors(['periode' => 'Choisissez une période ou des dates, pas les deux.']);
+    }
+
+    public function test_une_periode_personnalisee_respecte_le_perimetre_d_agence(): void
+    {
+        $this->part('2026-10-15', 100_000, vehicule: $this->vehicule($this->cba));
+        $this->part('2026-10-15', 900_000, vehicule: $this->vehicule($this->sonfonia));
+
+        $props = $this->props($this->staff(['commissions.read'], $this->cba), ['date_debut' => '2026-10-01', 'date_fin' => '2026-10-31']);
+
+        $this->assertEquals(100_000, $props['indicateurs']['total_genere']['montant']);
+        $this->assertCoherent($props);
     }
 
     // ── Graphique et répartition ──────────────────────────────────────────────
@@ -347,12 +498,108 @@ class DashboardCommissionsTest extends TestCase
 
         $props = $this->props($this->staff(['commissions.read'], $this->cba));
 
-        $this->assertSame(['Cba'], $props['agences']);
+        $this->assertSame([['value' => $this->cba->id, 'label' => 'Cba']], $props['agences']);
+        $this->assertTrue($props['perimetre_limite']);
         $this->assertEquals(150_000, $props['indicateurs']['total_genere']['montant']);
 
         $admin = $this->props($this->admin());
-        $this->assertNull($admin['agences']);
+        $this->assertFalse($admin['perimetre_limite']);
         $this->assertEquals(2_550_000, $admin['indicateurs']['total_genere']['montant']);
+    }
+
+    // ── Filtre agence (avec la période) ───────────────────────────────────────
+
+    /** Commissions de trois agences : livreur (agence du véhicule) et site bénéficiaire. */
+    private function commissionsDeTroisAgences(): void
+    {
+        foreach ([[$this->matoto, 100_000, 1_000], [$this->cba, 200_000, 2_000], [$this->sonfonia, 400_000, 4_000]] as [$site, $livreur, $commissionSite]) {
+            $vehicule = $this->vehicule($site);
+            $this->part('2026-11-03', $livreur, 'partiel', verse: $livreur / 2, vehicule: $vehicule);
+            $this->part('2026-11-04', $commissionSite, 'creee', type: CommissionEnveloppePart::TYPE_SITE, vehicule: $vehicule, beneficiaireId: $site->id);
+            // Période de comparaison du 1er au 22 octobre.
+            $this->part('2026-10-05', $livreur / 4, 'impaye', vehicule: $vehicule);
+        }
+    }
+
+    public function test_par_defaut_toutes_les_agences_de_l_organisation_pour_un_administrateur(): void
+    {
+        $this->commissionsDeTroisAgences();
+
+        $props = $this->props($this->admin());
+
+        $this->assertNull($props['agence']);
+        $this->assertSame(['Cba', 'Matoto', 'Sonfonia'], array_column($props['agences'], 'label'));
+        $this->assertEquals(707_000, $props['indicateurs']['total_genere']['montant']);
+        $this->assertCoherent($props);
+    }
+
+    public function test_une_agence_precise_pilote_les_cartes_les_graphiques_et_la_comparaison(): void
+    {
+        $this->commissionsDeTroisAgences();
+
+        $props = $this->props($this->admin(), ['site_id' => $this->cba->id]);
+
+        $this->assertSame($this->cba->id, $props['agence']);
+        $i = $props['indicateurs'];
+        $this->assertEquals(202_000, $i['total_genere']['montant']);
+        $this->assertEquals(2_000, $i['en_attente_periode']['montant']);
+        $this->assertEquals(100_000, $i['payable']['montant']);
+        $this->assertEquals(100_000, $i['deja_paye']['montant']);
+        $this->assertSame(['Livreurs', 'Sites'], array_column($props['repartition'], 'label'));
+        $this->assertCoherent($props);
+        // Comparaison sur la même agence : 50 000 générés à Cba en octobre (pas 175 000 pour tout).
+        $this->assertSame(round((202_000 - 50_000) / 50_000 * 100, 1), $i['total_genere']['evolution']);
+    }
+
+    public function test_periode_personnalisee_et_agence_se_combinent(): void
+    {
+        $this->commissionsDeTroisAgences();
+        $this->part('2026-11-10', 9_000_000, vehicule: $this->vehicule($this->matoto));
+
+        $props = $this->props($this->admin(), ['site_id' => $this->matoto->id, 'date_debut' => '2026-11-03', 'date_fin' => '2026-11-04']);
+
+        $this->assertSame('personnalisee', $props['periode']['cle']);
+        $this->assertSame($this->matoto->id, $props['agence']);
+        $this->assertEquals(101_000, $props['indicateurs']['total_genere']['montant']);
+        $this->assertSame(['03/11', '04/11'], array_column($props['evolution']['tranches'], 'label'));
+        $this->assertCoherent($props);
+    }
+
+    public function test_toutes_les_agences_d_un_responsable_sont_les_siennes_seulement(): void
+    {
+        $this->commissionsDeTroisAgences();
+        $responsable = $this->staff(['commissions.read'], $this->cba);
+        $responsable->sites()->attach($this->sonfonia->id, ['role' => 'employe', 'is_default' => false]);
+
+        $toutes = $this->props($responsable);
+        $this->assertSame(['Cba', 'Sonfonia'], array_column($toutes['agences'], 'label'));
+        $this->assertEquals(606_000, $toutes['indicateurs']['total_genere']['montant']);
+        $this->assertCoherent($toutes);
+
+        $sonfonia = $this->props($responsable, ['site_id' => $this->sonfonia->id]);
+        $this->assertEquals(404_000, $sonfonia['indicateurs']['total_genere']['montant']);
+        $this->assertCoherent($sonfonia);
+    }
+
+    public function test_une_agence_hors_du_perimetre_est_refusee(): void
+    {
+        $this->commissionsDeTroisAgences();
+        $responsable = $this->staff(['commissions.read'], $this->cba);
+        $autreOrganisation = $this->site('Ailleurs', org: Organization::factory()->create());
+        $depuis = route('dashboard.commissions');
+
+        // Refus explicite (redirection avec message), jamais les chiffres d'une autre agence.
+        foreach ([$this->matoto->id, $autreOrganisation->id, 'inconnue'] as $siteId) {
+            $this->actingAs($responsable)->from($depuis)
+                ->get(route('dashboard.commissions', ['site_id' => $siteId]))
+                ->assertRedirect($depuis)
+                ->assertSessionHasErrors(['site_id' => 'Agence inconnue ou hors de votre périmètre.']);
+        }
+
+        // Une agence d'une autre organisation est refusée même pour un administrateur.
+        $this->actingAs($this->admin())->from($depuis)
+            ->get(route('dashboard.commissions', ['site_id' => $autreOrganisation->id]))
+            ->assertSessionHasErrors(['site_id']);
     }
 
     public function test_l_agence_qui_paie_toutes_les_fiches_d_un_type_voit_tout_ce_type(): void
@@ -388,11 +635,11 @@ class DashboardCommissionsTest extends TestCase
         $responsable = $this->staff(['commissions.read'], $this->cba);
         $this->part('2026-11-03', 100_000);
 
-        $compter = function (User $user): int {
-            $this->props($user);
+        $compter = function (User $user, array $query = []): int {
+            $this->props($user, $query);
             DB::flushQueryLog();
             DB::enableQueryLog();
-            $this->props($user);
+            $this->props($user, $query);
             $nombre = count(DB::getQueryLog());
             DB::disableQueryLog();
 
@@ -409,5 +656,8 @@ class DashboardCommissionsTest extends TestCase
 
         $this->assertSame($adminAvant, $compter($admin));
         $this->assertSame($responsableAvant, $compter($responsable));
+        // Les filtres agence et période (dates libres) n'ajoutent aucune requête.
+        $this->assertSame($adminAvant, $compter($admin, ['site_id' => $this->cba->id]));
+        $this->assertSame($adminAvant, $compter($admin, ['site_id' => $this->cba->id, 'date_debut' => '2026-10-01', 'date_fin' => '2026-11-22']));
     }
 }

@@ -109,6 +109,7 @@ Chaque document technique indique en tête son **statut** :
 - [Transmission de paie RH → Comptabilité](transmission-paie.md)
 - [Contrats de travail générés](rh-contrat-pdf.md)
 - [Départ d'un salarié](rh-depart-salarie.md)
+- [Absences des salariés](rh-absences.md)
 - [Création d'un employé : identité existante](rh-employes-identite.md)
 - [Import des dossiers et contrats RH](import-dossiers-rh.md)
 - [Fiche agent](fiche-agent.md)
