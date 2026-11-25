@@ -155,6 +155,7 @@ use App\Http\Controllers\Divers\IndexCommunicationController;
 use App\Http\Controllers\Divers\IndexDashboardCommissionsController;
 use App\Http\Controllers\Divers\IndexDashboardController;
 use App\Http\Controllers\Divers\IndexDashboardDepensesController;
+use App\Http\Controllers\Divers\IndexDashboardStockController;
 use App\Http\Controllers\Divers\MarkReadContactController;
 use App\Http\Controllers\Divers\UnreadCountContactController;
 use App\Http\Controllers\EmployeController;
@@ -487,6 +488,11 @@ Route::prefix('backoffice')->group(function () {
         Route::get('tableau-de-bord/depenses', IndexDashboardDepensesController::class)
             ->middleware('module:'.ModuleFeature::DEPENSES)
             ->name('dashboard.depenses');
+
+        // Tableau de bord Stock — même droit de lecture et même périmètre que la page Stock.
+        Route::get('tableau-de-bord/stock', IndexDashboardStockController::class)
+            ->middleware('module:'.ModuleFeature::PRODUITS)
+            ->name('dashboard.stock');
 
         // Rapports (docs/rapports.md) — permission et périmètre vérifiés par RapportPerimetreResolver.
         Route::get('ma-situation', IndexMaSituationController::class)->name('ma-situation');

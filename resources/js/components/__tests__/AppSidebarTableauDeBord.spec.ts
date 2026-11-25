@@ -81,18 +81,20 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
         }
     });
 
-    it('affiche Stat-Ventes, Stat-Commissions puis Stat-Dépenses dans le Tableau de bord', () => {
+    it('affiche Stat-Ventes, Stat-Commissions, Stat-Dépenses puis Stat-Stock dans le Tableau de bord', () => {
         const entrees = tableauDeBord(items(TOUT));
 
         expect(entrees.map((e) => e.title)).toEqual([
             'Stat-Ventes',
             'Stat-Commissions',
             'Stat-Dépenses',
+            'Stat-Stock',
         ]);
         expect(entrees.map((e) => e.href)).toEqual([
             '/backoffice/dashboard',
             '/backoffice/tableau-de-bord/commissions',
             '/backoffice/tableau-de-bord/depenses',
+            '/backoffice/tableau-de-bord/stock',
         ]);
         expect(entrees.every((e) => e.icon !== undefined)).toBe(true);
     });
@@ -162,5 +164,11 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
         expect(
             tableauDeBord(items({ 'depenses.read': true })).map((e) => e.title),
         ).toEqual(['Stat-Ventes', 'Stat-Dépenses']);
+    });
+
+    it('conserve les permissions : Stat-Stock exige produits.read, comme la page Stock', () => {
+        expect(
+            tableauDeBord(items({ 'produits.read': true })).map((e) => e.title),
+        ).toEqual(['Stat-Ventes', 'Stat-Stock']);
     });
 });
