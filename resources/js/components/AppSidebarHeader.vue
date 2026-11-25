@@ -238,10 +238,11 @@ onMounted(() => {
                     />
                 </IconField>
 
-                <!-- Dropdown résultats -->
+                <!-- Dropdown résultats : pleine largeur sous la barre sur téléphone (ancré au
+                     champ, il déborderait à gauche de l'écran), aligné sous le champ au-delà. -->
                 <div
                     v-if="isSearchOpen"
-                    class="absolute top-full right-0 z-50 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-lg border bg-background shadow-lg"
+                    class="fixed inset-x-4 top-[4.25rem] z-50 max-h-[70vh] overflow-y-auto rounded-lg border bg-background shadow-lg sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-80"
                 >
                     <!-- Chargement -->
                     <div

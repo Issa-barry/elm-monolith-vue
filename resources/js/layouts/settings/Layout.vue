@@ -13,11 +13,20 @@ import { edit as editProfile } from '@/routes/profile';
 import { show } from '@/routes/two-factor';
 import { edit as editPassword } from '@/routes/user-password';
 import { type NavItem } from '@/types';
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
+import { useMediaQuery } from '@vueuse/core';
+import Select from 'primevue/select';
 import { computed } from 'vue';
 
 const page = usePage();
 const { can, hasRole } = usePermissions();
+
+/**
+ * Téléphone (< 640 px, point de rupture `sm` de ce menu) : la gestion des rôles et permissions
+ * est une interface d'administration réservée à la tablette et à l'ordinateur. Choix
+ * d'ergonomie uniquement : le lien est masqué, les droits et la route serveur sont inchangés.
+ */
+const estTelephone = useMediaQuery('(max-width: 639px)');
 
 const isAdmin = computed(
     () => hasRole('super_admin') || hasRole('admin_entreprise'),
@@ -49,7 +58,14 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
                     title: "Informations de l'organisation",
                     href: editOrganisation(),
                 },
-                { title: 'Rôles et permissions', href: '/backoffice/roles' },
+                ...(estTelephone.value
+                    ? []
+                    : [
+                          {
+                              title: 'Rôles et permissions',
+                              href: '/backoffice/roles',
+                          },
+                      ]),
             ],
         });
     }
@@ -132,6 +148,33 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
 });
 
 const currentPath = typeof window !== undefined ? window.location.pathname : '';
+
+/** Chemin d'un lien, qu'il soit relatif ('/settings/produits') ou absolu (routes générées). */
+const cheminDe = (href: NavItem['href']): string =>
+    new URL(toUrl(href) ?? '', 'http://x').pathname;
+
+// Téléphone : liste déroulante groupée à la place des onglets horizontaux, peu lisibles.
+const sectionsMobile = computed(() =>
+    sidebarNavGroups.value.map((group) => ({
+        label: group.title,
+        items: group.items.map((item) => ({
+            label: item.title,
+            value: toUrl(item.href) ?? '',
+            chemin: cheminDe(item.href),
+        })),
+    })),
+);
+
+const sectionActive = computed(
+    () =>
+        sectionsMobile.value
+            .flatMap((group) => group.items)
+            .find((item) => item.chemin === currentPath)?.value ?? null,
+);
+
+function ouvrirSection(url: string | null) {
+    if (url) router.visit(url);
+}
 </script>
 
 <template>
@@ -143,9 +186,29 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
 
         <div class="flex flex-col lg:flex-row lg:space-x-12">
             <aside class="w-full lg:w-48">
-                <nav
-                    class="flex gap-1 overflow-x-auto pb-2 sm:flex-col sm:space-y-1 sm:overflow-x-visible sm:pb-0"
-                >
+                <!-- Téléphone : choix de la section dans une liste groupée -->
+                <div class="sm:hidden" data-testid="parametres-sections-mobile">
+                    <label
+                        for="parametres-section"
+                        class="mb-1.5 block text-xs font-medium text-muted-foreground"
+                        >Section</label
+                    >
+                    <Select
+                        input-id="parametres-section"
+                        :model-value="sectionActive"
+                        :options="sectionsMobile"
+                        option-label="label"
+                        option-value="value"
+                        option-group-label="label"
+                        option-group-children="items"
+                        placeholder="Choisir une section"
+                        class="w-full"
+                        @update:model-value="ouvrirSection"
+                    />
+                </div>
+
+                <!-- Tablette et ordinateur : navigation verticale inchangée -->
+                <nav class="hidden gap-1 sm:flex sm:flex-col sm:space-y-1">
                     <div
                         v-for="group in sidebarNavGroups"
                         :key="group.title"
