@@ -26,6 +26,12 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class DepenseListingService
 {
+    /** Index (organization_id, statut, date_depense) de depenses (migration du 30/04/2026). */
+    public const INDEX_STATUT_DATE = 'depenses_organization_id_statut_date_depense_index';
+
+    /** Filtres qui ont leur propre index : en leur présence, l'index n'est jamais imposé. */
+    private const FILTRES_AVEC_INDEX_PROPRE = ['type', 'categorie', 'vehicule', 'vehicule_ids', 'proprietaire_id', 'concerne', 'telephone_concerne'];
+
     public function __construct(
         private readonly DroitCreationDepenseService $droitCreationDepense,
         private readonly DepensePerimetre $perimetre,
@@ -39,9 +45,13 @@ final class DepenseListingService
     public function query(User $user, array $filters, ?array $siteIds = null, ?Periode $periode = null): Builder
     {
         $orgId = $user->organization_id;
+        // L'identifiant (ULID, croissant avec la saisie) départage les dépenses de même date et de même
+        // seconde de saisie : sans lui, leur ordre dépendait du plan d'exécution, et une dépense à la
+        // frontière de deux pages pouvait apparaître deux fois ou pas du tout.
         $query = $this->perimetre->appliquer(Depense::forOrg($orgId), $user)
             ->orderByDesc('date_depense')
-            ->orderByDesc('created_at');
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         if (! empty($filters['type'])) {
             $query->whereIn('depense_type_id', (array) $filters['type']);
@@ -252,7 +262,40 @@ final class DepenseListingService
             $query->where('montant', (float) $filters['montant']);
         }
 
+        // Avec un filtre de statut, MySQL choisit souvent un index qui ne filtre que l'organisation et
+        // relit chaque dépense (jusqu'à 7 s pour « Validées · Cette année » sur 200 000 dépenses) : on
+        // lui impose (organization_id, statut, date_depense). Jamais avec un filtre qui a son propre
+        // index, où le moteur choisit mieux seul (docs/depenses-filtres.md, « Performances »).
+        // FORCE INDEX est compris par MySQL et MariaDB ; les autres moteurs gardent leur plan.
+        if (self::imposeIndexStatut($filters, $siteIds)
+            && in_array($query->getConnection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            $query->getQuery()->forceIndex(self::INDEX_STATUT_DATE);
+        }
+
         return $query;
+    }
+
+    /**
+     * Vrai si la liste doit imposer l'index (organization_id, statut, date_depense) : un filtre de
+     * statut est actif et aucun filtre n'a son propre index — agence (`site_id`), type et catégorie
+     * (`depense_type_id`), personne concernée (`dep_org_ben_idx`).
+     *
+     * @param  array<string, mixed>  $filters
+     * @param  list<string>|null  $siteIds  agences filtrées ; null = aucune sélection
+     */
+    public static function imposeIndexStatut(array $filters, ?array $siteIds): bool
+    {
+        if (empty($filters['statut']) || $siteIds !== null) {
+            return false;
+        }
+
+        foreach (self::FILTRES_AVEC_INDEX_PROPRE as $filtre) {
+            if (! empty($filters[$filtre])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

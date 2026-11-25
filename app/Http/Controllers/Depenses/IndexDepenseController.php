@@ -36,19 +36,6 @@ class IndexDepenseController extends Controller
         }
         $siteIds = $this->perimetre->sitesFiltres($user, (array) $request->input('site_ids', []));
 
-        $paginator = $this->listing->query($user, $filters, $siteIds, $periode)
-            ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
-            ->paginate(30)
-            ->withQueryString();
-
-        [$beneficiaireCache, $vehiculeInfoCache] = $this->listing->preloadBeneficiaires($paginator->items());
-
-        $droitValidation = $this->droitCreationDepense->droitValidationPour($user, $orgId);
-
-        $types = DepenseType::where('organization_id', $orgId)
-            ->ordered()
-            ->get(['id', 'libelle', 'categorie']);
-
         $statsRow = $this->listing->query($user, $filters, $siteIds, $periode)
             ->reorder()
             ->selectRaw(
@@ -59,6 +46,21 @@ class IndexDepenseController extends Controller
                 [StatutDepense::SOUMIS->value, StatutDepense::VALIDE->value]
             )
             ->first();
+
+        // Total de la pagination repris des statistiques (même requête, mêmes filtres) : une lecture
+        // complète de la période en moins à chaque affichage (docs/depenses-filtres.md).
+        $paginator = $this->listing->query($user, $filters, $siteIds, $periode)
+            ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
+            ->paginate(30, total: (int) $statsRow->total)
+            ->withQueryString();
+
+        [$beneficiaireCache, $vehiculeInfoCache] = $this->listing->preloadBeneficiaires($paginator->items());
+
+        $droitValidation = $this->droitCreationDepense->droitValidationPour($user, $orgId);
+
+        $types = DepenseType::where('organization_id', $orgId)
+            ->ordered()
+            ->get(['id', 'libelle', 'categorie']);
 
         return Inertia::render('Depenses/Index', [
             'depenses' => $paginator->through(fn (Depense $d) => $this->listing->transform($d, $beneficiaireCache, $vehiculeInfoCache, $user, $droitValidation)),
