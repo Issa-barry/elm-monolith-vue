@@ -96,6 +96,7 @@ Chaque document technique indique en tête son **statut** :
 - [Concernés d'un type de dépense](depenses-concernes.md)
 - [Filtres de la liste des dépenses](depenses-filtres.md)
 - [Dépense de carburant : commande de référence](depenses-carburant-commande.md)
+- [Tableau de bord des dépenses](tableau-de-bord-depenses.md)
 
 **Trésorerie et comptabilité**
 

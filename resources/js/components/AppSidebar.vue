@@ -32,6 +32,7 @@ import {
     ShoppingCart,
     Truck,
     UsersRound,
+    Wallet,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
@@ -203,6 +204,15 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Stat-Commissions',
             href: '/backoffice/tableau-de-bord/commissions',
             icon: HandCoins,
+            group: 'Tableau de bord',
+        });
+
+    // Même droit et même module que la liste des dépenses (docs/tableau-de-bord-depenses.md).
+    if (canSee('depenses.read', 'depenses'))
+        items.push({
+            title: 'Stat-Dépenses',
+            href: '/backoffice/tableau-de-bord/depenses',
+            icon: Wallet,
             group: 'Tableau de bord',
         });
 

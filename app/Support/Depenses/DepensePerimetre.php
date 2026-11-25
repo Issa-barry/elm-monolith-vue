@@ -12,7 +12,8 @@ use Illuminate\Contracts\Database\Query\Builder;
 /**
  * Périmètre de CONSULTATION des dépenses (docs/depenses-visibilite.md, ADR 0065) — seul point qui
  * décide quelles dépenses un utilisateur voit : liste, statistiques, export, impression, fiche,
- * historique, suggestions et dépenses affichées dans les fiches agent, véhicule et propriétaire.
+ * historique, suggestions, dépenses affichées dans les fiches agent, véhicule et propriétaire, et
+ * tableau de bord Stat-Dépenses.
  *
  * - Toutes les agences : vision de toutes les agences (User::voitToutesLesAgences(), ADR 0025/0034)
  *   ou permission du rôle `depenses.lecture_toutes_agences`. Seul ce cas voit les dépenses sans agence.
