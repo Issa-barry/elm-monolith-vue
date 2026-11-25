@@ -26,10 +26,13 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class DepenseListingService
 {
-    /** Index (organization_id, statut, date_depense) de depenses (migration du 30/04/2026). */
+    /**
+     * Index (organization_id, statut, date_depense, …) de depenses, couvrant pour les sommes depuis la
+     * migration du 25/11/2026 (même nom, mêmes trois premières colonnes).
+     */
     public const INDEX_STATUT_DATE = 'depenses_organization_id_statut_date_depense_index';
 
-    /** Filtres qui ont leur propre index : en leur présence, l'index n'est jamais imposé. */
+    /** Filtres qui ont leur propre index : en leur présence, l'index n'est jamais imposé aux statistiques. */
     private const FILTRES_AVEC_INDEX_PROPRE = ['type', 'categorie', 'vehicule', 'vehicule_ids', 'proprietaire_id', 'concerne', 'telephone_concerne'];
 
     public function __construct(
@@ -262,11 +265,27 @@ final class DepenseListingService
             $query->where('montant', (float) $filters['montant']);
         }
 
-        // Avec un filtre de statut, MySQL choisit souvent un index qui ne filtre que l'organisation et
-        // relit chaque dépense (jusqu'à 7 s pour « Validées · Cette année » sur 200 000 dépenses) : on
-        // lui impose (organization_id, statut, date_depense). Jamais avec un filtre qui a son propre
-        // index, où le moteur choisit mieux seul (docs/depenses-filtres.md, « Performances »).
-        // FORCE INDEX est compris par MySQL et MariaDB ; les autres moteurs gardent leur plan.
+        // Aucune indication d'index pour les lignes (page, export, impression) : l'index de tri
+        // (organization_id, date_depense, created_at) donne l'ordre de la liste sans tri, et MySQL comme
+        // MariaDB le choisissent seuls (docs/depenses-filtres.md, « Performances »).
+        return $query;
+    }
+
+    /**
+     * Requête des statistiques de la liste (totaux et compteurs) : les filtres de query(), sans tri.
+     * Avec un filtre de statut, MySQL choisit sinon un index qui ne filtre que l'organisation et relit
+     * chaque dépense (5 s pour « Validées · Cette année » sur 200 000 dépenses) : on lui impose l'index
+     * couvrant (organization_id, statut, date_depense, …), jamais avec un filtre qui a son propre index
+     * (imposeIndexStatut). FORCE INDEX est compris par MySQL et MariaDB ; les autres moteurs gardent
+     * leur plan.
+     *
+     * @param  array<string, mixed>  $filters
+     * @param  list<string>|null  $siteIds
+     */
+    public function queryStatistiques(User $user, array $filters, ?array $siteIds = null, ?Periode $periode = null): Builder
+    {
+        $query = $this->query($user, $filters, $siteIds, $periode)->reorder();
+
         if (self::imposeIndexStatut($filters, $siteIds)
             && in_array($query->getConnection()->getDriverName(), ['mysql', 'mariadb'], true)) {
             $query->getQuery()->forceIndex(self::INDEX_STATUT_DATE);
@@ -276,9 +295,9 @@ final class DepenseListingService
     }
 
     /**
-     * Vrai si la liste doit imposer l'index (organization_id, statut, date_depense) : un filtre de
-     * statut est actif et aucun filtre n'a son propre index — agence (`site_id`), type et catégorie
-     * (`depense_type_id`), personne concernée (`dep_org_ben_idx`).
+     * Vrai si les statistiques de la liste doivent imposer l'index (organization_id, statut,
+     * date_depense, …) : un filtre de statut est actif et aucun filtre n'a son propre index — agence
+     * (`site_id`), type et catégorie (`depense_type_id`), personne concernée (`dep_org_ben_idx`).
      *
      * @param  array<string, mixed>  $filters
      * @param  list<string>|null  $siteIds  agences filtrées ; null = aucune sélection

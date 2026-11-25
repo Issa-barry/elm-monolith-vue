@@ -36,8 +36,8 @@ class IndexDepenseController extends Controller
         }
         $siteIds = $this->perimetre->sitesFiltres($user, (array) $request->input('site_ids', []));
 
-        $statsRow = $this->listing->query($user, $filters, $siteIds, $periode)
-            ->reorder()
+        // Statistiques : seule requête de la liste à indication d'index (DepenseListingService::queryStatistiques).
+        $statsRow = $this->listing->queryStatistiques($user, $filters, $siteIds, $periode)
             ->selectRaw(
                 'COUNT(*) as total,
                 COALESCE(SUM(montant), 0) as montant_total,

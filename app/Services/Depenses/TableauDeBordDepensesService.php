@@ -49,7 +49,10 @@ class TableauDeBordDepensesService
     /** Types affichés dans la répartition ; les suivants sont regroupés dans « Autres types ». */
     public const TYPES_AFFICHES = 7;
 
-    /** Index (organization_id, statut, date_depense) de depenses (migration du 30/04/2026). */
+    /**
+     * Index (organization_id, statut, date_depense, …) de depenses : couvrant pour ces sommes depuis la
+     * migration du 25/11/2026 (même nom, mêmes trois premières colonnes).
+     */
     private const INDEX_PERIODE = 'depenses_organization_id_statut_date_depense_index';
 
     /** Sommes lues par jour : montants et nombres par statut, avances parmi les validées. */

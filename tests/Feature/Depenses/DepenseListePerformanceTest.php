@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
 use App\Support\Depenses\DepenseListingService;
+use App\Support\Depenses\DepensePerimetre;
 use App\Support\Periodes\Periode;
 use App\Support\Permissions\PermissionCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,9 +26,10 @@ use Tests\TestCase;
  * Performances de la liste des dépenses (docs/depenses-filtres.md, « Performances ») :
  * - le total de la pagination est repris des statistiques, sans second COUNT, et reste identique
  *   (total, nombre de pages, lignes de chaque page) quels que soient les filtres ;
- * - l'index (organization_id, statut, date_depense) n'est imposé qu'avec un filtre de statut et
- *   sans filtre d'agence, de type, de catégorie ou de personne concernée, et seulement sous MySQL
- *   et MariaDB : les autres moteurs (SQLite des tests) gardent leur plan.
+ * - l'index (organization_id, statut, date_depense, …) n'est imposé qu'aux statistiques, avec un
+ *   filtre de statut et sans filtre d'agence, de type, de catégorie ou de personne concernée, et
+ *   seulement sous MySQL et MariaDB ; les lignes gardent le plan du moteur (index de tri) ;
+ * - les index de la migration du 25/11/2026 sont en place.
  */
 class DepenseListePerformanceTest extends TestCase
 {
@@ -272,9 +274,63 @@ class DepenseListePerformanceTest extends TestCase
 
     public function test_sous_sqlite_la_requete_garde_son_plan(): void
     {
-        $sql = app(DepenseListingService::class)->query($this->admin, ['statut' => ['valide']])->toSql();
+        $listing = app(DepenseListingService::class);
 
-        $this->assertStringNotContainsStringIgnoringCase('indexed by', $sql);
-        $this->assertStringNotContainsStringIgnoringCase('force index', $sql);
+        foreach ([
+            $listing->query($this->admin, ['statut' => ['valide']])->toSql(),
+            $listing->queryStatistiques($this->admin, ['statut' => ['valide']])->toSql(),
+        ] as $sql) {
+            $this->assertStringNotContainsStringIgnoringCase('indexed by', $sql);
+            $this->assertStringNotContainsStringIgnoringCase('force index', $sql);
+        }
+    }
+
+    /**
+     * SQL réellement produit pour MySQL (grammaire MySQL, aucune connexion ouverte) : l'index n'est
+     * imposé qu'aux statistiques avec un filtre de statut ; les lignes (page, export, impression)
+     * gardent le plan du moteur, qui lit l'ordre dans l'index de tri.
+     */
+    public function test_sous_mysql_l_index_n_est_impose_qu_aux_statistiques_avec_un_statut(): void
+    {
+        $listing = app(DepenseListingService::class);
+        // Rôles et permissions chargés d'avance : construire les requêtes n'interroge pas la base.
+        $this->admin->load('roles', 'permissions');
+        $this->admin->voitToutesLesAgences();
+        app(DepensePerimetre::class)->voitToutesLesAgences($this->admin);
+
+        $defaut = DB::getDefaultConnection();
+        DB::setDefaultConnection('mysql');
+        try {
+            $page = $listing->query($this->admin, ['statut' => 'valide'])->forPage(1, 30)->toSql();
+            $statistiques = $listing->queryStatistiques($this->admin, ['statut' => 'valide'])->toSql();
+            $statistiquesSansStatut = $listing->queryStatistiques($this->admin, [])->toSql();
+            $statistiquesAgence = $listing->queryStatistiques($this->admin, ['statut' => 'valide'], [$this->siteA->id])->toSql();
+        } finally {
+            DB::setDefaultConnection($defaut);
+        }
+
+        $indication = 'force index ('.DepenseListingService::INDEX_STATUT_DATE.')';
+        $this->assertStringContainsString($indication, $statistiques);
+        $this->assertStringNotContainsString('force index', $page);
+        $this->assertStringContainsString('order by `date_depense` desc, `created_at` desc, `id` desc', $page);
+        $this->assertStringNotContainsString('force index', $statistiquesSansStatut);
+        $this->assertStringNotContainsString('force index', $statistiquesAgence);
+        $this->assertStringNotContainsString('order by', $statistiques);
+    }
+
+    /**
+     * Migration du 25/11/2026 : index couvrant des sommes (même nom, mêmes trois premières colonnes)
+     * et index de tri de la liste.
+     */
+    public function test_les_index_de_la_liste_et_des_statistiques_sont_en_place(): void
+    {
+        $colonnes = fn (string $index) => collect(DB::select('PRAGMA index_info('.$index.')'))
+            ->sortBy('seqno')->pluck('name')->values()->all();
+
+        $this->assertSame(
+            ['organization_id', 'statut', 'date_depense', 'deleted_at', 'site_id', 'user_id', 'depense_type_id', 'montant'],
+            $colonnes(DepenseListingService::INDEX_STATUT_DATE),
+        );
+        $this->assertSame(['organization_id', 'date_depense', 'created_at'], $colonnes('dep_org_date_creation_idx'));
     }
 }

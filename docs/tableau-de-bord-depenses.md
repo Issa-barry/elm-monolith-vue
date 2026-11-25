@@ -112,7 +112,7 @@ Mesures du 24/11/2026, MySQL 8.4 local (pool InnoDB de 128 Mo), base temporaire 
 dépenses dont 200 000 pour l'organisation mesurée (≈ 62 000 par an, 20 agences, 40 types), médiane
 de 7 appels du service :
 
-| Scénario | Première version | Version livrée | Avec index couvrant (non livré) |
+| Scénario | Première version | Sans index couvrant | Avec index couvrant (migration du 25/11/2026) |
 |---|---|---|---|
 | Admin · Ce mois | 433 ms | 216 ms | 63 ms |
 | Admin · Cette année | 11 117 ms | 2 215 ms | 911 ms |
@@ -120,7 +120,10 @@ de 7 appels du service :
 | Admin · Cette année · 1 agence | — | 1 742 ms | 403 ms |
 | Manager (2 agences) · Cette année | — | 1 799 ms | 529 ms |
 
-Le temps croît avec le nombre de dépenses de la période. **Index couvrant non livré** : remplacer
-l'index `(organization_id, statut, date_depense)` par `(organization_id, statut, date_depense,
-deleted_at, site_id, user_id, depense_type_id, montant)` rendrait les trois lectures « index
-seulement » (colonne de droite). C'est une migration de production, à décider séparément.
+Le temps croît avec le nombre de dépenses de la période. **Index couvrant** : la migration
+`2026_11_25_100000_optimiser_index_liste_et_statistiques_depenses` étend l'index imposé à
+`(organization_id, statut, date_depense, deleted_at, site_id, user_id, depense_type_id, montant)`,
+même nom : les trois lectures se font dans l'index seul (colonne de droite). Elle ajoute l'index de
+tri de la liste des dépenses, sans lequel l'index couvrant n'est jamais déployé
+([depenses-filtres.md](depenses-filtres.md#performances)). Sous MariaDB 11.8.9 : 46 ms → 30 ms
+(Ce mois), 505 ms → 233 ms (Cette année), 2,6 s → 0,54 s (Toutes les périodes).
