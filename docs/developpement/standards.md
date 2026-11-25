@@ -283,6 +283,9 @@ d'instructions.
   `resources/js/composables/useUrlTab.ts` (ex. [fiche-agent.md](../fiche-agent.md)).
 - **Bouton de confirmation d'une action serveur** : indicateur de chargement et boutons verrouillés
   pendant la requête (ex. [precommandes.md](../precommandes.md)).
+- **Compte utilisateur** (24/11/2026) : photo, identité, Mon profil, Paramètres, Espace client et
+  Déconnexion sont dans la barre supérieure, à droite de la cloche
+  (`resources/js/components/AppTopbarProfile.vue`) ; la barre latérale ne sert qu'à la navigation.
 - **Administration sur téléphone** (24/11/2026) : sous 640 px, le lien « Rôles et permissions » du
   menu Paramètres est masqué (gestion réservée à la tablette et à l'ordinateur) et les sections des
   Paramètres sont proposées dans une liste déroulante groupée

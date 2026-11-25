@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
-import NavUser from '@/components/NavUser.vue';
 import {
     Sidebar,
     SidebarContent,
@@ -624,13 +623,14 @@ const footerNavItems: NavItem[] = [];
             </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent class="mb-4">
+        <!-- Compte utilisateur : dans la barre supérieure (AppTopbarProfile), plus ici. La
+             navigation occupe toute la hauteur et défile jusqu'en bas. -->
+        <SidebarContent class="pb-4">
             <NavMain :items="mainNavItems" />
         </SidebarContent>
 
-        <SidebarFooter>
-            <NavFooter v-if="footerNavItems.length" :items="footerNavItems" />
-            <NavUser />
+        <SidebarFooter v-if="footerNavItems.length">
+            <NavFooter :items="footerNavItems" />
         </SidebarFooter>
     </Sidebar>
     <slot />
