@@ -41,6 +41,7 @@ Décision : [ADR 0065](adr/0065-visibilite-des-depenses-par-agence.md). Code : `
 | Suggestions du filtre (concerné, téléphone, véhicule) | `SuggestionsDepenseController` |
 | Onglet Dépenses de la fiche agent | `AgentDepensesService::pourAgent()` (périmètre du consulteur) |
 | Dépenses des fiches véhicule et propriétaire | `VehiculeController::show`, `ProprietaireController::show` |
+| Tableau de bord Stat-Dépenses `GET /backoffice/tableau-de-bord/depenses` (cartes, graphiques, filtre Agence) | `TableauDeBordDepensesService` ([tableau-de-bord-depenses.md](tableau-de-bord-depenses.md)) |
 
 Les **rapports** (rapport d'activité, rapport par agence, « Ma situation », charges) gardent leur
 propre périmètre (`RapportPerimetreResolver`, [rapports.md](rapports.md)) : inchangés.

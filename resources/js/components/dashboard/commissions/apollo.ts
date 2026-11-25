@@ -5,6 +5,8 @@
  * reprise en px (valeur rem × 14) pour un rendu identique — même méthode que KpiCard.vue.
  */
 
+import { evolutionEnPourcentage } from '@/lib/pourcentages';
+
 /**
  * `.card` d'Apollo (assets/layout/_utils.scss) : fond et bordure des tokens PrimeVue, rayon 12 px,
  * padding 2rem (28 px), ombre --card-shadow du thème clair (aucune en sombre). Le texte hérite de
@@ -36,14 +38,9 @@ export function montantCompact(valeur: number): string {
         .replace(/[  ]/g, ' ');
 }
 
-/** « +12,5 % », « -8 % », « 0 % ». */
+/** « +12,5 % », « -8,0 % », « 0,0 % » : une décimale, comme tous les tableaux de bord. */
 export function evolutionTexte(evolution: number): string {
-    const valeur = new Intl.NumberFormat('fr-FR', {
-        maximumFractionDigits: 1,
-    }).format(Math.abs(evolution));
-    const signe = evolution > 0 ? '+' : evolution < 0 ? '-' : '';
-
-    return `${signe}${valeur} %`;
+    return evolutionEnPourcentage(evolution);
 }
 
 /**

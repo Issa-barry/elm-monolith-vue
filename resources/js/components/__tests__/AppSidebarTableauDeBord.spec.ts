@@ -81,16 +81,18 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
         }
     });
 
-    it('affiche Stat-Ventes puis Stat-Commissions à la place de Ventes et Commissions', () => {
+    it('affiche Stat-Ventes, Stat-Commissions puis Stat-Dépenses dans le Tableau de bord', () => {
         const entrees = tableauDeBord(items(TOUT));
 
         expect(entrees.map((e) => e.title)).toEqual([
             'Stat-Ventes',
             'Stat-Commissions',
+            'Stat-Dépenses',
         ]);
         expect(entrees.map((e) => e.href)).toEqual([
             '/backoffice/dashboard',
             '/backoffice/tableau-de-bord/commissions',
+            '/backoffice/tableau-de-bord/depenses',
         ]);
         expect(entrees.every((e) => e.icon !== undefined)).toBe(true);
     });
@@ -154,5 +156,11 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
                 (e) => e.title,
             ),
         ).toEqual(['Stat-Ventes', 'Stat-Commissions']);
+    });
+
+    it('conserve les permissions : Stat-Dépenses exige depenses.read, comme la liste des dépenses', () => {
+        expect(
+            tableauDeBord(items({ 'depenses.read': true })).map((e) => e.title),
+        ).toEqual(['Stat-Ventes', 'Stat-Dépenses']);
     });
 });

@@ -36,9 +36,22 @@ class IndexDepenseController extends Controller
         }
         $siteIds = $this->perimetre->sitesFiltres($user, (array) $request->input('site_ids', []));
 
+        // Statistiques : seule requête de la liste à indication d'index (DepenseListingService::queryStatistiques).
+        $statsRow = $this->listing->queryStatistiques($user, $filters, $siteIds, $periode)
+            ->selectRaw(
+                'COUNT(*) as total,
+                COALESCE(SUM(montant), 0) as montant_total,
+                SUM(CASE WHEN statut = ? THEN 1 ELSE 0 END) as en_attente,
+                SUM(CASE WHEN statut = ? THEN 1 ELSE 0 END) as validees',
+                [StatutDepense::SOUMIS->value, StatutDepense::VALIDE->value]
+            )
+            ->first();
+
+        // Total de la pagination repris des statistiques (même requête, mêmes filtres) : une lecture
+        // complète de la période en moins à chaque affichage (docs/depenses-filtres.md).
         $paginator = $this->listing->query($user, $filters, $siteIds, $periode)
             ->with(['depenseType', 'site', 'user', 'validateur', 'commandeVente:id,reference', 'transfertLogistique:id,reference'])
-            ->paginate(30)
+            ->paginate(30, total: (int) $statsRow->total)
             ->withQueryString();
 
         [$beneficiaireCache, $vehiculeInfoCache] = $this->listing->preloadBeneficiaires($paginator->items());
@@ -48,17 +61,6 @@ class IndexDepenseController extends Controller
         $types = DepenseType::where('organization_id', $orgId)
             ->ordered()
             ->get(['id', 'libelle', 'categorie']);
-
-        $statsRow = $this->listing->query($user, $filters, $siteIds, $periode)
-            ->reorder()
-            ->selectRaw(
-                'COUNT(*) as total,
-                COALESCE(SUM(montant), 0) as montant_total,
-                SUM(CASE WHEN statut = ? THEN 1 ELSE 0 END) as en_attente,
-                SUM(CASE WHEN statut = ? THEN 1 ELSE 0 END) as validees',
-                [StatutDepense::SOUMIS->value, StatutDepense::VALIDE->value]
-            )
-            ->first();
 
         return Inertia::render('Depenses/Index', [
             'depenses' => $paginator->through(fn (Depense $d) => $this->listing->transform($d, $beneficiaireCache, $vehiculeInfoCache, $user, $droitValidation)),

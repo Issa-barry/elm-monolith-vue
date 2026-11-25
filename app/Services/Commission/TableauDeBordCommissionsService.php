@@ -60,7 +60,7 @@ class TableauDeBordCommissionsService
      *     agence: ?string,
      *     perimetre_limite: bool,
      *     indicateurs: array<string, array{montant: float, evolution: ?float}>,
-     *     taux_paiement: ?int,
+     *     taux_paiement: ?float,
      *     evolution: array{granularite: string, tranches: list<array<string, mixed>>},
      *     repartition: list<array{type: string, label: string, montant: float}>,
      * }
@@ -117,9 +117,10 @@ class TableauDeBordCommissionsService
             'agence' => $agence,
             'perimetre_limite' => ! $user->voitToutesLesAgences(),
             'indicateurs' => $indicateurs,
-            // Part du généré déjà payée, en % entier ; null sans commission sur la période.
+            // Part du généré déjà payée, en % au dixième (affiché avec une décimale, comme tous les
+            // pourcentages des tableaux de bord) ; null sans commission sur la période.
             'taux_paiement' => round($totaux['total_genere'], 2) > 0
-                ? (int) round($totaux['deja_paye'] / $totaux['total_genere'] * 100)
+                ? round($totaux['deja_paye'] / $totaux['total_genere'] * 100, 1)
                 : null,
             'evolution' => [
                 'granularite' => $decoupage->granularite(),

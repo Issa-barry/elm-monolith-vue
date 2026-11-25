@@ -108,7 +108,7 @@ Partition exacte du total, la même que les écrans Comptabilité → Commission
 - « Payées » compte ce qui a été versé **sur les commissions de la période**, quelle que soit la date
   du versement (pas les décaissements faits pendant la période : ceux-ci sont en Trésorerie).
 - Le cercle de la carte « Payées » (Knob d'Apollo) donne le **taux de paiement** : payées ÷ générées,
-  arrondi à l'unité ; « — » sans commission.
+  au dixième (« 77,3 % ») ; « — » sans commission.
 - Montants affichés en abrégé (53,4 M, 1,2 Md) suivis de « GNF » ; le montant exact apparaît au
   survol. Les mini-courbes tracent le montant de l'indicateur à chaque jour (ou mois) de la période.
 
@@ -127,6 +127,13 @@ de la dimension : c'est la seule portée par chaque part (`beneficiaire_type`) s
 supplémentaire, et elle répond à « qui touche les commissions ». La répartition par processus existe
 déjà côté ventes (« Ventes par processus » du tableau de bord des ventes) et reste disponible dans les
 listes de commissions (filtre Processus).
+
+Chaque type affiche sa **part du total de la période**, avec une décimale (« < 0,1 % » pour une
+part non nulle plus petite), dans la légende (« Livreurs (45,3 %) »), dans l'infobulle (montant puis
+pourcentage) et au centre de la part elle-même lorsqu'elle atteint 5 % du total (en dessous, la part
+est trop étroite : le pourcentage reste dans la légende et l'infobulle). Calcul fait dans le
+navigateur à partir des montants renvoyés par le serveur ; les arrondis peuvent ne pas totaliser
+exactement 100,0 %. Cet ajout aux pourcentages est le seul écart avec le camembert d'Apollo.
 
 ## Reprise du template Apollo
 

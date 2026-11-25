@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatPourcentage } from '@/lib/pourcentages';
 import type {
     CompartimentCommission,
     IndicateursCommissions,
@@ -109,9 +110,10 @@ const payees = computed(() => ({
     sens: tendance(props.indicateurs.deja_paye.evolution),
 }));
 
-const knob = computed(() => props.tauxPaiement ?? 0);
+const knob = computed(() => Math.round(props.tauxPaiement ?? 0));
+// Une décimale, comme tous les pourcentages des tableaux de bord (lib/pourcentages).
 const knobTexte = computed(() =>
-    props.tauxPaiement === null ? '—' : `${props.tauxPaiement}%`,
+    props.tauxPaiement === null ? '—' : formatPourcentage(props.tauxPaiement),
 );
 
 function libelleEvolution(evolution: number | null): string {

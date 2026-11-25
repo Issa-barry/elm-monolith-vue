@@ -50,6 +50,12 @@ class ImprimerDepenseController extends Controller
             'sites' => $sites,
             // Bornes réellement appliquées, aussi pour une période rapide (« Ce mois »…).
             'filters' => [...$filters, 'date_debut' => $periode->debut?->toDateString(), 'date_fin' => $periode->fin?->toDateString()],
+            // Statut de l'en-tête : une valeur (envoyée par l'écran) affichée telle quelle, ou plusieurs
+            // (`statut[]=…`, lien ou favori) jointes par des virgules, comme le filtre les applique.
+            'statut_affiche' => collect((array) ($filters['statut'] ?? []))
+                ->flatten()
+                ->filter(fn ($valeur) => is_scalar($valeur) && (string) $valeur !== '')
+                ->implode(', '),
             'org' => $org,
             'printed_by' => $printedBy,
             'generated_at' => $now,

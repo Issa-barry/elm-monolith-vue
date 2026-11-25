@@ -33,7 +33,7 @@ describe('VentesParProcessusWidget', () => {
             'Vente',
         ]);
         expect(texte(lignes[0])).toContain('400 000 GNF');
-        expect(texte(lignes[0])).toContain('51 %');
+        expect(texte(lignes[0])).toContain('51,3 %');
         expect(texte(lignes[2])).toContain('3 factures');
         expect(texte(wrapper)).toContain('780 000 GNF');
     });

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useChartTheme } from '@/composables/useChartTheme';
+import { partEnPourcentage, totalParts } from '@/lib/pourcentages';
 import type { RepartitionCommission } from '@/types/dashboard-commissions';
 import Chart from 'primevue/chart';
 import { ref, watch } from 'vue';
@@ -19,17 +20,77 @@ const { getPrimary, getSurface, isDarkTheme } = useChartTheme();
 const NUANCES = ['700', '400', '100', '500', '200'];
 const NUANCES_SURVOL = ['600', '300', '200', '400', '300'];
 
+// Nuances foncées : pourcentage écrit en blanc ; les autres en primaire 900, pour rester lisible.
+const NUANCES_FONCEES = ['700', '500'];
+// En dessous de 5 % du total, la part est trop étroite pour y écrire : le pourcentage reste
+// dans la légende et l'infobulle.
+const PART_MIN_ETIQUETTE = 0.05;
+
 const pieData = ref({});
 const pieOptions = ref({});
+let couleursEtiquettes: string[] = [];
+
+function totalRepartition(): number {
+    return totalParts(props.repartition);
+}
+
+// Part du total, une décimale (lib/pourcentages) : « 45,3 % », « < 0,1 % » pour une part infime.
+const pourcentage = partEnPourcentage;
+
+// Pourcentage écrit au centre de chaque part assez large (Chart.js n'a pas d'étiquettes natives).
+const pourcentagesSurParts = {
+    id: 'pourcentagesSurParts',
+    afterDatasetsDraw(chart: {
+        ctx: CanvasRenderingContext2D;
+        getDatasetMeta: (i: number) => {
+            data: {
+                tooltipPosition: (final: boolean) => { x: number; y: number };
+            }[];
+        };
+        getDataVisibility: (i: number) => boolean;
+    }) {
+        const total = totalRepartition();
+        if (total <= 0) {
+            return;
+        }
+        const { ctx } = chart;
+        ctx.save();
+        ctx.font = '700 13px Poppins, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        chart.getDatasetMeta(0).data.forEach((arc, i) => {
+            const montant = props.repartition[i]?.montant ?? 0;
+            if (
+                !chart.getDataVisibility(i) ||
+                montant / total < PART_MIN_ETIQUETTE
+            ) {
+                return;
+            }
+            const { x, y } = arc.tooltipPosition(true);
+            ctx.fillStyle = couleursEtiquettes[i] ?? '#ffffff';
+            ctx.fillText(pourcentage(montant, total), x, y);
+        });
+        ctx.restore();
+    },
+};
 
 function initChart() {
     const documentStyle = getComputedStyle(document.documentElement);
     const textColor = documentStyle.getPropertyValue('--p-text-color');
     const nuance = (n: string) =>
         documentStyle.getPropertyValue(`--p-primary-${n}`);
+    const total = totalRepartition();
+
+    couleursEtiquettes = props.repartition.map((_, i) =>
+        NUANCES_FONCEES.includes(NUANCES[i % NUANCES.length])
+            ? '#ffffff'
+            : nuance('900'),
+    );
 
     pieData.value = {
-        labels: props.repartition.map((r) => r.label),
+        labels: props.repartition.map(
+            (r) => `${r.label} (${pourcentage(r.montant, total)})`,
+        ),
         datasets: [
             {
                 data: props.repartition.map((r) => r.montant),
@@ -62,8 +123,11 @@ function initChart() {
             },
             tooltip: {
                 callbacks: {
-                    label(context: { label: string; parsed: number }) {
-                        return `${context.label} : ${montantGnf(context.parsed)}`;
+                    label(context: { dataIndex: number; parsed: number }) {
+                        const libelle =
+                            props.repartition[context.dataIndex]?.label ?? '';
+
+                        return `${libelle} : ${montantGnf(context.parsed)} (${pourcentage(context.parsed, total)})`;
                     },
                 },
             },
@@ -91,6 +155,7 @@ watch(
             :data="pieData"
             :height="300"
             :options="pieOptions"
+            :plugins="[pourcentagesSurParts]"
         ></Chart>
         <div
             v-else

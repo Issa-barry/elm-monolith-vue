@@ -30,3 +30,44 @@ immatriculation) reste accepté par le backend pour les liens existants, mais n'
 
 Tests : `tests/Feature/DepenseTest.php` (section « Filtre Propriétaire → Véhicules »),
 `resources/js/components/filters/__tests__/DataFilters.spec.ts` (« options dépendantes »).
+
+## DEPFIL-002 — Tri et pagination
+
+- Ordre de la liste, de l'export et de l'impression : date de la dépense décroissante, puis date de
+  saisie décroissante, puis identifiant décroissant. L'identifiant (ULID, croissant avec la saisie)
+  départage les dépenses de même date et de même seconde de saisie : leur ordre ne dépend plus du
+  plan d'exécution, et une dépense à la frontière de deux pages n'apparaît jamais deux fois ni ne
+  disparaît (24/11/2026).
+- Pagination de 30 lignes. Le total de la pagination est celui des statistiques affichées au-dessus
+  du tableau (même requête, mêmes filtres) : aucun second `COUNT`.
+
+## Performances
+
+Mesures du 24/11/2026 sur une base de test de 400 000 dépenses (200 000 pour l'organisation
+mesurée), MySQL 8.4 et MariaDB 11.8.9 (moteur de production), médianes de 5 mesures, temps SQL
+d'un affichage de la liste.
+
+- **Total repris des statistiques** (DEPFIL-002) : une lecture complète de la période en moins à
+  chaque affichage.
+- **Index de la liste** (migration `2026_11_25_100000_optimiser_index_liste_et_statistiques_depenses`) :
+  - **tri** `(organization_id, date_depense, created_at)` : InnoDB y ajoute la clé primaire, donc
+    l'ordre complet date, saisie, identifiant (DEPFIL-002) est lu dans l'index, sans tri. Page de la
+    liste : de 0,04–2 s à 1–40 ms selon les filtres, MySQL comme MariaDB ;
+  - **couvrant** `(organization_id, statut, date_depense, deleted_at, site_id, user_id,
+    depense_type_id, montant)` : même nom et mêmes trois premières colonnes que l'index d'origine ;
+    les statistiques et Stat-Dépenses se lisent dans l'index seul.
+  - Jamais l'un sans l'autre : l'index couvrant seul fait choisir aux deux moteurs un mauvais index
+    pour la page (jusqu'à 10 s). Migration en ligne (`ALGORITHM=INPLACE, LOCK=NONE`) : 8 s pour
+    400 000 dépenses sous MariaDB 11.8.9, lectures et écritures permises ; retour arrière exact.
+    Coût : +47 Mo d'index pour 400 000 dépenses, moins d'1 ms par écriture.
+- **Index imposé aux statistiques avec un filtre de statut**
+  (`DepenseListingService::queryStatistiques`, règle `imposeIndexStatut`) : avec un statut et sans
+  filtre d'agence, de type, de catégorie ni de personne concernée, les statistiques imposent l'index
+  couvrant (`FORCE INDEX`, MySQL et MariaDB seulement). Laissé libre, MySQL choisit un index qui ne
+  filtre que l'organisation et relit chaque dépense (5 s au lieu de 0,2 s pour « Validées · Cette
+  année »). Les lignes (page, export, impression) ne reçoivent aucune indication : l'index de tri
+  leur suffit, et l'index de statut imposé y ralentissait la page (1,6 s au lieu de 4 ms). Les
+  filtres d'agence, de type et de personne concernée ont leur propre index, que le moteur choisit
+  mieux seul.
+- Lignes, montants, compteurs et pagination identiques avant et après, sur 14 scénarios et les
+  deux moteurs (`tests/Feature/Depenses/DepenseListePerformanceTest.php` pour les tests).

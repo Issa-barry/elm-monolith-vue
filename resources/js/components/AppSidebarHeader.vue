@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppTopbarProfile from '@/components/AppTopbarProfile.vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import EnvironmentBadge from '@/components/EnvironmentBadge.vue';
 import { Button } from '@/components/ui/button';
@@ -232,7 +233,7 @@ onMounted(() => {
                     <InputText
                         v-model="searchQuery"
                         placeholder="Recherche"
-                        class="w-48 rounded-full text-sm sm:w-64 lg:w-80"
+                        class="w-36 rounded-full text-sm sm:w-64 lg:w-80"
                         data-testid="global-search"
                         @keydown.escape="closeSearch"
                     />
@@ -540,6 +541,9 @@ onMounted(() => {
                     </div>
                 </DropdownMenuContent>
             </DropdownMenu>
+
+            <!-- Profil utilisateur -->
+            <AppTopbarProfile />
         </div>
     </header>
 </template>

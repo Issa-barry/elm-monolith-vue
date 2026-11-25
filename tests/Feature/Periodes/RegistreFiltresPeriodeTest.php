@@ -57,6 +57,7 @@ class RegistreFiltresPeriodeTest extends TestCase
         'ma-situation.export' => 'Ma situation — export',
         'dashboard' => 'Tableau de bord (Stat-Ventes)',
         'dashboard.commissions' => 'Tableau de bord des commissions (Stat-Commissions)',
+        'dashboard.depenses' => 'Tableau de bord des dépenses (Stat-Dépenses)',
         'absences.index' => 'Absences des salariés',
     ];
 
@@ -152,12 +153,12 @@ class RegistreFiltresPeriodeTest extends TestCase
     }
 
     /**
-     * Les deux tableaux de bord proposent le même filtre : périodes rapides, trimestres, semestres,
+     * Les tableaux de bord proposent le même filtre : périodes rapides, trimestres, semestres,
      * toutes les périodes et dates libres (Periode::TABLEAU_DE_BORD).
      */
     public function test_les_tableaux_de_bord_proposent_les_memes_periodes_et_les_dates_libres(): void
     {
-        foreach (['dashboard', 'dashboard.commissions'] as $route) {
+        foreach (['dashboard', 'dashboard.commissions', 'dashboard.depenses'] as $route) {
             foreach (['hier', 't1', 's2', 'annee_precedente', 'mois_dernier', 'tout'] as $cle) {
                 $this->actingAs($this->admin)->get(route($route, ['periode' => $cle]))->assertOk()->assertSessionHasNoErrors();
             }
