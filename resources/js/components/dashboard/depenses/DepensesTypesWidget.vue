@@ -8,6 +8,10 @@ import type { PartDepenses } from '@/types/dashboard-depenses';
 import Chart from 'primevue/chart';
 import { computed, ref, watch } from 'vue';
 import {
+    couleursEtiquettes as calculerCouleursEtiquettes,
+    pluginPourcentagesSurParts,
+} from '../camembert';
+import {
     CARTE_APOLLO,
     TITRE_GRAPHIQUE_APOLLO,
     montantGnf,
@@ -28,8 +32,6 @@ const NUANCES = ['700', '400', '100', '500', '200', '800', '300', '600'];
 const NUANCES_SURVOL = ['600', '300', '200', '400', '300', '700', '200', '500'];
 // Nuances foncées : pourcentage écrit en blanc ; les autres en primaire 900.
 const NUANCES_FONCEES = ['700', '500', '800', '600'];
-// En dessous de 5 % du total, la part est trop étroite pour y écrire.
-const PART_MIN_ETIQUETTE = 0.05;
 
 const pieData = ref({});
 const pieOptions = ref({});
@@ -46,42 +48,12 @@ const legende = computed(() => {
     }));
 });
 
-// Pourcentage écrit au centre de chaque part assez large (Chart.js n'a pas d'étiquettes natives).
-const pourcentagesSurParts = {
-    id: 'pourcentagesSurPartsDepenses',
-    afterDatasetsDraw(chart: {
-        ctx: CanvasRenderingContext2D;
-        getDatasetMeta: (i: number) => {
-            data: {
-                tooltipPosition: (final: boolean) => { x: number; y: number };
-            }[];
-        };
-        getDataVisibility: (i: number) => boolean;
-    }) {
-        const total = totalParts(props.repartition);
-        if (total <= 0) {
-            return;
-        }
-        const { ctx } = chart;
-        ctx.save();
-        ctx.font = '700 13px Poppins, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        chart.getDatasetMeta(0).data.forEach((arc, i) => {
-            const montant = props.repartition[i]?.montant ?? 0;
-            if (
-                !chart.getDataVisibility(i) ||
-                montant / total < PART_MIN_ETIQUETTE
-            ) {
-                return;
-            }
-            const { x, y } = arc.tooltipPosition(true);
-            ctx.fillStyle = couleursEtiquettes[i] ?? '#ffffff';
-            ctx.fillText(pourcentage(montant, total), x, y);
-        });
-        ctx.restore();
-    },
-};
+// Pourcentage écrit sur chaque part d'au moins 5 % (module commun des camemberts).
+const pourcentagesSurParts = pluginPourcentagesSurParts(
+    'pourcentagesSurPartsDepenses',
+    () => props.repartition,
+    () => couleursEtiquettes,
+);
 
 function initChart() {
     const documentStyle = getComputedStyle(document.documentElement);
@@ -89,10 +61,11 @@ function initChart() {
         documentStyle.getPropertyValue(`--p-primary-${n}`);
     const total = totalParts(props.repartition);
 
-    couleursEtiquettes = props.repartition.map((_, i) =>
-        NUANCES_FONCEES.includes(NUANCES[i % NUANCES.length])
-            ? '#ffffff'
-            : nuance('900'),
+    couleursEtiquettes = calculerCouleursEtiquettes(
+        props.repartition.length,
+        NUANCES,
+        NUANCES_FONCEES,
+        nuance('900'),
     );
     couleurs.value = props.repartition.map((_, i) =>
         nuance(NUANCES[i % NUANCES.length]),
