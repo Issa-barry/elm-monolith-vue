@@ -279,6 +279,11 @@ d'instructions.
   `resources/js/composables/useUrlTab.ts` (ex. [fiche-agent.md](../fiche-agent.md)).
 - **Bouton de confirmation d'une action serveur** : indicateur de chargement et boutons verrouillés
   pendant la requête (ex. [precommandes.md](../precommandes.md)).
+- **Administration sur téléphone** (24/11/2026) : sous 640 px, le lien « Rôles et permissions » du
+  menu Paramètres est masqué (gestion réservée à la tablette et à l'ordinateur) et les sections des
+  Paramètres sont proposées dans une liste déroulante groupée
+  (`resources/js/layouts/settings/Layout.vue`). Choix d'ergonomie uniquement : permissions, routes
+  et contrôles serveur inchangés (B1).
 
 ---
 
