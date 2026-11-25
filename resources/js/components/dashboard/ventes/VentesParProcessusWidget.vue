@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { partEnPourcentage } from '@/lib/pourcentages';
 import { computed } from 'vue';
 
 interface ProcessusData {
@@ -25,10 +26,8 @@ const lignes = computed(() => {
         .map((p) => ({
             ...p,
             largeur: max > 0 ? (p.montant / max) * 100 : 0,
-            part:
-                total.value > 0
-                    ? Math.round((p.montant / total.value) * 100)
-                    : 0,
+            // Part du total, une décimale comme tous les tableaux de bord (« 51,3 % »).
+            part: partEnPourcentage(p.montant, total.value),
         }));
 });
 
@@ -52,7 +51,7 @@ function gnf(val: number): string {
             <li
                 v-for="p in lignes"
                 :key="p.code"
-                :title="`${p.label} : ${gnf(p.montant)} — ${p.nb_factures} facture${p.nb_factures > 1 ? 's' : ''}, ${p.part} % du total`"
+                :title="`${p.label} : ${gnf(p.montant)} — ${p.nb_factures} facture${p.nb_factures > 1 ? 's' : ''}, ${p.part} du total`"
             >
                 <div class="mb-1.5 flex items-baseline justify-between gap-3">
                     <span class="text-sm font-medium">{{ p.label }}</span>
@@ -75,7 +74,7 @@ function gnf(val: number): string {
                     {{ p.nb_factures }} facture{{
                         p.nb_factures > 1 ? 's' : ''
                     }}
-                    · {{ p.part }} %
+                    · {{ p.part }}
                 </div>
             </li>
         </ul>

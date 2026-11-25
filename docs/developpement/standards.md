@@ -250,6 +250,10 @@ dérogation valide + commande autorisée → **avertissement**, pas danger.
   ([même document](../ui-cartes-et-informations.md#exception--tableaux-de-bord-reproduits-dapollo)).
 - Tableaux : les statuts dans les cellules suivent A1, les filtres A2. Aucune autre règle propre
   aux tableaux n'est fixée à ce jour.
+- **Pourcentages des tableaux de bord** (24/11/2026) : toujours une décimale, virgule française
+  (« 56,7 % », « +12,5 % », « 100,0 % »), via `resources/js/lib/pourcentages.ts` — jamais de
+  formatage local. Calculés sur les valeurs réelles ; seul l'affichage est arrondi, aucun total
+  n'est ajusté pour atteindre 100,0 %.
 - Réutiliser les composants partagés et les styles existants avant d'en créer de nouveaux.
 
 ### A10. Paramètres et choix Oui / Non

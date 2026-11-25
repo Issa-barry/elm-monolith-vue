@@ -29,7 +29,7 @@ vi.mock('@/composables/useChartTheme', async () => {
 
 const ChartStub = defineComponent({
     name: 'ChartStub',
-    props: ['type', 'data', 'options', 'height'],
+    props: ['type', 'data', 'options', 'height', 'plugins'],
     setup: (props) => () => h('canvas', { 'data-type': props.type }),
 });
 
@@ -80,8 +80,8 @@ describe('apollo.ts', () => {
 
     it('écrit les évolutions avec leur signe', () => {
         expect(evolutionTexte(12.5)).toBe('+12,5 %');
-        expect(evolutionTexte(-8)).toBe('-8 %');
-        expect(evolutionTexte(0)).toBe('0 %');
+        expect(evolutionTexte(-8)).toBe('-8,0 %');
+        expect(evolutionTexte(0)).toBe('0,0 %');
     });
 
     it('trace la courbe dans la viewBox, plate pour une série constante ou d’un point', () => {
@@ -130,7 +130,7 @@ describe('CommissionsStatsWidget', () => {
             'pi-arrow-up',
         );
 
-        expect(evolution('en_attente_periode').text()).toBe('-8 %');
+        expect(evolution('en_attente_periode').text()).toBe('-8,0 %');
         expect(evolution('en_attente_periode').classes()).toContain(
             'text-[var(--p-pink-500)]',
         );
@@ -141,7 +141,7 @@ describe('CommissionsStatsWidget', () => {
         // Aucune flèche ni pourcentage inventé sans période de comparaison.
         expect(evolution('payable').text()).toBe('—');
         expect(evolution('payable').find('i').exists()).toBe(false);
-        expect(evolution('deja_paye').text()).toBe('0 %');
+        expect(evolution('deja_paye').text()).toBe('0,0 %');
         expect(evolution('deja_paye').find('i').exists()).toBe(false);
     });
 
@@ -167,7 +167,7 @@ describe('CommissionsStatsWidget', () => {
     });
 
     it('le cercle de la carte Payées donne le taux de paiement, vide sans commission', () => {
-        expect(monter(97).find('[data-knob]').text()).toBe('97%');
+        expect(monter(97).find('[data-knob]').text()).toBe('97,0 %');
         expect(monter(null).find('[data-knob]').text()).toBe('—');
     });
 });
@@ -223,8 +223,69 @@ describe('CommissionsRepartitionWidget', () => {
             labels: string[];
             datasets: { data: number[] }[];
         };
-        expect(data.labels).toEqual(['Sites', 'Livreurs']);
+        expect(data.labels).toEqual(['Sites (66,7 %)', 'Livreurs (33,3 %)']);
         expect(data.datasets[0].data).toEqual([300, 150]);
+    });
+
+    it('affiche le pourcentage dans l’infobulle et « < 0,1 % » pour une part infime', () => {
+        const wrapper = mount(CommissionsRepartitionWidget, {
+            props: {
+                repartition: [
+                    { type: 'livreur', label: 'Livreurs', montant: 9_999 },
+                    { type: 'parrain', label: 'Parrains', montant: 1 },
+                ],
+            },
+            global: { stubs },
+        });
+
+        const chart = wrapper.findComponent(ChartStub);
+        expect((chart.props('data') as { labels: string[] }).labels).toEqual([
+            'Livreurs (100,0 %)',
+            'Parrains (< 0,1 %)',
+        ]);
+        const options = chart.props('options') as {
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: (c: {
+                            dataIndex: number;
+                            parsed: number;
+                        }) => string;
+                    };
+                };
+            };
+        };
+        expect(
+            options.plugins.tooltip.callbacks
+                .label({ dataIndex: 1, parsed: 1 })
+                .replace(/\s/g, ' '),
+        ).toBe('Parrains : 1 GNF (< 0,1 %)');
+    });
+
+    it('écrit le pourcentage sur les parts d’au moins 5 % seulement', () => {
+        const wrapper = mount(CommissionsRepartitionWidget, {
+            props: {
+                repartition: [
+                    { type: 'livreur', label: 'Livreurs', montant: 960 },
+                    { type: 'parrain', label: 'Parrains', montant: 40 },
+                ],
+            },
+            global: { stubs },
+        });
+
+        const [plugin] = wrapper.findComponent(ChartStub).props('plugins') as {
+            afterDatasetsDraw: (chart: unknown) => void;
+        }[];
+        const fillText = vi.fn();
+        const arc = { tooltipPosition: () => ({ x: 10, y: 20 }) };
+        plugin.afterDatasetsDraw({
+            ctx: { save: vi.fn(), restore: vi.fn(), fillText },
+            getDatasetMeta: () => ({ data: [arc, arc] }),
+            getDataVisibility: () => true,
+        });
+
+        expect(fillText).toHaveBeenCalledTimes(1);
+        expect(fillText).toHaveBeenCalledWith('96,0 %', 10, 20);
     });
 
     it('affiche un état vide sans commission sur la période', () => {
