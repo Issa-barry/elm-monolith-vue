@@ -22,6 +22,7 @@ import {
     ChartColumn,
     Contact,
     HandCoins,
+    IdCard,
     Layers,
     LayoutGrid,
     MessageSquare,
@@ -222,6 +223,21 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Stat-Stock',
             href: '/backoffice/tableau-de-bord/stock',
             icon: Warehouse,
+            group: 'Tableau de bord',
+        });
+
+    // Ouvert à qui consulte une des listes RH ; chaque bloc suit la permission de sa liste
+    // (docs/tableau-de-bord-rh.md).
+    if (
+        moduleActive('rh') &&
+        (can('rh-employes.read') ||
+            can('rh-contrats.read') ||
+            can('rh-absences.read'))
+    )
+        items.push({
+            title: 'Stat-RH',
+            href: '/backoffice/tableau-de-bord/rh',
+            icon: IdCard,
             group: 'Tableau de bord',
         });
 

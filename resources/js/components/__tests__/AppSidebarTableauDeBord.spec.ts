@@ -81,7 +81,7 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
         }
     });
 
-    it('affiche Stat-Ventes, Stat-Commissions, Stat-Dépenses puis Stat-Stock dans le Tableau de bord', () => {
+    it('affiche Stat-Ventes, Stat-Commissions, Stat-Dépenses, Stat-Stock puis Stat-RH dans le Tableau de bord', () => {
         const entrees = tableauDeBord(items(TOUT));
 
         expect(entrees.map((e) => e.title)).toEqual([
@@ -89,12 +89,14 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
             'Stat-Commissions',
             'Stat-Dépenses',
             'Stat-Stock',
+            'Stat-RH',
         ]);
         expect(entrees.map((e) => e.href)).toEqual([
             '/backoffice/dashboard',
             '/backoffice/tableau-de-bord/commissions',
             '/backoffice/tableau-de-bord/depenses',
             '/backoffice/tableau-de-bord/stock',
+            '/backoffice/tableau-de-bord/rh',
         ]);
         expect(entrees.every((e) => e.icon !== undefined)).toBe(true);
     });
@@ -170,5 +172,25 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
         expect(
             tableauDeBord(items({ 'produits.read': true })).map((e) => e.title),
         ).toEqual(['Stat-Ventes', 'Stat-Stock']);
+    });
+
+    it('ouvre Stat-RH avec l’une des listes Employés, Contrats ou Absences', () => {
+        for (const permission of [
+            'rh-employes.read',
+            'rh-contrats.read',
+            'rh-absences.read',
+        ]) {
+            expect(
+                tableauDeBord(items({ [permission]: true })).map(
+                    (e) => e.title,
+                ),
+                permission,
+            ).toEqual(['Stat-Ventes', 'Stat-RH']);
+        }
+        expect(
+            tableauDeBord(items({ 'rh-transmissions-paie.read': true })).map(
+                (e) => e.title,
+            ),
+        ).toEqual(['Stat-Ventes']);
     });
 });

@@ -155,6 +155,7 @@ use App\Http\Controllers\Divers\IndexCommunicationController;
 use App\Http\Controllers\Divers\IndexDashboardCommissionsController;
 use App\Http\Controllers\Divers\IndexDashboardController;
 use App\Http\Controllers\Divers\IndexDashboardDepensesController;
+use App\Http\Controllers\Divers\IndexDashboardRhController;
 use App\Http\Controllers\Divers\IndexDashboardStockController;
 use App\Http\Controllers\Divers\MarkReadContactController;
 use App\Http\Controllers\Divers\UnreadCountContactController;
@@ -493,6 +494,11 @@ Route::prefix('backoffice')->group(function () {
         Route::get('tableau-de-bord/stock', IndexDashboardStockController::class)
             ->middleware('module:'.ModuleFeature::PRODUITS)
             ->name('dashboard.stock');
+
+        // Tableau de bord RH — un bloc par liste RH consultable (Employés, Contrats, Absences), même périmètre d'agences.
+        Route::get('tableau-de-bord/rh', IndexDashboardRhController::class)
+            ->middleware('module:'.ModuleFeature::RH)
+            ->name('dashboard.rh');
 
         // Rapports (docs/rapports.md) — permission et périmètre vérifiés par RapportPerimetreResolver.
         Route::get('ma-situation', IndexMaSituationController::class)->name('ma-situation');
