@@ -32,6 +32,7 @@ import {
     Truck,
     UsersRound,
     Wallet,
+    Warehouse,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
@@ -212,6 +213,15 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Stat-Dépenses',
             href: '/backoffice/tableau-de-bord/depenses',
             icon: Wallet,
+            group: 'Tableau de bord',
+        });
+
+    // Même droit et même module que la page Stock (docs/tableau-de-bord-stock.md).
+    if (canSee('produits.read', 'produits'))
+        items.push({
+            title: 'Stat-Stock',
+            href: '/backoffice/tableau-de-bord/stock',
+            icon: Warehouse,
             group: 'Tableau de bord',
         });
 

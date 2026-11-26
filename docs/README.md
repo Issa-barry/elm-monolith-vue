@@ -78,6 +78,7 @@ Chaque document technique indique en tête son **statut** :
 - [Retour au site source sur un transfert](retour-transfert.md)
 - [Disponibilité et alerte de stock faible](stock-alertes.md)
 - [Date métier des mouvements de stock](stock-mouvements-date.md)
+- [Tableau de bord du stock](tableau-de-bord-stock.md)
 - [Capacités de chargement des véhicules](capacites-vehicule.md)
 - [Parrainage véhicule](parrainage-vehicule.md)
 - [Import de mise à jour des véhicules](import-vehicules-maj.md)

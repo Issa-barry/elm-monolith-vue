@@ -71,7 +71,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 </script>
 
 <template>
-    <Head title="Tableau de bord — Dépenses" />
+    <Head><title>Tableau de bord — Dépenses</title></Head>
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 p-4 sm:p-6">

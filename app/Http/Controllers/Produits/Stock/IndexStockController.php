@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Produits\Stock;
 
-use App\Enums\ProduitStatut;
 use App\Enums\StockStatut;
 use App\Http\Controllers\Controller;
 use App\Models\Categorie;
@@ -11,16 +10,15 @@ use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
-use App\Models\User;
 use App\Services\DroitAjustementStockService;
 use App\Services\MouvementStockMotifService;
 use App\Services\SavedFilterService;
 use App\Services\StockStatutService;
+use App\Support\Stock\EtatStock;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -41,7 +39,7 @@ class IndexStockController extends Controller
 
         $user = $request->user();
         $orgId = (string) $user->organization_id;
-        $sites = $this->sitesConsultables($user, $orgId);
+        $sites = EtatStock::sitesConsultables($user, $orgId);
         $siteIds = $this->siteIdsFiltres($request, $sites, $user->voitToutesLesAgences());
         $seuilOrganisation = Parametre::getSeuilStockFaible($orgId);
 
@@ -82,74 +80,13 @@ class IndexStockController extends Controller
 
     private function stockQuery(string $orgId, array $siteIds, int $seuilOrganisation, array $filters): Builder
     {
-        $physique = 'COALESCE(vs.qte_stock, 0)';
-        $reserve = 'COALESCE(vs.qte_reservee, 0)';
-        // « Disponible » = ce qui reste réellement vendable — physique moins réservé (commandes
-        // vente confirmées, pas encore chargées, cf. StockReservationService). L'État affiché
-        // ci-dessous se base sur CETTE quantité, jamais le physique brut : un stock physique
-        // positif mais entièrement réservé doit apparaître en Rupture, pas Disponible (24/08/2026,
-        // même bug que la page Commande CMD-* : deux commandes pouvaient toutes deux promettre le
-        // même stock tant que rien n'était retenu entre la confirmation et le chargement).
-        $quantite = "({$physique} - {$reserve})";
-        // Seuil résolu PAR SITE (produit_seuils_alerte, cf. StockStatutService::
-        // seuilEffectifPourSite()) — jamais l'ancienne colonne p.seuil_alerte_stock (unique,
-        // conservée en base à titre historique) : le seuil de Matoto ne doit jamais servir à
-        // contrôler le stock de CBA.
-        $seuil = 'COALESCE(psa.seuil_alerte_stock, ?)';
-        // DISPONIBILITÉ résolue PAR SITE (cf. StockStatutService::disponiblePourSite()) — défaut
-        // VRAI (absence de ligne psa = disponible partout, mode "Tous les sites") : un site non
-        // disponible n'a aucune rupture "métier" possible, quel que soit son stock physique.
-        $disponible = 'COALESCE(psa.disponible, 1)';
-        // ALERTE résolue PAR SITE (cf. StockStatutService::alerteActivePourSite()) — défaut FAUX,
-        // jamais implicite. N'intervient PAS dans le statut affiché ici (page opérationnelle : le
-        // stock réel reste affiché même sans alerte active) ni dans les filtres ci-dessous —
-        // uniquement exposée par ligne pour un éventuel affichage.
-        $alerteActive = 'COALESCE(psa.actif, 0)';
+        // Requête et expressions partagées avec Stat-Stock (EtatStock) : quantités physique /
+        // réservée / disponible, seuil, disponibilité et alerte résolus PAR SITE.
+        $quantite = EtatStock::QUANTITE;
+        $seuil = EtatStock::SEUIL;
+        $disponible = EtatStock::DISPONIBLE;
 
-        $query = DB::table('produit_variantes as pv')
-            ->join('produits as p', 'p.id', '=', 'pv.produit_id')
-            ->join('produit_types as pt', 'pt.id', '=', 'p.produit_type_id')
-            ->join('sites as s', function ($join) use ($orgId, $siteIds) {
-                $join->where('s.organization_id', '=', $orgId)
-                    ->whereNull('s.deleted_at')
-                    ->whereIn('s.id', $siteIds);
-            })
-            ->leftJoin('categories as c', 'c.id', '=', 'p.categorie_id')
-            ->leftJoin('variante_stocks as vs', function ($join) {
-                $join->on('vs.produit_variante_id', '=', 'pv.id')
-                    ->on('vs.site_id', '=', 's.id');
-            })
-            ->leftJoin('produit_seuils_alerte as psa', function ($join) {
-                $join->on('psa.produit_id', '=', 'p.id')
-                    ->on('psa.site_id', '=', 's.id');
-            })
-            ->where('p.organization_id', $orgId)
-            ->where('pv.organization_id', $orgId)
-            ->where('pt.organization_id', $orgId)
-            ->where('pt.gere_stock', true)
-            ->where('p.statut', '!=', ProduitStatut::ARCHIVE->value)
-            ->where('pv.is_active', true)
-            ->whereNull('p.deleted_at')
-            ->whereNull('pv.deleted_at')
-            ->select([
-                'p.id as produit_id',
-                'p.nom as produit_nom',
-                'p.categorie_id',
-                'c.nom as categorie_nom',
-                'pv.id as variante_id',
-                'pv.sku',
-                'pv.is_default',
-                'pv.combo_hash',
-                's.id as site_id',
-                's.nom as site_nom',
-                's.code as site_code',
-            ])
-            ->selectRaw("{$quantite} as qte_disponible")
-            ->selectRaw("{$physique} as qte_physique")
-            ->selectRaw("{$reserve} as qte_reservee")
-            ->selectRaw("{$seuil} as seuil_effectif", [$seuilOrganisation])
-            ->selectRaw("{$disponible} as disponible_sur_site")
-            ->selectRaw("{$alerteActive} as alerte_active");
+        $query = EtatStock::requete($orgId, $siteIds, $seuilOrganisation);
 
         if ($filters['search'] !== '') {
             $search = $filters['search'];
@@ -243,7 +180,7 @@ class IndexStockController extends Controller
                 'categorie_id' => $row->categorie_id,
                 'categorie_nom' => $row->categorie_nom,
                 'variante_id' => $row->variante_id,
-                'variante_libelle' => $this->libelleVariante($variante),
+                'variante_libelle' => EtatStock::libelleVariante($variante),
                 'is_default' => (bool) $row->is_default,
                 'sku' => $row->sku,
                 'site_id' => $row->site_id,
@@ -272,37 +209,6 @@ class IndexStockController extends Controller
                 'can_ajuster' => $sitesAjustablesIds->contains((string) $row->site_id),
             ];
         }));
-    }
-
-    private function sitesConsultables(User $user, string $orgId): Collection
-    {
-        $query = Site::where('organization_id', $orgId)->orderBy('nom');
-
-        if (! $user->voitToutesLesAgences()) {
-            $query->whereIn('id', $user->sites()->where('sites.organization_id', $orgId)->pluck('sites.id'));
-        }
-
-        return $query->get(['id', 'nom', 'code']);
-    }
-
-    private function libelleVariante(?ProduitVariante $variante): string
-    {
-        if (! $variante || $variante->combo_hash === ProduitVariante::COMBO_HASH_DEFAUT) {
-            return 'Variante par défaut';
-        }
-
-        $libelle = $variante->valeurs
-            ->sort(fn ($a, $b) => [
-                $a->option?->position ?? 0,
-                $a->position,
-            ] <=> [
-                $b->option?->position ?? 0,
-                $b->position,
-            ])
-            ->pluck('valeur')
-            ->implode(' / ');
-
-        return $libelle !== '' ? $libelle : 'Variante';
     }
 
     private function siteIdsFiltres(Request $request, Collection $sites, bool $toutesAgences): array
