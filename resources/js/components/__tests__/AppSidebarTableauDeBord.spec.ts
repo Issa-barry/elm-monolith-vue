@@ -81,7 +81,7 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
         }
     });
 
-    it('affiche Stat-Ventes, Stat-Commissions, Stat-Dépenses, Stat-Stock puis Stat-RH dans le Tableau de bord', () => {
+    it('affiche Stat-Ventes, Stat-Commissions, Stat-Dépenses, Stat-Stock, Stat-RH puis Stat-Véhicules dans le Tableau de bord', () => {
         const entrees = tableauDeBord(items(TOUT));
 
         expect(entrees.map((e) => e.title)).toEqual([
@@ -90,6 +90,7 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
             'Stat-Dépenses',
             'Stat-Stock',
             'Stat-RH',
+            'Stat-Véhicules',
         ]);
         expect(entrees.map((e) => e.href)).toEqual([
             '/backoffice/dashboard',
@@ -97,6 +98,7 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
             '/backoffice/tableau-de-bord/depenses',
             '/backoffice/tableau-de-bord/stock',
             '/backoffice/tableau-de-bord/rh',
+            '/backoffice/tableau-de-bord/vehicules',
         ]);
         expect(entrees.every((e) => e.icon !== undefined)).toBe(true);
     });
@@ -191,6 +193,20 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
             tableauDeBord(items({ 'rh-transmissions-paie.read': true })).map(
                 (e) => e.title,
             ),
+        ).toEqual(['Stat-Ventes']);
+    });
+
+    it('conserve les permissions : Stat-Véhicules exige vehicules.read, comme la liste des véhicules', () => {
+        expect(
+            tableauDeBord(items({ 'vehicules.read': true })).map(
+                (e) => e.title,
+            ),
+        ).toEqual(['Stat-Ventes', 'Stat-Véhicules']);
+        // Lire les ventes ou les dépenses n'ouvre pas le tableau de bord du parc.
+        expect(
+            tableauDeBord(
+                items({ 'ventes.read': true, 'logistique.read': true }),
+            ).map((e) => e.title),
         ).toEqual(['Stat-Ventes']);
     });
 });

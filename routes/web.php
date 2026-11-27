@@ -157,6 +157,7 @@ use App\Http\Controllers\Divers\IndexDashboardController;
 use App\Http\Controllers\Divers\IndexDashboardDepensesController;
 use App\Http\Controllers\Divers\IndexDashboardRhController;
 use App\Http\Controllers\Divers\IndexDashboardStockController;
+use App\Http\Controllers\Divers\IndexDashboardVehiculesController;
 use App\Http\Controllers\Divers\MarkReadContactController;
 use App\Http\Controllers\Divers\UnreadCountContactController;
 use App\Http\Controllers\EmployeController;
@@ -499,6 +500,11 @@ Route::prefix('backoffice')->group(function () {
         Route::get('tableau-de-bord/rh', IndexDashboardRhController::class)
             ->middleware('module:'.ModuleFeature::RH)
             ->name('dashboard.rh');
+
+        // Tableau de bord du parc — lecture des véhicules ; chaque bloc d'activité ou de dépenses suit la permission et le module de sa source.
+        Route::get('tableau-de-bord/vehicules', IndexDashboardVehiculesController::class)
+            ->middleware('module:'.ModuleFeature::VEHICULES)
+            ->name('dashboard.vehicules');
 
         // Rapports (docs/rapports.md) — permission et périmètre vérifiés par RapportPerimetreResolver.
         Route::get('ma-situation', IndexMaSituationController::class)->name('ma-situation');

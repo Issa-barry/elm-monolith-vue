@@ -241,6 +241,16 @@ const mainNavItems = computed((): NavItem[] => {
             group: 'Tableau de bord',
         });
 
+    // Même droit et même module que la liste des véhicules ; chaque bloc d'activité ou de
+    // dépenses suit la permission de sa source (docs/tableau-de-bord-vehicules.md).
+    if (canSee('vehicules.read', 'vehicules'))
+        items.push({
+            title: 'Stat-Véhicules',
+            href: '/backoffice/tableau-de-bord/vehicules',
+            icon: Car,
+            group: 'Tableau de bord',
+        });
+
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
             { title: 'Commandes', href: '/backoffice/ventes' },
