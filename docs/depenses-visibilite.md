@@ -40,7 +40,14 @@ Décision : [ADR 0065](adr/0065-visibilite-des-depenses-par-agence.md). Code : `
 | Fiche, modification, soumission, suppression, historique | `DepensePolicy::view/update/delete` |
 | Suggestions du filtre (concerné, téléphone, véhicule) | `SuggestionsDepenseController` |
 | Onglet Dépenses de la fiche agent | `AgentDepensesService::pourAgent()` (périmètre du consulteur) |
-| Dépenses des fiches véhicule et propriétaire | `VehiculeController::show`, `ProprietaireController::show` |
+| Onglet Dépenses de la fiche véhicule : exige aussi `depenses.read` et le module Dépenses, onglet masqué sinon (27/11/2026, [vehicule-situation-ventes.md](vehicule-situation-ventes.md#droits-et-périmètre-27112026)) | `VehiculeController::depensesDuVehicule()` |
+| Onglet Dépenses de la fiche propriétaire : exige aussi `depenses.read` et le module Dépenses, onglet masqué sinon (27/11/2026) | `ProprietaireController::depensesDuProprietaire()` |
+
+**Fiches véhicule et propriétaire** (27/11/2026) : ouvrir la fiche (`vehicules.read`,
+`proprietaires.read`) ne donne jamais accès aux dépenses. Sans `depenses.read` ou sans le module
+Dépenses, les dépenses ne sont ni lues ni envoyées au navigateur (prop `depenses` à `null`) et
+l'onglet Dépenses n'est pas proposé ; avec le droit, les lignes suivent le périmètre ci-dessus.
+Tests : `tests/Feature/VehiculeDepensesOngletTest.php`, `tests/Feature/ProprietaireDepensesOngletTest.php`.
 | Tableau de bord Stat-Dépenses `GET /backoffice/tableau-de-bord/depenses` (cartes, graphiques, filtre Agence) | `TableauDeBordDepensesService` ([tableau-de-bord-depenses.md](tableau-de-bord-depenses.md)) |
 
 Les **rapports** (rapport d'activité, rapport par agence, « Ma situation », charges) gardent leur

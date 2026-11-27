@@ -87,7 +87,12 @@ const pieces = [
 
 async function ouvrir(
     page: Page,
-    options: { dark?: boolean; long?: boolean } = {},
+    options: {
+        dark?: boolean;
+        long?: boolean;
+        /** Consulteur sans `depenses.read` : le serveur envoie `depenses: null`. */
+        sansDepenses?: boolean;
+    } = {},
 ) {
     const manifest = JSON.parse(
         await readFile('public/build/manifest.json', 'utf8'),
@@ -137,7 +142,7 @@ async function ouvrir(
                 : {}),
         },
         vehicules,
-        depenses,
+        depenses: options.sansDepenses ? null : depenses,
         pieces_identite: pieces,
         piece_identite_permissions: {
             can_create: true,
@@ -283,6 +288,24 @@ test('clavier : flèches et Fin parcourent les onglets', async ({ page }) => {
     await page.keyboard.press('End');
     await expect(page.getByTestId('owner-piece-identite-tab')).toBeFocused();
     await expect(page.getByRole('tabpanel')).toContainText('****1234');
+});
+
+test('sans droit de lire les dépenses : onglet Dépenses absent', async ({
+    page,
+}) => {
+    await ouvrir(page, { sansDepenses: true });
+    await expect(page.getByTestId('owner-depenses-tab')).toHaveCount(0);
+    await expect(page.getByRole('tab')).toHaveText([
+        'Informations',
+        /Vehicules/,
+        /Pièce d’identité|Pièce d'identité/,
+    ]);
+    const first = page.getByRole('tab', { name: 'Informations', exact: true });
+    await first.focus();
+    await first.press('ArrowRight');
+    await expect(page.getByTestId('owner-vehicles-tab')).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByTestId('owner-piece-identite-tab')).toBeFocused();
 });
 
 test('dialogue pièce d’identité : tient dans l’écran mobile', async ({

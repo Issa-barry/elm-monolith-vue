@@ -139,6 +139,10 @@ const detailProps = {
         { value: 'distribution_client', label: 'Distribution' },
         { value: 'logistique_transfert', label: 'Transfert' },
     ],
+    // Props de l'onglet Parrain (ADR 0035) : sans elles la fiche ne se rend pas.
+    parrain_remuneration: [],
+    parrain_partage: null,
+    parrain_part: { statut: 'definie', repartition_obligatoire_du: null },
 };
 const listeProps = {
     vehicules: [
@@ -184,6 +188,10 @@ async function ouvrir(
         dark?: boolean;
         long?: boolean;
         tab?: string;
+        /** Consulteur sans `ventes.read` : le serveur envoie `situation_ventes: null`. */
+        sansVentes?: boolean;
+        /** Consulteur sans `depenses.read` : le serveur envoie `depenses: null`. */
+        sansDepenses?: boolean;
     } = {},
 ) {
     const manifest = JSON.parse(
@@ -238,6 +246,8 @@ async function ouvrir(
                   }
                 : {}),
         },
+        ...(options.sansVentes ? { situation_ventes: null } : {}),
+        ...(options.sansDepenses ? { depenses: null } : {}),
     };
     function inertiaPage(url: URL) {
         const isList = url.pathname === '/backoffice/vehicules';
@@ -508,6 +518,50 @@ test('lecture seule, photo et clavier : droits et navigation accessibles', async
     await expect(page.getByRole('tab', { name: /Dépenses/ })).toBeFocused();
     await expect(page).toHaveURL(/tab=depenses/);
     await sansDebordement(page);
+});
+
+test('sans droit de lire les ventes : onglet Situation absent, lien direct vers Informations', async ({
+    page,
+}) => {
+    await ouvrir(page, { sansVentes: true, tab: 'situation' });
+    await expect(page.getByRole('tab', { name: /Situation/ })).toHaveCount(0);
+    const informations = page.getByRole('tab', {
+        name: 'Informations',
+        exact: true,
+    });
+    await expect(informations).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('tab', { name: /Parrain/ }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('tab', { name: /Dépenses/ })).toBeFocused();
+    await expect(page).toHaveURL(/tab=depenses/);
+});
+
+test('sans droit de lire les dépenses : onglet Dépenses absent, lien direct vers Informations', async ({
+    page,
+}) => {
+    await ouvrir(page, { sansDepenses: true, tab: 'depenses' });
+    await expect(page.getByRole('tab', { name: /Dépenses/ })).toHaveCount(0);
+    const informations = page.getByRole('tab', {
+        name: 'Informations',
+        exact: true,
+    });
+    await expect(informations).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText('Dépenses du véhicule')).toHaveCount(0);
+    await informations.focus();
+    await informations.press('End');
+    await expect(page.getByRole('tab', { name: /Situation/ })).toBeFocused();
+    await expect(page).toHaveURL(/tab=situation/);
+});
+
+test('sans droit sur les ventes ni les dépenses : seuls les onglets non financiers', async ({
+    page,
+}) => {
+    await ouvrir(page, { sansVentes: true, sansDepenses: true });
+    await expect(page.getByRole('tab')).toHaveText([
+        'Informations',
+        /Équipe/,
+        'Parrain',
+    ]);
 });
 
 test('mobile sombre et textes longs : aucun débordement', async ({

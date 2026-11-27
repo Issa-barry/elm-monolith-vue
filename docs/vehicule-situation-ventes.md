@@ -97,6 +97,36 @@ modifiables dans la barre de filtres de Ventes. Le total peut différer de la Si
 affiche aussi brouillons et annulées, et ne liste que les ventes standard (les distributions ont
 leur écran `/backoffice/distributions`).
 
+### Droits et périmètre (27/11/2026)
+
+`vehicules.read` ouvre la fiche véhicule, **jamais** ses données financières : ni les chiffres de
+vente (onglet Situation), ni les dépenses (onglet Dépenses, voir plus bas).
+
+- **Droit** : la section Activité commerciale exige `ventes.read` **et** le module Ventes actif.
+  Sans l'un des deux, elle n'est ni calculée ni envoyée au navigateur (prop `situation_ventes` à
+  `null`) et l'onglet Situation est masqué ; `?tab=situation` ouvre alors l'onglet Informations.
+- **Périmètre** : celui de l'écran Ventes, sur l'agence de la vente (`commandes_ventes.site_id`) :
+  toutes les ventes du véhicule avec la vision de toutes les agences (administrateur, superviseur,
+  `sites.lecture_toutes_agences`), ventes sans agence comprises ; sinon seulement celles des agences
+  de rattachement de l'utilisateur. Un véhicule qui a vendu dans plusieurs agences n'affiche donc à
+  un agent que la part de ses agences. Aucune agence de rattachement : aucune vente.
+- Règle portée par `VehiculeSituationVentesService::pourConsulteur()`, testée dans
+  `tests/Feature/VehiculeSituationVentesTest.php`.
+
+**Onglet Dépenses**, même principe :
+
+- **Droit** : `depenses.read` **et** le module Dépenses actif, comme l'écran Dépenses. Sans l'un
+  des deux, les dépenses ne sont ni lues ni envoyées (prop `depenses` à `null`) et l'onglet est
+  masqué ; `?tab=depenses` ouvre alors l'onglet Informations.
+- **Périmètre** : celui de l'écran Dépenses (`DepensePerimetre`, [depenses-visibilite.md](depenses-visibilite.md)) :
+  ses agences de consultation et ses propres saisies, toutes les agences avec la vision toutes
+  agences ou `depenses.lecture_toutes_agences`.
+- Le crayon de modification reste soumis à `depenses.update`.
+- Règle portée par `VehiculeController::depensesDuVehicule()`, testée dans
+  `tests/Feature/VehiculeDepensesOngletTest.php`.
+
+Sans aucun des deux droits, la fiche ne propose que Informations, Équipe et Parrain.
+
 ## Onglet actif et filtres dans l'URL (fiche véhicule)
 
 L'onglet actif de `Vehicules/Show.vue` est porté par l'URL : `?tab=informations|equipe|parrain|situation|depenses`
@@ -122,7 +152,7 @@ Règle pour tout nouveau `router.get` sur cette page : fusionner l'URL courante
 
 Une **seule** période est active pour tout l'onglet : elle est résolue une fois par
 `App\Support\Periodes\Periode` (ADR 0057, [periodes.md](periodes.md)) puis transmise à chaque section
-(`VehiculeSituationVentesService::pourVehicule($vehicule, $periode)` et les futures). Le
+(`VehiculeSituationVentesService::pourConsulteur($user, $vehicule, $periode)` et les futures). Le
 frontend n'applique aucun filtre de dates : il envoie la période et affiche ce que le serveur a
 calculé (prop `situation_periode` : `cle`, `date_debut`, `date_fin`, `options`).
 
@@ -154,9 +184,14 @@ calculé (prop `situation_periode` : `cle`, `date_debut`, `date_fin`, `options`)
 ## Implémentation
 
 Backend — une section = un service + une prop Inertia :
-- `App\Services\Vehicules\VehiculeSituationVentesService::pourVehicule()` → prop
-  `situation_ventes` (`kpis`, `produits`, `paiements`), appelée depuis `VehiculeController::show()`
-  avec la période commune (`SituationPeriode::depuisRequete()`, exposée en prop `situation_periode`).
+- `App\Services\Vehicules\VehiculeSituationVentesService::pourConsulteur()` → prop
+  `situation_ventes` (`kpis`, `produits`, `paiements`, ou `null` sans droit), appelée depuis
+  `VehiculeController::show()` avec la période commune (`Periode::depuisRequeteValidee()`, exposée
+  en prop `situation_periode`). Droit et agences vérifiés par `pourConsulteur()`, calcul par
+  `pourVehicule($vehicule, $periode, $siteIds)`.
+- Frontend : `Vehicules/Show.vue` ne propose l'onglet Situation que si `situation_ventes` n'est pas
+  `null`, et l'onglet Dépenses que si `depenses` n'est pas `null` (même principe que la fiche agent).
+  Tests d'interface : `tests/ui/vehicule-mobile.spec.ts` (aperçu sur le bundle, hors CI).
 - `Vehicule::commandesVentes()` (relation inverse de `CommandeVente::vehicule()`).
 
 Frontend :
@@ -191,5 +226,5 @@ visibles) et le tableau accessible masqué des produits font office de vue tabul
 
 - `resources/js/components/StatusDot.vue` (`STATUS_COLOR_MAP`) ne couvre pas la valeur de statut
   `facturation` (couleur grise par défaut) — gap préexistant, déjà présent sur `Ventes/Index.vue`.
-- L'onglet Situation, comme l'onglet Dépenses, est visible avec `vehicules.read` seul (pas de
-  `ventes.read` exigé pour lire les chiffres) ; seul le lien vers Ventes est conditionné.
+- La fiche **propriétaire**, qui avait le même défaut sur ses dépenses, a reçu le même correctif
+  le 27/11/2026 ([depenses-visibilite.md](depenses-visibilite.md)).
