@@ -6,47 +6,16 @@ import {
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import UserInfo from '@/components/UserInfo.vue';
-import { usePermissions } from '@/composables/usePermissions';
-import { logout } from '@/routes';
-import { dashboard as clientDashboard } from '@/routes/client';
-import { edit as editParametres } from '@/routes/parametres';
-import { edit as editProfile } from '@/routes/profile';
+import { useUserMenuActions } from '@/composables/useUserMenuActions';
 import type { User } from '@/types';
-import { router } from '@inertiajs/vue3';
 import { ArrowRightLeft, LogOut, Settings } from 'lucide-vue-next';
-import { computed } from 'vue';
 
 interface Props {
     user: User;
 }
 
-const { can, hasAnyRole } = usePermissions();
-
-const settingsHref = computed(() =>
-    can('parametres.read') ? editParametres().url : editProfile().url,
-);
-
-// Un compte staff peut aussi porter un rôle client/proprietaire/livreur (ex: un
-// admin qui possède lui-même un véhicule) — cf. EnsureIsStaffAccount côté backend,
-// qui autorise ce cumul plutôt que de forcer un second compte.
-const canAccessClientSpace = computed(() =>
-    hasAnyRole(['client', 'proprietaire', 'livreur']),
-);
-
-const openSettings = () => {
-    router.flushAll();
-    router.visit(settingsHref.value);
-};
-
-const openClientSpace = () => {
-    router.flushAll();
-    router.visit(clientDashboard().url);
-};
-
-const handleLogout = () => {
-    router.flushAll();
-    router.post(logout().url);
-};
+const { canAccessClientSpace, openSettings, openClientSpace, handleLogout } =
+    useUserMenuActions();
 
 defineProps<Props>();
 </script>

@@ -181,8 +181,8 @@
                 </span>
             </div>
             @endif
-            @if(!empty($filters['statut']))
-            <div>Statut : <span>{{ $filters['statut'] }}</span></div>
+            @if($statut_affiche !== '')
+            <div>Statut : <span>{{ $statut_affiche }}</span></div>
             @endif
             @if(!empty($filters['search']))
             <div>Recherche : <span>{{ $filters['search'] }}</span></div>

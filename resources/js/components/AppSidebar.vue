@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
-import NavUser from '@/components/NavUser.vue';
 import {
     Sidebar,
     SidebarContent,
@@ -23,6 +22,7 @@ import {
     ChartColumn,
     Contact,
     HandCoins,
+    IdCard,
     Layers,
     LayoutGrid,
     MessageSquare,
@@ -32,6 +32,8 @@ import {
     ShoppingCart,
     Truck,
     UsersRound,
+    Wallet,
+    Warehouse,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
@@ -203,6 +205,39 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Stat-Commissions',
             href: '/backoffice/tableau-de-bord/commissions',
             icon: HandCoins,
+            group: 'Tableau de bord',
+        });
+
+    // Même droit et même module que la liste des dépenses (docs/tableau-de-bord-depenses.md).
+    if (canSee('depenses.read', 'depenses'))
+        items.push({
+            title: 'Stat-Dépenses',
+            href: '/backoffice/tableau-de-bord/depenses',
+            icon: Wallet,
+            group: 'Tableau de bord',
+        });
+
+    // Même droit et même module que la page Stock (docs/tableau-de-bord-stock.md).
+    if (canSee('produits.read', 'produits'))
+        items.push({
+            title: 'Stat-Stock',
+            href: '/backoffice/tableau-de-bord/stock',
+            icon: Warehouse,
+            group: 'Tableau de bord',
+        });
+
+    // Ouvert à qui consulte une des listes RH ; chaque bloc suit la permission de sa liste
+    // (docs/tableau-de-bord-rh.md).
+    if (
+        moduleActive('rh') &&
+        (can('rh-employes.read') ||
+            can('rh-contrats.read') ||
+            can('rh-absences.read'))
+    )
+        items.push({
+            title: 'Stat-RH',
+            href: '/backoffice/tableau-de-bord/rh',
+            icon: IdCard,
             group: 'Tableau de bord',
         });
 
@@ -614,13 +649,14 @@ const footerNavItems: NavItem[] = [];
             </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent class="mb-4">
+        <!-- Compte utilisateur : dans la barre supérieure (AppTopbarProfile), plus ici. La
+             navigation occupe toute la hauteur et défile jusqu'en bas. -->
+        <SidebarContent class="pb-4">
             <NavMain :items="mainNavItems" />
         </SidebarContent>
 
-        <SidebarFooter>
-            <NavFooter v-if="footerNavItems.length" :items="footerNavItems" />
-            <NavUser />
+        <SidebarFooter v-if="footerNavItems.length">
+            <NavFooter :items="footerNavItems" />
         </SidebarFooter>
     </Sidebar>
     <slot />

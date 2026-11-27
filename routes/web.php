@@ -154,6 +154,9 @@ use App\Http\Controllers\Depenses\VehiculeDetailDepenseController;
 use App\Http\Controllers\Divers\IndexCommunicationController;
 use App\Http\Controllers\Divers\IndexDashboardCommissionsController;
 use App\Http\Controllers\Divers\IndexDashboardController;
+use App\Http\Controllers\Divers\IndexDashboardDepensesController;
+use App\Http\Controllers\Divers\IndexDashboardRhController;
+use App\Http\Controllers\Divers\IndexDashboardStockController;
 use App\Http\Controllers\Divers\MarkReadContactController;
 use App\Http\Controllers\Divers\UnreadCountContactController;
 use App\Http\Controllers\EmployeController;
@@ -481,6 +484,21 @@ Route::prefix('backoffice')->group(function () {
         Route::get('tableau-de-bord/commissions', IndexDashboardCommissionsController::class)
             ->middleware('module:'.ModuleFeature::COMPTABILITE)
             ->name('dashboard.commissions');
+
+        // Tableau de bord Dépenses — même droit de lecture et même périmètre que la liste des dépenses.
+        Route::get('tableau-de-bord/depenses', IndexDashboardDepensesController::class)
+            ->middleware('module:'.ModuleFeature::DEPENSES)
+            ->name('dashboard.depenses');
+
+        // Tableau de bord Stock — même droit de lecture et même périmètre que la page Stock.
+        Route::get('tableau-de-bord/stock', IndexDashboardStockController::class)
+            ->middleware('module:'.ModuleFeature::PRODUITS)
+            ->name('dashboard.stock');
+
+        // Tableau de bord RH — un bloc par liste RH consultable (Employés, Contrats, Absences), même périmètre d'agences.
+        Route::get('tableau-de-bord/rh', IndexDashboardRhController::class)
+            ->middleware('module:'.ModuleFeature::RH)
+            ->name('dashboard.rh');
 
         // Rapports (docs/rapports.md) — permission et périmètre vérifiés par RapportPerimetreResolver.
         Route::get('ma-situation', IndexMaSituationController::class)->name('ma-situation');

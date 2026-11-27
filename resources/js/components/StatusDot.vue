@@ -203,6 +203,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     pending_validation: 'bg-orange-500',
     soumis: 'bg-orange-500',
     expire_bientot: 'bg-amber-500',
+    // Stat-RH : CDD actif dont la fin prévue est passée, sans renouvellement ni départ — à traiter, pas
+    // une erreur (la fin prévue ne fait jamais sortir le salarié).
+    echeance_depassee: 'bg-orange-500',
     analyse: 'bg-orange-500',
     stock_faible: 'bg-amber-500',
     a_financer: 'bg-orange-500',

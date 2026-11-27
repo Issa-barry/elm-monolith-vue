@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { useChartTheme } from '@/composables/useChartTheme';
+import { partEnPourcentage, totalParts } from '@/lib/pourcentages';
 import type { RepartitionCommission } from '@/types/dashboard-commissions';
 import Chart from 'primevue/chart';
 import { ref, watch } from 'vue';
+import {
+    couleursEtiquettes as calculerCouleursEtiquettes,
+    pluginPourcentagesSurParts,
+} from '../camembert';
 import { CARTE_APOLLO, TITRE_GRAPHIQUE_APOLLO, montantGnf } from './apollo';
 
 // Port de SalesByCategoryWidget.vue (Apollo) : camembert de hauteur 300, nuances de la couleur
@@ -19,17 +24,45 @@ const { getPrimary, getSurface, isDarkTheme } = useChartTheme();
 const NUANCES = ['700', '400', '100', '500', '200'];
 const NUANCES_SURVOL = ['600', '300', '200', '400', '300'];
 
+// Nuances foncées : pourcentage écrit en blanc ; les autres en primaire 900, pour rester lisible.
+const NUANCES_FONCEES = ['700', '500'];
+
 const pieData = ref({});
 const pieOptions = ref({});
+let couleursEtiquettes: string[] = [];
+
+function totalRepartition(): number {
+    return totalParts(props.repartition);
+}
+
+// Part du total, une décimale (lib/pourcentages) : « 45,3 % », « < 0,1 % » pour une part infime.
+const pourcentage = partEnPourcentage;
+
+// Pourcentage écrit sur chaque part d'au moins 5 % (module commun des camemberts).
+const pourcentagesSurParts = pluginPourcentagesSurParts(
+    'pourcentagesSurParts',
+    () => props.repartition,
+    () => couleursEtiquettes,
+);
 
 function initChart() {
     const documentStyle = getComputedStyle(document.documentElement);
     const textColor = documentStyle.getPropertyValue('--p-text-color');
     const nuance = (n: string) =>
         documentStyle.getPropertyValue(`--p-primary-${n}`);
+    const total = totalRepartition();
+
+    couleursEtiquettes = calculerCouleursEtiquettes(
+        props.repartition.length,
+        NUANCES,
+        NUANCES_FONCEES,
+        nuance('900'),
+    );
 
     pieData.value = {
-        labels: props.repartition.map((r) => r.label),
+        labels: props.repartition.map(
+            (r) => `${r.label} (${pourcentage(r.montant, total)})`,
+        ),
         datasets: [
             {
                 data: props.repartition.map((r) => r.montant),
@@ -62,8 +95,11 @@ function initChart() {
             },
             tooltip: {
                 callbacks: {
-                    label(context: { label: string; parsed: number }) {
-                        return `${context.label} : ${montantGnf(context.parsed)}`;
+                    label(context: { dataIndex: number; parsed: number }) {
+                        const libelle =
+                            props.repartition[context.dataIndex]?.label ?? '';
+
+                        return `${libelle} : ${montantGnf(context.parsed)} (${pourcentage(context.parsed, total)})`;
                     },
                 },
             },
@@ -91,6 +127,7 @@ watch(
             :data="pieData"
             :height="300"
             :options="pieOptions"
+            :plugins="[pourcentagesSurParts]"
         ></Chart>
         <div
             v-else

@@ -44,6 +44,71 @@ class MouvementStockMotifService
     public const KEY_INCONNU = 'inconnu';
 
     /**
+     * Motif d'un mouvement automatique selon sa source (`source_type`). Seule table de
+     * correspondance, lue par classify() (affichage) et expressionSql() (agrégations Stat-Stock).
+     */
+    private const SOURCES = [
+        CommandeVenteLigne::class => self::KEY_VENTE,
+        TransfertLigne::class => self::KEY_TRANSFERT,
+        CommandeVenteRetourLigne::class => self::KEY_RETOUR_LIVRAISON,
+        TransfertRetourLigne::class => self::KEY_RETOUR_TRANSFERT,
+        ReceptionAchatLigne::class => self::KEY_RECEPTION_ACHAT,
+        CommandeAchatLigne::class => self::KEY_RECEPTION_ACHAT,
+    ];
+
+    private const LIBELLES_SOURCES = [
+        self::KEY_VENTE => 'Vente',
+        self::KEY_TRANSFERT => 'Transfert',
+        self::KEY_RETOUR_LIVRAISON => 'Retour livraison',
+        self::KEY_RETOUR_TRANSFERT => 'Retour transfert',
+        self::KEY_RECEPTION_ACHAT => 'Réception achat',
+    ];
+
+    /**
+     * Le motif de classify() en SQL, pour agréger les mouvements par motif sans les charger
+     * (tableau de bord Stat-Stock) : mêmes règles, même ordre — libellé d'ajustement manuel dans
+     * `notes` d'abord, puis la source.
+     *
+     * @return array{0: string, 1: list<string>} expression et liaisons
+     */
+    public static function expressionSql(string $alias = 'm'): array
+    {
+        $notes = "TRIM(COALESCE({$alias}.notes, ''))";
+        $cas = [];
+        $liaisons = [];
+
+        foreach (MotifAjustementStock::cases() as $case) {
+            if ($case === MotifAjustementStock::AUTRE) {
+                $cas[] = "WHEN {$notes} LIKE ? THEN ?";
+                $liaisons[] = 'Autre%';
+            } else {
+                $cas[] = "WHEN {$notes} = ? THEN ?";
+                $liaisons[] = $case->label();
+            }
+            $liaisons[] = $case->value;
+        }
+        // Notes présentes mais non reconnues (contre-mouvements d'annulation, texte libre legacy).
+        $cas[] = "WHEN {$notes} <> '' THEN ?";
+        $liaisons[] = self::KEY_INCONNU;
+
+        foreach (self::SOURCES as $source => $key) {
+            $cas[] = "WHEN {$alias}.source_type = ? THEN ?";
+            $liaisons[] = $source;
+            $liaisons[] = $key;
+        }
+
+        return ['CASE '.implode(' ', $cas).' ELSE ? END', [...$liaisons, self::KEY_INCONNU]];
+    }
+
+    /** Libellé d'une clé de motif (ajustement manuel ou source), « Autre motif » si inconnue. */
+    public static function libelle(string $key): string
+    {
+        return MotifAjustementStock::tryFrom($key)?->label()
+            ?? self::LIBELLES_SOURCES[$key]
+            ?? 'Autre motif';
+    }
+
+    /**
      * Annote une collection de MouvementStock avec motif_type (clé stable, pour filtrer)
      * et motif_label (texte affiché, avec référence de commande/transfert si résolue).
      * Résout les références par lot pour éviter le N+1.
@@ -203,27 +268,9 @@ class MouvementStockMotifService
             return [self::KEY_INCONNU, $notes];
         }
 
-        if ($sourceType === CommandeVenteLigne::class) {
-            return [self::KEY_VENTE, 'Vente'];
-        }
+        $key = self::SOURCES[(string) $sourceType] ?? null;
 
-        if ($sourceType === TransfertLigne::class) {
-            return [self::KEY_TRANSFERT, 'Transfert'];
-        }
-
-        if ($sourceType === CommandeVenteRetourLigne::class) {
-            return [self::KEY_RETOUR_LIVRAISON, 'Retour livraison'];
-        }
-
-        if ($sourceType === TransfertRetourLigne::class) {
-            return [self::KEY_RETOUR_TRANSFERT, 'Retour transfert'];
-        }
-
-        if ($sourceType === ReceptionAchatLigne::class || $sourceType === CommandeAchatLigne::class) {
-            return [self::KEY_RECEPTION_ACHAT, 'Réception achat'];
-        }
-
-        return [self::KEY_INCONNU, '—'];
+        return $key === null ? [self::KEY_INCONNU, '—'] : [$key, self::LIBELLES_SOURCES[$key]];
     }
 
     /**

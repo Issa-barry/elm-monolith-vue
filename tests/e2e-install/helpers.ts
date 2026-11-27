@@ -169,15 +169,16 @@ export async function loginAfterInstall(
 
     await expect(page).toHaveURL(/\/backoffice\/dashboard/, { timeout: 20_000 });
 
-    // Le nom généré automatiquement doit apparaître tel quel dans le bloc utilisateur du menu
-    // latéral (NavUser.vue/UserInfo.vue), sans le type dupliqué (ex: jamais "Usine de Usine de
-    // Matoto") — cf. Site::getLabelAttribute(). Locator scopé au bloc utilisateur
-    // (data-test="sidebar-menu-button") plutôt qu'à toute la page : le dashboard affiche aussi le
-    // site par défaut dans son en-tête (HeaderWidget.vue), un getByText() global sur toute la page
-    // matcherait donc deux éléments (strict mode violation).
+    // Le nom généré automatiquement doit apparaître tel quel dans l'en-tête du menu profil de la
+    // barre supérieure (AppTopbarProfile.vue), sans le type dupliqué (ex: jamais "Usine de Usine
+    // de Matoto") — cf. Site::getLabelAttribute(). Locator scopé à cet en-tête
+    // (data-testid="topbar-profile-entete") plutôt qu'à toute la page : le dashboard affiche aussi
+    // le site par défaut dans son en-tête (HeaderWidget.vue), un getByText() global sur toute la
+    // page matcherait donc deux éléments (strict mode violation).
+    await page.getByTestId('topbar-profile').click();
     await expect(
         page
-            .locator('[data-test="sidebar-menu-button"]')
+            .getByTestId('topbar-profile-entete')
             .getByText(`${scenario.siteTypeLabel} de ${scenario.siteQuartier}`, {
                 exact: true,
             }),

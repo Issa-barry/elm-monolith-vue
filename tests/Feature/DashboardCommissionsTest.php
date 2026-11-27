@@ -262,7 +262,7 @@ class DashboardCommissionsTest extends TestCase
             $i['en_attente_periode']['montant'] + $i['payable']['montant'] + $i['deja_paye']['montant'],
         );
         // 150 000 payés sur 600 000 générés.
-        $this->assertSame(25, $props['taux_paiement']);
+        $this->assertSame(25.0, $props['taux_paiement']);
     }
 
     public function test_sans_commission_sur_la_periode_le_taux_de_paiement_est_vide(): void
@@ -346,7 +346,7 @@ class DashboardCommissionsTest extends TestCase
         $this->assertEquals(100_000, $i['en_attente_periode']['montant']);
         $this->assertEquals(200_000, $i['payable']['montant']);
         $this->assertEquals(100_000, $i['deja_paye']['montant']);
-        $this->assertSame(25, $props['taux_paiement']);
+        $this->assertSame(25.0, $props['taux_paiement']);
 
         $this->assertSame('jour', $props['evolution']['granularite']);
         $this->assertSame(['02/11', '03/11', '04/11', '05/11'], array_column($props['evolution']['tranches'], 'label'));

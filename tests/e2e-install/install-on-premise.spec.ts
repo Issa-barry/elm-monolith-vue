@@ -61,8 +61,8 @@ test('installation complète avec Type=Usine, Ville=Conakry, Quartier=Matoto aff
     await completeInstallWizard(page, scenario);
     await loginAfterInstall(page, scenario);
 
-    // loginAfterInstall() a déjà vérifié la présence exacte de "Usine de Matoto" dans le bloc
-    // utilisateur (UserInfo.vue) — on vérifie ici, en plus, l'absence explicite du doublon signalé.
+    // loginAfterInstall() a déjà vérifié la présence exacte de "Usine de Matoto" dans le menu
+    // profil (AppTopbarProfile.vue) — on vérifie ici, en plus, l'absence explicite du doublon signalé.
     await expect(page.getByText('Usine de Usine de Matoto')).toHaveCount(0);
     await expect(page.getByText('Usine de Usine Matoto')).toHaveCount(0);
 });

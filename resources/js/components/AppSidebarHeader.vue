@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppTopbarProfile from '@/components/AppTopbarProfile.vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import EnvironmentBadge from '@/components/EnvironmentBadge.vue';
 import { Button } from '@/components/ui/button';
@@ -232,16 +233,17 @@ onMounted(() => {
                     <InputText
                         v-model="searchQuery"
                         placeholder="Recherche"
-                        class="w-48 rounded-full text-sm sm:w-64 lg:w-80"
+                        class="w-36 rounded-full text-sm sm:w-64 lg:w-80"
                         data-testid="global-search"
                         @keydown.escape="closeSearch"
                     />
                 </IconField>
 
-                <!-- Dropdown résultats -->
+                <!-- Dropdown résultats : pleine largeur sous la barre sur téléphone (ancré au
+                     champ, il déborderait à gauche de l'écran), aligné sous le champ au-delà. -->
                 <div
                     v-if="isSearchOpen"
-                    class="absolute top-full right-0 z-50 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-lg border bg-background shadow-lg"
+                    class="fixed inset-x-4 top-[4.25rem] z-50 max-h-[70vh] overflow-y-auto rounded-lg border bg-background shadow-lg sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-80"
                 >
                     <!-- Chargement -->
                     <div
@@ -539,6 +541,9 @@ onMounted(() => {
                     </div>
                 </DropdownMenuContent>
             </DropdownMenu>
+
+            <!-- Profil utilisateur -->
+            <AppTopbarProfile />
         </div>
     </header>
 </template>

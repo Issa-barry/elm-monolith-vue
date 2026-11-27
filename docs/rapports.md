@@ -408,4 +408,6 @@ pas une vente et n'y figure pas.
   remise grossiste), la même source que la colonne « Processus » de la liste des ventes. Un grossiste
   en enlèvement compte donc en **Vente**, un grossiste livré en **Transfert grossiste**.
 - Affichage en barres horizontales classées du plus gros au plus petit : longueur relative au premier
-  processus, part (%) relative au total, nombre de factures et montant GNF complet.
+  processus, part (%) relative au total, nombre de factures et montant GNF complet. La part s'affiche
+  avec une décimale (« 51,3 % »), comme tous les pourcentages des tableaux de bord
+  (`resources/js/lib/pourcentages.ts`, 24/11/2026).

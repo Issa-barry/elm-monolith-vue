@@ -250,6 +250,10 @@ dérogation valide + commande autorisée → **avertissement**, pas danger.
   ([même document](../ui-cartes-et-informations.md#exception--tableaux-de-bord-reproduits-dapollo)).
 - Tableaux : les statuts dans les cellules suivent A1, les filtres A2. Aucune autre règle propre
   aux tableaux n'est fixée à ce jour.
+- **Pourcentages des tableaux de bord** (24/11/2026) : toujours une décimale, virgule française
+  (« 56,7 % », « +12,5 % », « 100,0 % »), via `resources/js/lib/pourcentages.ts` — jamais de
+  formatage local. Calculés sur les valeurs réelles ; seul l'affichage est arrondi, aucun total
+  n'est ajusté pour atteindre 100,0 %.
 - Réutiliser les composants partagés et les styles existants avant d'en créer de nouveaux.
 
 ### A10. Paramètres et choix Oui / Non
@@ -279,6 +283,14 @@ d'instructions.
   `resources/js/composables/useUrlTab.ts` (ex. [fiche-agent.md](../fiche-agent.md)).
 - **Bouton de confirmation d'une action serveur** : indicateur de chargement et boutons verrouillés
   pendant la requête (ex. [precommandes.md](../precommandes.md)).
+- **Compte utilisateur** (24/11/2026) : photo, identité, Mon profil, Paramètres, Espace client et
+  Déconnexion sont dans la barre supérieure, à droite de la cloche
+  (`resources/js/components/AppTopbarProfile.vue`) ; la barre latérale ne sert qu'à la navigation.
+- **Administration sur téléphone** (24/11/2026) : sous 640 px, le lien « Rôles et permissions » du
+  menu Paramètres est masqué (gestion réservée à la tablette et à l'ordinateur) et les sections des
+  Paramètres sont proposées dans une liste déroulante groupée
+  (`resources/js/layouts/settings/Layout.vue`). Choix d'ergonomie uniquement : permissions, routes
+  et contrôles serveur inchangés (B1).
 
 ---
 

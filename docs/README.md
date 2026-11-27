@@ -78,6 +78,7 @@ Chaque document technique indique en tête son **statut** :
 - [Retour au site source sur un transfert](retour-transfert.md)
 - [Disponibilité et alerte de stock faible](stock-alertes.md)
 - [Date métier des mouvements de stock](stock-mouvements-date.md)
+- [Tableau de bord du stock](tableau-de-bord-stock.md)
 - [Capacités de chargement des véhicules](capacites-vehicule.md)
 - [Parrainage véhicule](parrainage-vehicule.md)
 - [Import de mise à jour des véhicules](import-vehicules-maj.md)
@@ -96,6 +97,7 @@ Chaque document technique indique en tête son **statut** :
 - [Concernés d'un type de dépense](depenses-concernes.md)
 - [Filtres de la liste des dépenses](depenses-filtres.md)
 - [Dépense de carburant : commande de référence](depenses-carburant-commande.md)
+- [Tableau de bord des dépenses](tableau-de-bord-depenses.md)
 
 **Trésorerie et comptabilité**
 
@@ -110,6 +112,7 @@ Chaque document technique indique en tête son **statut** :
 - [Contrats de travail générés](rh-contrat-pdf.md)
 - [Départ d'un salarié](rh-depart-salarie.md)
 - [Absences des salariés](rh-absences.md)
+- [Tableau de bord RH (Stat-RH)](tableau-de-bord-rh.md)
 - [Création d'un employé : identité existante](rh-employes-identite.md)
 - [Import des dossiers et contrats RH](import-dossiers-rh.md)
 - [Fiche agent](fiche-agent.md)
