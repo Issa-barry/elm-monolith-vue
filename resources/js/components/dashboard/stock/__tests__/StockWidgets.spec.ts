@@ -118,7 +118,13 @@ describe('StockCartesWidget', () => {
         ).toBe('1 transfert en cours');
         expect(
             texte(carte('alertes').find('[data-slot="detail"]').text()),
-        ).toBe('1 rupture · 2 stocks faibles · 0 négatif');
+        ).toBe('1 rupture · 2 faibles · 0 négatif');
+        expect(
+            carte('alertes').find('[data-slot="detail"]').classes(),
+        ).toContain('text-amber-600');
+        expect(
+            carte('reserve').find('[data-slot="detail"]').classes(),
+        ).not.toContain('text-amber-600');
         expect(texte(carte('ecarts').find('[data-slot="detail"]').text())).toBe(
             'Manquants · surplus 2',
         );

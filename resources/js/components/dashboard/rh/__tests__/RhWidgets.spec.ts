@@ -108,11 +108,14 @@ describe('RhCartesWidget', () => {
         expect(detail(wrapper, 'actifs')).toBe(
             '41 présents avec les suspendus',
         );
-        expect(detail(wrapper, 'entrees')).toBe(
-            '39 dossiers sans date d’embauche',
-        );
+        expect(detail(wrapper, 'entrees')).toBe('39 sans date d’embauche');
         expect(valeur(wrapper, 'sans-contrat')).toBe('32');
         expect(valeur(wrapper, 'fins-cdd')).toBe('2');
+        expect(
+            wrapper
+                .find('[data-testid="kpi-fins-cdd"] [data-slot="detail"]')
+                .classes(),
+        ).toContain('text-amber-600');
         expect(detail(wrapper, 'fins-cdd')).toBe(
             '1 dépassée · 1 sous 30 jours',
         );
@@ -122,9 +125,7 @@ describe('RhCartesWidget', () => {
         );
         // Une décimale, virgule française (lib/pourcentages).
         expect(valeur(wrapper, 'taux')).toBe('15,4 %');
-        expect(detail(wrapper, 'taux')).toBe(
-            '2 salariés pris en compte · 1 exclu',
-        );
+        expect(detail(wrapper, 'taux')).toBe('2 pris en compte · 1 exclu');
         expect(
             wrapper
                 .find('[data-testid="kpi-taux"] [title]')
@@ -192,9 +193,7 @@ describe('RhCartesWidget', () => {
         });
 
         expect(valeur(wrapper, 'taux')).toBe('—');
-        expect(detail(wrapper, 'taux')).toBe(
-            '0 salarié pris en compte · 39 exclus',
-        );
+        expect(detail(wrapper, 'taux')).toBe('0 pris en compte · 39 exclus');
     });
 
     it('n’affiche que le taux sans accès aux fiches salariés', () => {
@@ -209,7 +208,7 @@ describe('RhCartesWidget', () => {
 
         expect(valeur(wrapper, 'taux')).toBe('15,4 %');
         expect(detail(wrapper, 'taux')).toBe(
-            'Salariés avec date d’embauche connue',
+            'Salariés à date d’embauche connue',
         );
         expect(
             wrapper
@@ -228,7 +227,7 @@ describe('RhCartesWidget', () => {
             },
         });
         expect(detail(sansSalarie, 'taux')).toBe(
-            'Aucun salarié avec date d’embauche connue',
+            'Aucune date d’embauche connue',
         );
     });
 });

@@ -57,7 +57,10 @@ règle RH : statuts, dates, contrats et absences sont ceux des écrans RH
 
 ## Cartes
 
-Quatre cartes par bloc, sur une ligne chacune.
+Quatre cartes par bloc, sur une ligne chacune. Présentation commune à Stat-Stock et Stat-RH (`components/dashboard/shared/LignesIndicateursApollo.vue`,
+27/11/2026) : carte `.card` d'Apollo, quatre par ligne, titre de section en tête de chaque ligne ;
+icône de l'indicateur dans l'angle du titre, chiffre, détail court sur une ligne, en ambre pour une
+alerte à traiter (standard A8, rien n'est bloqué). Ici : la carte « Fins de CDD à traiter » dès qu'une fin est à traiter.
 
 **Effectifs** (à ce jour ; entrées et sorties de la période)
 
