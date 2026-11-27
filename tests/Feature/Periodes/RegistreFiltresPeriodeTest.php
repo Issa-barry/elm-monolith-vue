@@ -59,6 +59,7 @@ class RegistreFiltresPeriodeTest extends TestCase
         'dashboard.commissions' => 'Tableau de bord des commissions (Stat-Commissions)',
         'dashboard.depenses' => 'Tableau de bord des dépenses (Stat-Dépenses)',
         'dashboard.stock' => 'Tableau de bord du stock (Stat-Stock)',
+        'dashboard.rh' => 'Tableau de bord RH (Stat-RH)',
         'absences.index' => 'Absences des salariés',
     ];
 
@@ -159,7 +160,7 @@ class RegistreFiltresPeriodeTest extends TestCase
      */
     public function test_les_tableaux_de_bord_proposent_les_memes_periodes_et_les_dates_libres(): void
     {
-        foreach (['dashboard', 'dashboard.commissions', 'dashboard.depenses', 'dashboard.stock'] as $route) {
+        foreach (['dashboard', 'dashboard.commissions', 'dashboard.depenses', 'dashboard.stock', 'dashboard.rh'] as $route) {
             foreach (['hier', 't1', 's2', 'annee_precedente', 'mois_dernier', 'tout'] as $cle) {
                 $this->actingAs($this->admin)->get(route($route, ['periode' => $cle]))->assertOk()->assertSessionHasNoErrors();
             }
