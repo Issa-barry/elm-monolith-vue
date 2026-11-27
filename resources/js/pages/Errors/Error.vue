@@ -1,10 +1,26 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Head, Link } from '@inertiajs/vue3';
-import { AlertTriangle, Ban, Home, ServerCrash } from 'lucide-vue-next';
-import { computed } from 'vue';
+import {
+    AlertTriangle,
+    ArrowLeft,
+    Ban,
+    Home,
+    ServerCrash,
+} from 'lucide-vue-next';
+import { computed, onMounted, ref } from 'vue';
 
 const props = defineProps<{ status: number }>();
+
+// Uniquement quand l'onglet a un historique : sinon le retour quitterait l'application.
+const peutRevenir = ref(false);
+onMounted(() => {
+    peutRevenir.value = window.history.length > 1;
+});
+
+function revenir(): void {
+    window.history.back();
+}
 
 const config = computed(() => {
     const map: Record<
@@ -92,7 +108,11 @@ const config = computed(() => {
             </p>
 
             <!-- Actions -->
-            <div class="mt-8 flex justify-center gap-3">
+            <div class="mt-8 flex flex-wrap justify-center gap-3">
+                <Button v-if="peutRevenir" variant="outline" @click="revenir">
+                    <ArrowLeft class="mr-2 h-4 w-4" />
+                    Page précédente
+                </Button>
                 <Link href="/backoffice/dashboard">
                     <Button>
                         <Home class="mr-2 h-4 w-4" />

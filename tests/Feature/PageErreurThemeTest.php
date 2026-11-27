@@ -50,6 +50,33 @@ class PageErreurThemeTest extends TestCase
                 ->has('theme.locked'));
     }
 
+    public function test_une_route_inconnue_en_navigation_inertia_ne_peut_pas_etre_resservie_en_json_brut(): void
+    {
+        $response = $this->withHeaders([
+            'X-Inertia' => 'true',
+            'X-Requested-With' => 'XMLHttpRequest',
+            'Accept' => 'text/html, application/xhtml+xml',
+        ])->get('/backoffice/page-qui-n-existe-pas');
+
+        $response->assertNotFound()
+            ->assertHeader('X-Inertia', 'true')
+            ->assertHeader('Vary', 'X-Inertia')
+            ->assertJsonPath('component', 'Errors/Error')
+            ->assertJsonPath('props.status', 404);
+        $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+    }
+
+    public function test_une_route_inconnue_ouverte_directement_rend_la_page_html_sans_cache(): void
+    {
+        $response = $this->get('/backoffice/page-qui-n-existe-pas');
+
+        $response->assertNotFound()
+            ->assertHeader('Vary', 'X-Inertia')
+            ->assertHeaderMissing('X-Inertia')
+            ->assertViewIs('app');
+        $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+    }
+
     public function test_un_modele_introuvable_rend_la_page_d_erreur_avec_le_theme_de_l_organisation(): void
     {
         $org = Organization::factory()->create();

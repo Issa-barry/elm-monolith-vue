@@ -24,6 +24,7 @@ use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use Inertia\Support\Header;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -130,7 +131,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $response->getStatusCode();
             if (in_array($status, [403, 404, 500]) && ! $request->is('api/*') && ! $request->expectsJson()) {
-                return Inertia::render('Errors/Error', [
+                $pageErreur = Inertia::render('Errors/Error', [
                     'status' => $status,
                     // Les props partagées par HandleInertiaRequests manquent quand l'erreur
                     // survient avant ce middleware (route inconnue, modèle introuvable) : sans
@@ -145,6 +146,15 @@ return Application::configure(basePath: dirname(__DIR__))
                 ])
                     ->toResponse($request)
                     ->setStatusCode($status);
+
+                // Une route inconnue échoue avant le groupe web : la réponse n'a alors ni
+                // `Vary: X-Inertia` (HandleInertiaRequests) ni l'interdiction de cache
+                // (PreventCachingOfDynamicResponses). Le navigateur pouvait garder le JSON
+                // d'une navigation Inertia et l'afficher brut au lieu de la page d'erreur
+                // (retour arrière, onglet restauré).
+                $pageErreur->headers->set('Vary', Header::INERTIA);
+
+                return (new PreventCachingOfDynamicResponses)->handle($request, fn () => $pageErreur);
             }
 
             return $response;
