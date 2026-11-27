@@ -4,19 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Enums\TypePieceIdentite;
 use App\Enums\TypeProprietaire;
+use App\Features\ModuleFeature;
 use App\Http\Controllers\Concerns\SaisieEntrepriseLiee;
 use App\Models\Depense;
 use App\Models\Personne;
 use App\Models\PieceIdentite;
 use App\Models\Proprietaire;
+use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeCapacite;
 use App\Services\Contacts\ProprietaireEntreprise;
+use App\Services\ModuleService;
 use App\Support\Contacts\SuppressionFonction;
 use App\Support\Depenses\DepensePerimetre;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -237,21 +241,7 @@ class ProprietaireController extends Controller
             })
             ->values();
 
-        $depenses = app(DepensePerimetre::class)->appliquer(Depense::query(), auth()->user())
-            ->where('beneficiaire_type', 'proprietaire')
-            ->where('beneficiaire_id', $proprietaire->id)
-            ->where('organization_id', $proprietaire->organization_id)
-            ->with('depenseType:id,libelle')
-            ->orderByDesc('date_depense')
-            ->get()
-            ->map(fn (Depense $d) => [
-                'id' => $d->id,
-                'libelle' => $d->depenseType?->libelle ?? '—',
-                'montant' => (float) $d->montant,
-                'date_depense' => $d->date_depense?->format('d/m/Y'),
-                'statut' => $d->statut,
-                'commentaire' => $d->commentaire,
-            ]);
+        $depenses = $this->depensesDuProprietaire(auth()->user(), $proprietaire);
 
         return Inertia::render('Proprietaires/Show', [
             'proprietaire' => [
@@ -277,6 +267,7 @@ class ProprietaireController extends Controller
                 'is_proprietaire_interne' => $proprietaire->organization->proprietaire_interne_id === $proprietaire->id,
             ],
             'vehicules' => $vehicules,
+            // null sans `depenses.read` ou sans le module Dépenses : l'onglet Dépenses est masqué.
             'depenses' => $depenses,
             'pieces_identite' => $this->piecesIdentiteRows($proprietaire),
             'piece_identite_permissions' => [
@@ -290,6 +281,38 @@ class ProprietaireController extends Controller
             'type_piece_options' => TypePieceIdentite::options(),
             'can_create_vehicule' => auth()->user()->can('vehicules.create'),
         ]);
+    }
+
+    /**
+     * Onglet Dépenses de la fiche (27/11/2026) : la fiche propriétaire ne donne jamais accès aux
+     * dépenses. Exige `depenses.read` et le module Dépenses actif, comme l'écran Dépenses, et
+     * reprend son périmètre de consultation (DepensePerimetre). Sans droit : null, rien n'est lu.
+     *
+     * @return Collection<int, array<string, mixed>>|null
+     */
+    private function depensesDuProprietaire(User $user, Proprietaire $proprietaire): ?Collection
+    {
+        if (! $user->can('depenses.read') || ! ModuleService::isActive(ModuleFeature::DEPENSES, $user->organization)) {
+            return null;
+        }
+
+        return app(DepensePerimetre::class)->appliquer(Depense::query(), $user)
+            ->where('beneficiaire_type', 'proprietaire')
+            ->where('beneficiaire_id', $proprietaire->id)
+            ->where('organization_id', $proprietaire->organization_id)
+            ->with('depenseType:id,libelle')
+            ->orderByDesc('date_depense')
+            ->get()
+            ->map(fn (Depense $d) => [
+                'id' => $d->id,
+                'libelle' => $d->depenseType?->libelle ?? '—',
+                'montant' => (float) $d->montant,
+                'date_depense' => $d->date_depense?->format('d/m/Y'),
+                'statut' => $d->statut,
+                'commentaire' => $d->commentaire,
+            ])
+            ->values()
+            ->toBase();
     }
 
     /**

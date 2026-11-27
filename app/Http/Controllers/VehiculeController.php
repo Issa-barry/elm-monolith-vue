@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\CategorieVehicule;
 use App\Enums\CommissionScopeType;
 use App\Enums\CommissionUniteCalcul;
+use App\Features\ModuleFeature;
 use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\Categorie;
 use App\Models\CommissionCibleType;
@@ -29,6 +30,7 @@ use App\Services\Commission\PartParrainService;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
+use App\Services\ModuleService;
 use App\Services\SavedFilterService;
 use App\Services\VehiculeCapaciteService;
 use App\Services\Vehicules\VehiculeListExport;
@@ -480,24 +482,10 @@ class VehiculeController extends Controller
 
         $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'parrain.personne', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
 
-        $depenses = app(DepensePerimetre::class)->appliquer(Depense::query(), $request->user())
-            ->where('beneficiaire_type', 'vehicule')
-            ->where('beneficiaire_id', $vehicule->id)
-            ->where('organization_id', $vehicule->organization_id)
-            ->with('depenseType:id,libelle')
-            ->orderByDesc('date_depense')
-            ->get()
-            ->map(fn (Depense $d) => [
-                'id' => $d->id,
-                'libelle' => $d->depenseType?->libelle ?? '—',
-                'montant' => (float) $d->montant,
-                'date_depense' => $d->date_depense?->format('d/m/Y'),
-                'statut' => $d->statut,
-                'commentaire' => $d->commentaire,
-            ]);
+        $depenses = $this->depensesDuVehicule($request->user(), $vehicule);
 
         $situationPeriode = Periode::depuisRequeteValidee($request, parametre: 'situation_periode');
-        $situationVentes = $this->situationVentesService->pourVehicule($vehicule, $situationPeriode);
+        $situationVentes = $this->situationVentesService->pourConsulteur($request->user(), $vehicule, $situationPeriode);
 
         $equipe = $vehicule->equipe;
         $equipeData = null;
@@ -545,8 +533,10 @@ class VehiculeController extends Controller
                     $commandeFormBuilder->resolveVehiculeAvecEquipe($vehicule->id, $vehicule->organization_id),
                 )
                 : null,
+            // null sans `depenses.read` ou sans le module Dépenses : l'onglet Dépenses est masqué.
             'depenses' => $depenses,
             'equipe' => $equipeData,
+            // null sans `ventes.read` ou sans le module Ventes : l'onglet Situation est masqué.
             'situation_ventes' => $situationVentes,
             'situation_periode' => $situationPeriode->pourFront(),
             'proprietaires' => $this->proprietairesOptions(),
@@ -583,6 +573,38 @@ class VehiculeController extends Controller
                 ? ['id' => $vehicule->parrain->id, 'nom_complet' => $vehicule->parrain->nom_complet]
                 : null,
         ]);
+    }
+
+    /**
+     * Onglet Dépenses de la fiche (27/11/2026) : `vehicules.read` ouvre la fiche, jamais les
+     * dépenses. Exige `depenses.read` et le module Dépenses actif, comme l'écran Dépenses, et
+     * reprend son périmètre de consultation (DepensePerimetre). Sans droit : null, rien n'est lu.
+     *
+     * @return Collection<int, array<string, mixed>>|null
+     */
+    private function depensesDuVehicule(User $user, Vehicule $vehicule): ?Collection
+    {
+        if (! $user->can('depenses.read') || ! ModuleService::isActive(ModuleFeature::DEPENSES, $user->organization)) {
+            return null;
+        }
+
+        return app(DepensePerimetre::class)->appliquer(Depense::query(), $user)
+            ->where('beneficiaire_type', 'vehicule')
+            ->where('beneficiaire_id', $vehicule->id)
+            ->where('organization_id', $vehicule->organization_id)
+            ->with('depenseType:id,libelle')
+            ->orderByDesc('date_depense')
+            ->get()
+            ->map(fn (Depense $d) => [
+                'id' => $d->id,
+                'libelle' => $d->depenseType?->libelle ?? '—',
+                'montant' => (float) $d->montant,
+                'date_depense' => $d->date_depense?->format('d/m/Y'),
+                'statut' => $d->statut,
+                'commentaire' => $d->commentaire,
+            ])
+            ->values()
+            ->toBase();
     }
 
     public function storeFrais(Request $request, Vehicule $vehicule): RedirectResponse

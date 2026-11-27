@@ -118,7 +118,7 @@ interface DepenseRow {
 const props = defineProps<{
     proprietaire: ProprietaireData;
     vehicules: VehiculeRow[];
-    depenses: DepenseRow[];
+    depenses: DepenseRow[] | null;
     pieces_identite: PieceIdentiteRow[];
     piece_identite_permissions: PieceIdentitePermissions;
     type_piece_options: TypeOption[];
@@ -162,6 +162,7 @@ type OngletProprietaire =
 
 const activeTab = ref<OngletProprietaire>('informations');
 
+// Dépenses : uniquement avec le droit de lire les dépenses (prop null sinon, décidé par le serveur).
 const detailTabs = computed(() => [
     {
         key: 'informations' as const,
@@ -177,13 +178,17 @@ const detailTabs = computed(() => [
         count: props.vehicules.length,
         testid: 'owner-vehicles-tab',
     },
-    {
-        key: 'depenses' as const,
-        label: 'Dépenses',
-        icon: Receipt,
-        count: props.depenses.length,
-        testid: 'owner-depenses-tab',
-    },
+    ...(props.depenses
+        ? [
+              {
+                  key: 'depenses' as const,
+                  label: 'Dépenses',
+                  icon: Receipt,
+                  count: props.depenses.length,
+                  testid: 'owner-depenses-tab',
+              },
+          ]
+        : []),
     {
         key: 'piece_identite' as const,
         label: "Pièce d'identité",
@@ -246,7 +251,7 @@ const statutLabel: Record<string, string> = {
 };
 
 const totalApprouve = computed(() =>
-    props.depenses
+    (props.depenses ?? [])
         .filter((d) => d.statut === 'approuve')
         .reduce((s, d) => s + d.montant, 0),
 );
@@ -824,7 +829,7 @@ function closeLightbox() {
 
                     <!-- Dépenses tab -->
                     <div
-                        v-else-if="activeTab === 'depenses'"
+                        v-else-if="activeTab === 'depenses' && depenses"
                         class="rounded-xl border bg-card p-4 sm:p-6"
                     >
                         <div

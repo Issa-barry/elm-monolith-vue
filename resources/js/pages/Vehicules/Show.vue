@@ -162,9 +162,9 @@ type StatutPartageCommission = 'fait' | 'a_faire' | 'a_repartir' | 'non_requis';
 const props = defineProps<{
     vehicule: VehiculeData;
     distribution_chauffeur_motif: string | null;
-    depenses: DepenseRow[];
+    depenses: DepenseRow[] | null;
     equipe: EquipeData | null;
-    situation_ventes: SituationVentesData;
+    situation_ventes: SituationVentesData | null;
     situation_periode: SituationPeriode;
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
@@ -207,14 +207,18 @@ const props = defineProps<{
 }>();
 
 const page = usePage();
-const ONGLETS = [
+type Onglet = 'informations' | 'equipe' | 'parrain' | 'situation' | 'depenses';
+
+// Situation et Dépenses : uniquement avec le droit de lire les ventes, resp. les dépenses (prop
+// null sinon, décidé par le serveur).
+const ONGLETS: Onglet[] = [
     'informations',
     'equipe',
     'parrain',
-    'situation',
-    'depenses',
-] as const;
-const { onglet: activeTab, choisir: choisirOnglet } = useUrlTab(
+    ...(props.situation_ventes ? (['situation'] as const) : []),
+    ...(props.depenses ? (['depenses'] as const) : []),
+];
+const { onglet: activeTab, choisir: choisirOnglet } = useUrlTab<Onglet>(
     ONGLETS,
     'informations',
 );
@@ -282,8 +286,8 @@ function supprimerVehicule() {
 }
 
 const tabNav = ref<HTMLElement | null>(null);
-const detailTabs = computed(
-    () =>
+const detailTabs = computed(() =>
+    (
         [
             {
                 key: 'informations',
@@ -308,9 +312,10 @@ const detailTabs = computed(
                 key: 'depenses',
                 label: 'Dépenses',
                 icon: Receipt,
-                count: props.depenses.length,
+                count: props.depenses?.length ?? 0,
             },
-        ] as const,
+        ] as const
+    ).filter((tab) => ONGLETS.includes(tab.key)),
 );
 async function centrerOnglet() {
     await nextTick();
@@ -323,7 +328,7 @@ async function centrerOnglet() {
 }
 watch(activeTab, centrerOnglet);
 onMounted(centrerOnglet);
-function naviguerOnglets(event: KeyboardEvent, key: (typeof ONGLETS)[number]) {
+function naviguerOnglets(event: KeyboardEvent, key: Onglet) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     const index = ONGLETS.indexOf(key);
@@ -549,7 +554,7 @@ const statutLabel: Record<string, string> = {
 };
 
 const totalApprouve = computed(() =>
-    props.depenses
+    (props.depenses ?? [])
         .filter((d) => d.statut === 'approuve')
         .reduce((s, d) => s + d.montant, 0),
 );
@@ -1842,7 +1847,9 @@ function formatGNF(val: number): string {
 
                     <!-- Situation tab -->
                     <SituationTab
-                        v-else-if="activeTab === 'situation'"
+                        v-else-if="
+                            activeTab === 'situation' && situation_ventes
+                        "
                         :vehicule-id="vehicule.id"
                         :vehicule-recherche="vehicule.immatriculation"
                         :ventes="situation_ventes"
@@ -1850,7 +1857,10 @@ function formatGNF(val: number): string {
                     />
 
                     <!-- Dépenses tab -->
-                    <div v-else class="rounded-xl border bg-card p-4 sm:p-6">
+                    <div
+                        v-else-if="activeTab === 'depenses' && depenses"
+                        class="rounded-xl border bg-card p-4 sm:p-6"
+                    >
                         <div
                             class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
                         >

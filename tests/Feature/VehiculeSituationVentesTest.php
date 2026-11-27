@@ -4,14 +4,20 @@ namespace Tests\Feature;
 
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
+use App\Features\ModuleFeature;
 use App\Models\CommandeVente;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\ProduitVariante;
 use App\Models\Proprietaire;
+use App\Models\Site;
+use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Pennant\Feature;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -30,7 +36,32 @@ class VehiculeSituationVentesTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['vehicules.read']);
+        // `ventes.read` : la section Activité commerciale l'exige (27/11/2026) ; administrateur,
+        // donc toutes les agences, ventes sans agence comprises.
+        $this->initOrgAndUser(['vehicules.read', 'ventes.read']);
+    }
+
+    /** Agent non administrateur, rattaché aux seules agences données. */
+    private function makeAgent(array $permissions, array $sites): User
+    {
+        Role::firstOrCreate(['name' => 'agent_situation_test', 'guard_name' => 'web']);
+        foreach ($permissions as $permission) {
+            Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        $agent = User::factory()->create(['organization_id' => $this->org->id]);
+        $agent->assignRole('agent_situation_test');
+        $agent->givePermissionTo($permissions);
+        foreach ($sites as $index => $site) {
+            $agent->sites()->attach($site->id, ['role' => 'employe', 'is_default' => $index === 0]);
+        }
+
+        return $agent;
+    }
+
+    private function makeSite(string $nom): Site
+    {
+        return Site::create(['organization_id' => $this->org->id, 'nom' => $nom, 'type' => 'depot', 'localisation' => 'Conakry']);
     }
 
     private function makeVehicule(): Vehicule
@@ -409,5 +440,83 @@ class VehiculeSituationVentesTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('vehicules.show', ['vehicule' => $vehicule, 'date_fin' => '2026-09-13']))
             ->assertSessionHasErrors('date_debut');
+    }
+
+    /** 27/11/2026 : `vehicules.read` ouvre la fiche, jamais les chiffres de vente du véhicule. */
+    public function test_sans_ventes_read_la_situation_n_est_ni_calculee_ni_envoyee(): void
+    {
+        $site = $this->user->sites()->firstOrFail();
+        $vehicule = $this->makeVehicule();
+        $this->makeFacture($this->makeCommande($vehicule, ['site_id' => $site->id, 'total_commande' => 10000]), 10000, 10000);
+
+        $agent = $this->makeAgent(['vehicules.read'], [$site]);
+
+        $this->actingAs($agent)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('situation_ventes', null)
+            );
+    }
+
+    public function test_module_ventes_inactif_la_situation_n_est_pas_envoyee(): void
+    {
+        $vehicule = $this->makeVehicule();
+        $this->makeCommande($vehicule, ['total_commande' => 10000]);
+
+        Feature::for($this->org)->deactivate(ModuleFeature::VENTES);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('situation_ventes', null));
+    }
+
+    /** Périmètre de l'écran Ventes : seules les ventes des agences de rattachement de l'agent. */
+    public function test_agent_ne_voit_que_les_ventes_de_ses_agences(): void
+    {
+        $agenceA = $this->user->sites()->firstOrFail();
+        $agenceB = $this->makeSite('Agence B');
+        $vehicule = $this->makeVehicule();
+
+        $this->makeFacture($this->makeCommande($vehicule, ['site_id' => $agenceA->id, 'total_commande' => 10000]), 10000, 4000);
+        $this->makeFacture($this->makeCommande($vehicule, ['site_id' => $agenceB->id, 'total_commande' => 50000]), 50000, 50000);
+        $this->makeCommande($vehicule, ['site_id' => null, 'total_commande' => 70000]);
+
+        $agent = $this->makeAgent(['vehicules.read', 'ventes.read'], [$agenceA]);
+
+        $this->actingAs($agent)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('situation_ventes.kpis.ca_vendu', 10000)
+                ->where('situation_ventes.kpis.nb_ventes', 1)
+                ->where('situation_ventes.kpis.encaisse', 4000)
+                ->where('situation_ventes.kpis.reste_du', 6000)
+                ->where('situation_ventes.paiements.total_ventes', 1)
+            );
+    }
+
+    /** Vision de toutes les agences (ADR 0025) : toutes les ventes, y compris celles sans agence. */
+    public function test_vision_toutes_agences_voit_toutes_les_ventes_du_vehicule(): void
+    {
+        $agenceA = $this->user->sites()->firstOrFail();
+        $agenceB = $this->makeSite('Agence B');
+        $vehicule = $this->makeVehicule();
+
+        $this->makeCommande($vehicule, ['site_id' => $agenceA->id, 'total_commande' => 10000]);
+        $this->makeCommande($vehicule, ['site_id' => $agenceB->id, 'total_commande' => 50000]);
+        $this->makeCommande($vehicule, ['site_id' => null, 'total_commande' => 70000]);
+
+        $agent = $this->makeAgent(['vehicules.read', 'ventes.read', User::PERMISSION_LECTURE_TOUTES_AGENCES], [$agenceA]);
+
+        $this->actingAs($agent)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('situation_ventes.kpis.ca_vendu', 130000)
+                ->where('situation_ventes.kpis.nb_ventes', 3)
+            );
     }
 }
