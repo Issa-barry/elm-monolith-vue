@@ -7,11 +7,12 @@ import type {
     FinCddRh,
 } from '@/types/dashboard-rh';
 import { computed } from 'vue';
-import { CARTE_APOLLO } from '../commissions/apollo';
+import type { LigneIndicateurs } from '../shared/indicateurs';
+import LignesIndicateursApollo from '../shared/LignesIndicateursApollo.vue';
 import { nombreTexte, pluriel } from './nombres';
 
-// Cartes de Stat-RH, mêmes cartes Apollo que les autres tableaux de bord : quatre par ligne sur
-// grand écran, deux sur tablette, une sur téléphone. Une ligne par liste RH, affichée seulement avec
+// Cartes de Stat-RH, cartes Apollo partagées avec Stat-Stock (LignesIndicateursApollo) : quatre par
+// ligne sur grand écran, deux sur tablette, une sur téléphone. Une ligne par liste RH, affichée seulement avec
 // sa permission (le serveur n'envoie pas le bloc sinon) :
 // - Effectifs (à ce jour ; entrées et sorties de la période) ;
 // - Contrats (à ce jour) ;
@@ -24,22 +25,7 @@ const props = defineProps<{
     absences: AbsencesRh | null;
 }>();
 
-interface Carte {
-    id: string;
-    titre: string;
-    definition: string;
-    valeur: string;
-    detail: string;
-}
-
-interface Ligne {
-    id: string;
-    titre: string;
-    precision: string;
-    cartes: Carte[];
-}
-
-function ligneEffectifs(e: EffectifsRh): Ligne {
+function ligneEffectifs(e: EffectifsRh): LigneIndicateurs {
     const sansDate = props.sansDateEmbauche ?? 0;
 
     return {
@@ -50,6 +36,7 @@ function ligneEffectifs(e: EffectifsRh): Ligne {
             {
                 id: 'actifs',
                 titre: 'Salariés actifs',
+                icone: 'pi-users',
                 definition:
                     'Salariés au statut Actif aujourd’hui, dans les agences du filtre.',
                 valeur: nombreTexte(e.actifs),
@@ -58,6 +45,7 @@ function ligneEffectifs(e: EffectifsRh): Ligne {
             {
                 id: 'suspendus',
                 titre: 'Salariés suspendus',
+                icone: 'pi-pause-circle',
                 definition:
                     'Salariés au statut Suspendu aujourd’hui : toujours dans l’effectif.',
                 valeur: nombreTexte(e.suspendus),
@@ -66,27 +54,29 @@ function ligneEffectifs(e: EffectifsRh): Ligne {
             {
                 id: 'entrees',
                 titre: 'Entrées',
+                icone: 'pi-sign-in',
                 definition:
                     'Salariés dont la date d’embauche tombe dans la période. Un dossier sans date d’embauche n’est jamais compté.',
                 valeur: nombreTexte(e.entrees),
                 detail:
                     sansDate > 0
-                        ? `${pluriel(sansDate, 'dossier')} sans date d’embauche`
+                        ? `${nombreTexte(sansDate)} sans date d’embauche`
                         : 'Date d’embauche dans la période',
             },
             {
                 id: 'sorties',
                 titre: 'Sorties',
+                icone: 'pi-sign-out',
                 definition:
                     'Départs enregistrés dont la date de sortie effective tombe dans la période.',
                 valeur: nombreTexte(e.sorties),
-                detail: 'Date de sortie dans la période',
+                detail: 'Départs de la période',
             },
         ],
     };
 }
 
-function ligneContrats(c: ContratsRh, fins: FinCddRh[]): Ligne {
+function ligneContrats(c: ContratsRh, fins: FinCddRh[]): LigneIndicateurs {
     const depassees = fins.filter(
         (f) => f.statut === 'echeance_depassee',
     ).length;
@@ -99,22 +89,25 @@ function ligneContrats(c: ContratsRh, fins: FinCddRh[]): Ligne {
             {
                 id: 'cdi',
                 titre: 'CDI en cours',
+                icone: 'pi-briefcase',
                 definition:
                     'Salariés actifs ou suspendus dont le contrat actif est un CDI.',
                 valeur: nombreTexte(c.cdi),
-                detail: 'Contrat actif à durée indéterminée',
+                detail: 'Durée indéterminée',
             },
             {
                 id: 'cdd',
                 titre: 'CDD en cours',
+                icone: 'pi-calendar',
                 definition:
                     'Salariés actifs ou suspendus dont le contrat actif est un CDD.',
                 valeur: nombreTexte(c.cdd),
-                detail: 'Contrat actif à durée déterminée',
+                detail: 'Durée déterminée',
             },
             {
                 id: 'sans-contrat',
                 titre: 'Sans contrat en cours',
+                icone: 'pi-file',
                 definition:
                     'Salariés actifs sans contrat au statut Actif (aucun contrat, ou contrats terminés ou rompus).',
                 valeur: nombreTexte(c.sans_contrat),
@@ -123,9 +116,11 @@ function ligneContrats(c: ContratsRh, fins: FinCddRh[]): Ligne {
             {
                 id: 'fins-cdd',
                 titre: 'Fins de CDD à traiter',
+                icone: 'pi-calendar-times',
                 definition:
                     'CDD en cours dont la fin prévue est dépassée ou atteinte dans les 30 jours : renouvellement, nouveau contrat ou départ à décider.',
                 valeur: nombreTexte(fins.length),
+                ton: fins.length > 0 ? 'avertissement' : 'neutre',
                 detail: `${depassees} ${depassees > 1 ? 'dépassées' : 'dépassée'} · ${fins.length - depassees} sous 30 jours`,
             },
         ],
@@ -148,15 +143,15 @@ function detailTaux(a: AbsencesRh): string {
     if (a.taux_motif === 'periode')
         return 'Période bornée et commencée requise';
     if (a.salaries_taux !== null && a.salaries_exclus !== null) {
-        return `${pluriel(a.salaries_taux, 'salarié')} pris en compte · ${pluriel(a.salaries_exclus, 'exclu')}`;
+        return `${nombreTexte(a.salaries_taux)} pris en compte · ${pluriel(a.salaries_exclus, 'exclu')}`;
     }
 
     return a.taux_motif === 'aucun_salarie'
-        ? 'Aucun salarié avec date d’embauche connue'
-        : 'Salariés avec date d’embauche connue';
+        ? 'Aucune date d’embauche connue'
+        : 'Salariés à date d’embauche connue';
 }
 
-function ligneAbsences(a: AbsencesRh): Ligne {
+function ligneAbsences(a: AbsencesRh): LigneIndicateurs {
     return {
         id: 'absences',
         titre: 'Absences',
@@ -167,6 +162,7 @@ function ligneAbsences(a: AbsencesRh): Ligne {
             {
                 id: 'jours-absence',
                 titre: 'Jours d’absence',
+                icone: 'pi-calendar-minus',
                 definition:
                     'Jours calendaires d’absence enregistrée (annulées exclues), dates incluses, sur les jours écoulés de la période.',
                 valeur: nombreTexte(a.jours),
@@ -175,6 +171,7 @@ function ligneAbsences(a: AbsencesRh): Ligne {
             {
                 id: 'taux',
                 titre: 'Taux d’absentéisme',
+                icone: 'pi-percentage',
                 definition: definitionTaux(a),
                 valeur: a.taux === null ? '—' : formatPourcentage(a.taux),
                 detail: detailTaux(a),
@@ -182,6 +179,7 @@ function ligneAbsences(a: AbsencesRh): Ligne {
             {
                 id: 'injustifiees',
                 titre: 'Absences injustifiées',
+                icone: 'pi-ban',
                 definition:
                     'Jours d’absence au seul motif « Absence injustifiée ».',
                 valeur: nombreTexte(a.injustifiees_jours),
@@ -190,17 +188,18 @@ function ligneAbsences(a: AbsencesRh): Ligne {
             {
                 id: 'absents',
                 titre: 'Absents aujourd’hui',
+                icone: 'pi-user-minus',
                 definition:
                     'Salariés dont une absence enregistrée couvre aujourd’hui.',
                 valeur: nombreTexte(a.absents_aujourdhui),
-                detail: `${pluriel(a.a_venir, 'absence')} à venir sur la période`,
+                detail: `${pluriel(a.a_venir, 'absence')} à venir`,
             },
         ],
     };
 }
 
-const lignes = computed((): Ligne[] => {
-    const resultat: Ligne[] = [];
+const lignes = computed((): LigneIndicateurs[] => {
+    const resultat: LigneIndicateurs[] = [];
     if (props.effectifs) resultat.push(ligneEffectifs(props.effectifs));
     if (props.contrats)
         resultat.push(ligneContrats(props.contrats, props.finsCdd ?? []));
@@ -211,39 +210,5 @@ const lignes = computed((): Ligne[] => {
 </script>
 
 <template>
-    <template v-for="ligne in lignes" :key="ligne.id">
-        <h2
-            class="col-span-12 -mb-4 text-sm font-semibold text-[var(--p-text-muted-color)]"
-            :data-testid="`rh-ligne-${ligne.id}`"
-        >
-            {{ ligne.titre }}
-            <span class="font-normal">· {{ ligne.precision }}</span>
-        </h2>
-        <div
-            v-for="carte in ligne.cartes"
-            :key="carte.id"
-            class="col-span-12 md:col-span-6 xl:col-span-3"
-            :data-testid="`kpi-${carte.id}`"
-        >
-            <div :class="CARTE_APOLLO">
-                <span
-                    class="text-[15.75px] leading-[24.5px] font-semibold"
-                    :title="carte.definition"
-                    >{{ carte.titre }}</span
-                >
-                <div
-                    class="mt-3.5 text-[31.5px] leading-[35px] font-bold whitespace-nowrap text-[var(--p-surface-900)] dark:text-[var(--p-surface-0)]"
-                    data-slot="valeur"
-                >
-                    {{ carte.valeur }}
-                </div>
-                <div
-                    class="mt-1 font-medium text-[var(--p-text-muted-color)]"
-                    data-slot="detail"
-                >
-                    {{ carte.detail }}
-                </div>
-            </div>
-        </div>
-    </template>
+    <LignesIndicateursApollo :lignes="lignes" prefixe="rh" />
 </template>

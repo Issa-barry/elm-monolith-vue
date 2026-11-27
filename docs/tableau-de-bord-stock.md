@@ -49,6 +49,11 @@ S1 n'affiche aucune valeur financière du stock et ne gère pas le surstock (dé
 
 ## Cartes
 
+Présentation commune à Stat-Stock et Stat-RH (`components/dashboard/shared/LignesIndicateursApollo.vue`,
+27/11/2026) : carte `.card` d'Apollo, quatre par ligne, titre de section en tête de chaque ligne ;
+icône de l'indicateur dans l'angle du titre, chiffre, détail court sur une ligne, en ambre pour une
+alerte à traiter (standard A8, rien n'est bloqué). Ici : la carte « Alertes stock » dès qu'une alerte existe.
+
 | Carte | Formule | Source |
 |---|---|---|
 | Stock disponible | physique − réservé, somme des agences du filtre | `variante_stocks` via `EtatStock` |
