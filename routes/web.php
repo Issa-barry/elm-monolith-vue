@@ -1,6 +1,7 @@
 <?php
 
 use App\Features\ModuleFeature;
+use App\Features\TableauDeBordFeature;
 use App\Http\Controllers\Account\IndexAccountController;
 use App\Http\Controllers\Account\ToggleActiveAccountController;
 use App\Http\Controllers\Achats\AnnulerCommandeAchatController;
@@ -157,6 +158,7 @@ use App\Http\Controllers\Divers\IndexDashboardController;
 use App\Http\Controllers\Divers\IndexDashboardDepensesController;
 use App\Http\Controllers\Divers\IndexDashboardRhController;
 use App\Http\Controllers\Divers\IndexDashboardStockController;
+use App\Http\Controllers\Divers\IndexDashboardVehiculesController;
 use App\Http\Controllers\Divers\MarkReadContactController;
 use App\Http\Controllers\Divers\UnreadCountContactController;
 use App\Http\Controllers\EmployeController;
@@ -468,6 +470,8 @@ Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboa
 
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
+    // Page d'accueil du back-office (Fortify home, AuthRedirects) : jamais refusée. Stat-Ventes
+    // désactivé (ADR 0071) ne masque que ses indicateurs, cf. IndexDashboardController.
     Route::get('dashboard', IndexDashboardController::class)
         ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'staff', 'org.site.required', 'require.site'])
         ->name('dashboard');
@@ -480,25 +484,33 @@ Route::prefix('backoffice')->group(function () {
         Route::patch('saved-filters/{scope}/{id}', UpdateSavedFilterController::class)->name('saved-filters.update');
         Route::delete('saved-filters/{scope}/{id}', DestroySavedFilterController::class)->name('saved-filters.destroy');
 
+        // Tableaux de bord « Stat- » : chacun exige que l'organisation l'ait activé (ADR 0071), en plus
+        // du module de ses données et de la permission vérifiée par son contrôleur.
+
         // Tableau de bord Commissions — même droit de lecture et mêmes périmètres d'agence que les écrans commissions.
         Route::get('tableau-de-bord/commissions', IndexDashboardCommissionsController::class)
-            ->middleware('module:'.ModuleFeature::COMPTABILITE)
+            ->middleware(['module:'.ModuleFeature::COMPTABILITE, 'tableau-de-bord:'.TableauDeBordFeature::COMMISSIONS])
             ->name('dashboard.commissions');
 
         // Tableau de bord Dépenses — même droit de lecture et même périmètre que la liste des dépenses.
         Route::get('tableau-de-bord/depenses', IndexDashboardDepensesController::class)
-            ->middleware('module:'.ModuleFeature::DEPENSES)
+            ->middleware(['module:'.ModuleFeature::DEPENSES, 'tableau-de-bord:'.TableauDeBordFeature::DEPENSES])
             ->name('dashboard.depenses');
 
         // Tableau de bord Stock — même droit de lecture et même périmètre que la page Stock.
         Route::get('tableau-de-bord/stock', IndexDashboardStockController::class)
-            ->middleware('module:'.ModuleFeature::PRODUITS)
+            ->middleware(['module:'.ModuleFeature::PRODUITS, 'tableau-de-bord:'.TableauDeBordFeature::STOCK])
             ->name('dashboard.stock');
 
         // Tableau de bord RH — un bloc par liste RH consultable (Employés, Contrats, Absences), même périmètre d'agences.
         Route::get('tableau-de-bord/rh', IndexDashboardRhController::class)
-            ->middleware('module:'.ModuleFeature::RH)
+            ->middleware(['module:'.ModuleFeature::RH, 'tableau-de-bord:'.TableauDeBordFeature::RH])
             ->name('dashboard.rh');
+
+        // Tableau de bord du parc — lecture des véhicules ; chaque bloc d'activité ou de dépenses suit la permission et le module de sa source.
+        Route::get('tableau-de-bord/vehicules', IndexDashboardVehiculesController::class)
+            ->middleware(['module:'.ModuleFeature::VEHICULES, 'tableau-de-bord:'.TableauDeBordFeature::VEHICULES])
+            ->name('dashboard.vehicules');
 
         // Rapports (docs/rapports.md) — permission et périmètre vérifiés par RapportPerimetreResolver.
         Route::get('ma-situation', IndexMaSituationController::class)->name('ma-situation');

@@ -28,6 +28,9 @@ règle RH : statuts, dates, contrats et absences sont ceux des écrans RH
 
 ## Accès et périmètre
 
+- **Activation** : le tableau doit être activé pour l'organisation (Paramètres → Tableaux de
+  bord, désactivé par défaut), sinon il quitte le menu et sa route est refusée, avant tout calcul
+  ([tableaux-de-bord-activation.md](tableaux-de-bord-activation.md), ADR 0071).
 - **Module** RH actif.
 - **Accès** : au moins une des permissions `rh-employes.read`, `rh-contrats.read`,
   `rh-absences.read`. Aucune permission dédiée.

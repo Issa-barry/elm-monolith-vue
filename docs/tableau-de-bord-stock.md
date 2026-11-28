@@ -21,6 +21,9 @@ ceux de l'historique du stock.
 
 ## Accès et périmètre
 
+- **Activation** : le tableau doit être activé pour l'organisation (Paramètres → Tableaux de
+  bord, activé par défaut), sinon il quitte le menu et sa route est refusée, avant tout calcul
+  ([tableaux-de-bord-activation.md](tableaux-de-bord-activation.md), ADR 0071).
 - **Droit** : `produits.read`, module Produits actif, comme la page Stock. Aucune permission dédiée.
 - **Périmètre** : celui de la page Stock (`EtatStock::sitesConsultables`) : toutes les agences pour
   la vision toutes agences, sinon les agences de rattachement.

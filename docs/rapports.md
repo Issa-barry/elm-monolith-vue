@@ -18,7 +18,8 @@ sont des vues statistiques, toujours préfixées `Stat-` pour ne jamais être co
 métier homonyme : **Stat-Ventes** (`/backoffice/dashboard`) et **Stat-Commissions**
 (`/backoffice/tableau-de-bord/commissions`), alors que **Ventes** (Commercial) et **Comptabilité ›
 Commissions** (Finance) restent les modules de travail. Toute nouvelle vue statistique du tableau de
-bord suit cette convention (protégée par `AppSidebarTableauDeBord.spec.ts`). Groupe
+bord suit cette convention (protégée par `AppSidebarTableauDeBord.spec.ts`). Chaque entrée n'apparaît que si
+l'organisation a activé ce tableau de bord ([tableaux-de-bord-activation.md](tableaux-de-bord-activation.md)). Groupe
 « Pilotage » : **Rapports › Ma situation**, **Rapports › Rapport d'activité** et **Rapports › Rapport
 par agence** (chaque sous-entrée selon sa permission ; le menu Rapports n'apparaît que si l'une est
 accordée). « Ma situation »

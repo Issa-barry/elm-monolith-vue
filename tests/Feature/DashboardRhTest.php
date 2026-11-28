@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Features\ModuleFeature;
+use App\Features\TableauDeBordFeature;
 use App\Models\Absence;
 use App\Models\Contrat;
 use App\Models\Employe;
@@ -46,6 +47,8 @@ class DashboardRhTest extends TestCase
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         $this->org = Organization::factory()->create();
+        // Désactivé par défaut (ADR 0071) : refus couvert par TableauxDeBordActivationTest.
+        Feature::for($this->org)->activate(TableauDeBordFeature::RH);
         $this->matoto = Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'depot']);
         $this->cba = Site::create(['organization_id' => $this->org->id, 'nom' => 'CBA', 'type' => 'depot']);
     }

@@ -6,9 +6,12 @@ use App\Enums\NatureMouvementFonds;
 use App\Enums\StatutAnomalieEncaissement;
 use App\Enums\StatutMouvementFonds;
 use App\Enums\StatutTransfert;
+use App\Features\ModuleFeature;
+use App\Features\TableauDeBordFeature;
 use App\Models\AnomalieEncaissement;
 use App\Models\ContactMessage;
 use App\Models\MouvementFonds;
+use App\Models\Organization;
 use App\Models\PropositionVehicule;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
@@ -17,6 +20,7 @@ use App\Notifications\AnomalieEncaissementNotification;
 use App\Notifications\EcartReceptionTransfertNotification;
 use App\Services\ModuleService;
 use App\Services\StockStatutService;
+use App\Services\TableauDeBordService;
 use App\Services\ThemePolicyService;
 use App\Services\Tresorerie\ApprovisionnementsAgentService;
 use App\Support\AppVersion;
@@ -26,6 +30,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Middleware;
+use Laravel\Pennant\Feature;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -99,6 +104,8 @@ class HandleInertiaRequests extends Middleware
             return [];
         }
 
+        $this->prechargerFlagsPennant($org);
+
         // Les clés sont simplifiées (sans préfixe 'module.')
         // pour éviter les problèmes de dot-notation dans les assertions Inertia/Vue
         $raw = ModuleService::allForOrg($org);
@@ -108,6 +115,38 @@ class HandleInertiaRequests extends Middleware
         }
 
         return $flags;
+    }
+
+    /**
+     * Tableaux de bord « Stat- » activés pour l'organisation (ADR 0071) : pilotent le groupe
+     * « Tableau de bord » du menu. Clés courtes (`ventes`, `stock`…). Le serveur refuse de toute
+     * façon la route d'un tableau désactivé (middleware `tableau-de-bord:`).
+     *
+     * @return array<string, bool>
+     */
+    private function tableauxDeBord(Request $request): array
+    {
+        $org = $request->user()?->organization_id
+            ? $request->user()->loadMissing('organization')->organization
+            : null;
+        if (! $org) {
+            return [];
+        }
+
+        $this->prechargerFlagsPennant($org);
+
+        $etats = [];
+        foreach (TableauDeBordService::allForOrg($org) as $tableau => $actif) {
+            $etats[TableauDeBordFeature::cleCourte($tableau)] = $actif;
+        }
+
+        return $etats;
+    }
+
+    /** Modules et tableaux de bord lus en une seule requête Pennant par page ; idempotent. */
+    private function prechargerFlagsPennant(Organization $org): void
+    {
+        Feature::for($org)->loadMissing([...ModuleFeature::ALL, ...TableauDeBordFeature::ALL]);
     }
 
     /**
@@ -465,6 +504,7 @@ class HandleInertiaRequests extends Middleware
             'ecarts_reception' => fn () => $this->ecartsReception($request),
             'anomalies_encaissement' => fn () => $this->anomaliesEncaissement($request),
             'module_flags' => fn () => $this->moduleFlags($request),
+            'tableaux_de_bord' => fn () => $this->tableauxDeBord($request),
             'theme' => fn () => $this->theme($request),
             'org_sites' => fn () => $this->orgSites($request),
             // Choix du champ « Période » de DataFilters : une seule liste pour tout le back-office (ADR 0057).

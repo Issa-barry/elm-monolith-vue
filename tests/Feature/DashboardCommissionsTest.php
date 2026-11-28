@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\CommissionActivationStatut;
+use App\Features\TableauDeBordFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
@@ -19,6 +20,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Laravel\Pennant\Feature;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -50,6 +52,8 @@ class DashboardCommissionsTest extends TestCase
         Carbon::setTestNow('2026-11-22 10:00:00');
 
         $this->org = Organization::factory()->create();
+        // Désactivé par défaut (ADR 0071) : refus couvert par TableauxDeBordActivationTest.
+        Feature::for($this->org)->activate(TableauDeBordFeature::COMMISSIONS);
         $this->matoto = $this->site('Matoto', ['is_central_tresorerie' => true]);
         $this->cba = $this->site('Cba');
         $this->sonfonia = $this->site('Sonfonia');
