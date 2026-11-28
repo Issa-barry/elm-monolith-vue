@@ -89,6 +89,7 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
             { title: 'Logistique', href: '/settings/logistique' },
             { title: 'Commissions', href: '/settings/commissions' },
             { title: 'Applications', href: '/settings/modules' },
+            { title: 'Tableaux de bord', href: '/settings/tableaux-de-bord' },
         );
     }
     if (can('commissions.configurer_agences_payeuses')) {

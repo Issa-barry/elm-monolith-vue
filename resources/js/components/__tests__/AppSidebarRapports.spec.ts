@@ -19,7 +19,11 @@ vi.mock('@inertiajs/vue3', async () => {
                     h('a', slots.default?.()),
         }),
         usePage: () => ({
-            props: { auth: { permissions: permissions.valeur, roles: [] } },
+            props: {
+                auth: { permissions: permissions.valeur, roles: [] },
+                // Valeurs par défaut du serveur (ADR 0071).
+                tableaux_de_bord: { ventes: true, stock: true },
+            },
         }),
     };
 });

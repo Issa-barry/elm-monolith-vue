@@ -3,6 +3,7 @@
 namespace Tests\Feature\Periodes;
 
 use App\Features\ModuleFeature;
+use App\Features\TableauDeBordFeature;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
@@ -90,6 +91,10 @@ class RegistreFiltresPeriodeTest extends TestCase
         $org = Organization::factory()->create();
         // Modules désactivés par défaut mais dont les écrans sont au registre.
         Feature::for($org)->activate(ModuleFeature::ACHATS);
+        // Idem pour les tableaux de bord désactivés par défaut (ADR 0071).
+        foreach (TableauDeBordFeature::ALL as $tableau) {
+            Feature::for($org)->activate($tableau);
+        }
         $site = Site::factory()->for($org)->create();
         $this->admin = User::factory()->create(['organization_id' => $org->id]);
         $this->admin->assignRole('super_admin');

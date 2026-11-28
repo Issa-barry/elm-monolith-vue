@@ -7,6 +7,10 @@ import { describe, expect, it, vi } from 'vitest';
 const permissions = vi.hoisted(() => ({
     valeur: {} as Record<string, boolean>,
 }));
+// Tableaux de bord activés pour l'organisation (props partagées, ADR 0071).
+const tableaux = vi.hoisted(() => ({
+    valeur: undefined as Record<string, boolean> | undefined,
+}));
 
 vi.mock('@inertiajs/vue3', async () => {
     const { defineComponent, h } = await import('vue');
@@ -19,7 +23,10 @@ vi.mock('@inertiajs/vue3', async () => {
                     h('a', slots.default?.()),
         }),
         usePage: () => ({
-            props: { auth: { permissions: permissions.valeur, roles: [] } },
+            props: {
+                auth: { permissions: permissions.valeur, roles: [] },
+                tableaux_de_bord: tableaux.valeur,
+            },
         }),
     };
 });
@@ -43,8 +50,23 @@ const estVueStatistique = (href: NavItem['href']) => {
 /** Toutes les permissions accordées, pour voir le menu le plus complet possible. */
 const TOUT = new Proxy({} as Record<string, boolean>, { get: () => true });
 
-function items(perms: Record<string, boolean>): NavItem[] {
+/** Les six tableaux de bord activés : ces tests portent sur les permissions et la convention. */
+const TOUS_ACTIFS = {
+    ventes: true,
+    commissions: true,
+    depenses: true,
+    stock: true,
+    rh: true,
+    vehicules: true,
+};
+
+function items(
+    perms: Record<string, boolean>,
+    actifs: Record<string, boolean> | null = TOUS_ACTIFS,
+): NavItem[] {
     permissions.valeur = perms;
+    // null : le serveur n'a transmis aucun état.
+    tableaux.valeur = actifs ?? undefined;
 
     return shallowMount(AppSidebar, {
         global: { renderStubDefaultSlot: true },
@@ -207,6 +229,57 @@ describe('AppSidebar — convention « Stat- » du tableau de bord', () => {
             tableauDeBord(
                 items({ 'ventes.read': true, 'logistique.read': true }),
             ).map((e) => e.title),
+        ).toEqual(['Stat-Ventes']);
+    });
+});
+
+describe('AppSidebar — activation des tableaux de bord par organisation (ADR 0071)', () => {
+    const titres = (actifs: Record<string, boolean> | null) =>
+        tableauDeBord(items(TOUT, actifs)).map((e) => e.title);
+
+    it('n’affiche par défaut que Stat-Ventes et Stat-Stock', () => {
+        expect(
+            titres({
+                ventes: true,
+                commissions: false,
+                depenses: false,
+                stock: true,
+                rh: false,
+                vehicules: false,
+            }),
+        ).toEqual(['Stat-Ventes', 'Stat-Stock']);
+    });
+
+    it('retire du menu chaque tableau désactivé, sans changer l’ordre des autres', () => {
+        const ordre = [
+            ['ventes', 'Stat-Ventes'],
+            ['commissions', 'Stat-Commissions'],
+            ['depenses', 'Stat-Dépenses'],
+            ['stock', 'Stat-Stock'],
+            ['rh', 'Stat-RH'],
+            ['vehicules', 'Stat-Véhicules'],
+        ];
+
+        for (const [cle, titre] of ordre) {
+            expect(titres({ ...TOUS_ACTIFS, [cle]: false }), cle).toEqual(
+                ordre.map(([, t]) => t).filter((t) => t !== titre),
+            );
+        }
+    });
+
+    it('fait disparaître le groupe Tableau de bord quand aucun tableau n’est activé', () => {
+        const aucun = Object.fromEntries(
+            Object.keys(TOUS_ACTIFS).map((cle) => [cle, false]),
+        );
+
+        expect(titres(aucun)).toEqual([]);
+        // Sans état transmis par le serveur, aucun tableau n'est supposé activé.
+        expect(titres(null)).toEqual([]);
+    });
+
+    it('n’ouvre jamais un tableau activé sans la permission de l’utilisateur', () => {
+        expect(
+            tableauDeBord(items({}, TOUS_ACTIFS)).map((e) => e.title),
         ).toEqual(['Stat-Ventes']);
     });
 });

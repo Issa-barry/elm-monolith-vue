@@ -12,7 +12,11 @@ import {
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/composables/usePermissions';
 import { home } from '@/routes';
-import { type NavItem, type PermissionKey } from '@/types';
+import {
+    type NavItem,
+    type PermissionKey,
+    type TableauDeBordKey,
+} from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     Briefcase,
@@ -50,6 +54,16 @@ const moduleFlags = computed(
     () => ((page.props as any).module_flags as Record<string, boolean>) ?? {},
 );
 const moduleActive = (key: string): boolean => moduleFlags.value[key] !== false;
+// Strict, contrairement aux modules : un tableau de bord n'apparaît que si le serveur le dit
+// activé (la plupart sont désactivés par défaut, ADR 0071).
+const tableauxDeBord = computed(
+    () =>
+        ((page.props as any).tableaux_de_bord as Partial<
+            Record<TableauDeBordKey, boolean>
+        >) ?? {},
+);
+const tableauDeBordActif = (key: TableauDeBordKey): boolean =>
+    tableauxDeBord.value[key] === true;
 const transfertsAReceptionner = computed(
     () => ((page.props as any).transferts_a_receptionner as number) ?? 0,
 );
@@ -184,8 +198,13 @@ const vehiculesItems = computed((): NavItem[] => {
 });
 
 const mainNavItems = computed((): NavItem[] => {
-    const items: NavItem[] = [
-        {
+    const items: NavItem[] = [];
+
+    // Chaque entrée « Stat- » exige en plus que l'organisation ait activé ce tableau de bord
+    // (Paramètres → Tableaux de bord, ADR 0071). Aucune entrée activée : le groupe disparaît.
+    // Stat-Ventes désactivé : /backoffice/dashboard reste l'accueil, sans ses indicateurs.
+    if (tableauDeBordActif('ventes'))
+        items.push({
             // Chemin relatif comme les autres entrées : l'URL Wayfinder est absolue et ne serait
             // jamais reconnue comme page active par NavMainItem.
             // Convention : toute vue statistique du groupe « Tableau de bord » est préfixée
@@ -194,10 +213,10 @@ const mainNavItems = computed((): NavItem[] => {
             href: '/backoffice/dashboard',
             icon: LayoutGrid,
             group: 'Tableau de bord',
-        },
-    ];
+        });
 
     if (
+        tableauDeBordActif('commissions') &&
         moduleActive('comptabilite') &&
         (can('comptabilite.read') || can('commissions.read'))
     )
@@ -209,7 +228,7 @@ const mainNavItems = computed((): NavItem[] => {
         });
 
     // Même droit et même module que la liste des dépenses (docs/tableau-de-bord-depenses.md).
-    if (canSee('depenses.read', 'depenses'))
+    if (tableauDeBordActif('depenses') && canSee('depenses.read', 'depenses'))
         items.push({
             title: 'Stat-Dépenses',
             href: '/backoffice/tableau-de-bord/depenses',
@@ -218,7 +237,7 @@ const mainNavItems = computed((): NavItem[] => {
         });
 
     // Même droit et même module que la page Stock (docs/tableau-de-bord-stock.md).
-    if (canSee('produits.read', 'produits'))
+    if (tableauDeBordActif('stock') && canSee('produits.read', 'produits'))
         items.push({
             title: 'Stat-Stock',
             href: '/backoffice/tableau-de-bord/stock',
@@ -229,6 +248,7 @@ const mainNavItems = computed((): NavItem[] => {
     // Ouvert à qui consulte une des listes RH ; chaque bloc suit la permission de sa liste
     // (docs/tableau-de-bord-rh.md).
     if (
+        tableauDeBordActif('rh') &&
         moduleActive('rh') &&
         (can('rh-employes.read') ||
             can('rh-contrats.read') ||
@@ -243,7 +263,10 @@ const mainNavItems = computed((): NavItem[] => {
 
     // Même droit et même module que la liste des véhicules ; chaque bloc d'activité ou de
     // dépenses suit la permission de sa source (docs/tableau-de-bord-vehicules.md).
-    if (canSee('vehicules.read', 'vehicules'))
+    if (
+        tableauDeBordActif('vehicules') &&
+        canSee('vehicules.read', 'vehicules')
+    )
         items.push({
             title: 'Stat-Véhicules',
             href: '/backoffice/tableau-de-bord/vehicules',

@@ -42,6 +42,9 @@ serveur applique déjà à la saisie d'une vente ou d'un transfert.
 
 ## Accès et périmètre
 
+- **Activation** : le tableau doit être activé pour l'organisation (Paramètres → Tableaux de
+  bord, désactivé par défaut), sinon il quitte le menu et sa route est refusée, avant tout calcul
+  ([tableaux-de-bord-activation.md](tableaux-de-bord-activation.md), ADR 0071).
 - **Module** Véhicules actif et permission **`vehicules.read`** (celle de la liste des véhicules).
   Aucune permission dédiée.
 - **Un bloc par source** : chaque bloc d'activité ou de dépenses n'est **ni calculé ni envoyé** sans

@@ -121,6 +121,7 @@ Chaque document technique indique en tête son **statut** :
 **Rapports**
 
 - [Rapport d'activité, rapport par agence et « Ma situation »](rapports.md)
+- [Activation des tableaux de bord « Stat- » par organisation](tableaux-de-bord-activation.md)
 
 **Organisation, agences et communications**
 

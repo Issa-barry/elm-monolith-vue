@@ -6,6 +6,7 @@ use App\Contracts\Rh\SourceDonneesPaie;
 use App\Contracts\SmsGateway;
 use App\Contracts\WhatsAppGateway;
 use App\Features\ModuleFeature;
+use App\Features\TableauDeBordFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Depense;
@@ -165,6 +166,12 @@ class AppServiceProvider extends ServiceProvider
         // Persistance: driver database (table features).
         foreach (ModuleFeature::ALL as $module) {
             Feature::define($module, fn (Organization $org) => ModuleFeature::defaultState($module));
+        }
+
+        // Tableaux de bord « Stat- » (ADR 0071) : même portée et même stockage que les modules.
+        // Valeur par défaut enregistrée à la première lecture, jamais recalculée ensuite.
+        foreach (TableauDeBordFeature::ALL as $tableau) {
+            Feature::define($tableau, fn (Organization $org) => TableauDeBordFeature::defaultState($tableau));
         }
 
         // api/public/* (contact, inscription livreur) : appelées server-to-server

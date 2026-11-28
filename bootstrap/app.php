@@ -13,6 +13,7 @@ use App\Http\Middleware\PreventCachingOfDynamicResponses;
 use App\Http\Middleware\RequireActiveLivreur;
 use App\Http\Middleware\RequireModuleEnabled;
 use App\Http\Middleware\RequireSiteAssigned;
+use App\Http\Middleware\RequireTableauDeBordActif;
 use App\Http\Middleware\VerifyVitrineServiceToken;
 use App\Services\ThemePolicyService;
 use App\Support\AuthRedirects;
@@ -77,6 +78,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => RoleMiddleware::class,
             'module' => RequireModuleEnabled::class,
+            'tableau-de-bord' => RequireTableauDeBordActif::class,
             'require.site' => RequireSiteAssigned::class,
             'staff' => EnsureIsStaffAccount::class,
             'org.site.required' => EnsureOrganizationHasSite::class,
