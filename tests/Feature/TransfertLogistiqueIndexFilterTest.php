@@ -108,9 +108,14 @@ class TransfertLogistiqueIndexFilterTest extends TestCase
             'vehicule_id' => $vehicule->id,
             'is_active' => true,
         ]);
+        // Prénom et nom transmis à la Personne : sinon Faker (fr_FR) peut tirer « Diallo »
+        // pour l'autre livreur et la recherche par nom remonte les deux transferts.
+        [$prenom, $nom] = explode(' ', $nomLivreur, 2);
         $livreur = Livreur::factory()->create([
             'organization_id' => $org->id,
             'nom_complet' => $nomLivreur,
+            'prenom' => $prenom,
+            'nom' => $nom,
             'telephone' => $telephone,
         ]);
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $livreur->id, 'role' => 'chauffeur', 'ordre' => 0]);
