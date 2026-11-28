@@ -26,6 +26,8 @@ use App\Http\Controllers\Settings\Profile\UpdateProfileController;
 use App\Http\Controllers\Settings\ReconfigurationPartagesController;
 use App\Http\Controllers\Settings\ShowTwoFactorAuthenticationController;
 use App\Http\Controllers\Settings\StockAjustementController;
+use App\Http\Controllers\Settings\TableauxDeBord\EditTableauxDeBordController;
+use App\Http\Controllers\Settings\TableauxDeBord\UpdateTableauDeBordController;
 use App\Http\Controllers\Settings\ThemeController;
 use App\Http\Controllers\Settings\Ventes\EditVenteParametrageController;
 use App\Http\Controllers\Settings\Ventes\UpdateVenteParametrageController;
@@ -62,6 +64,10 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/modules', [ModuleController::class, 'edit'])->name('modules.edit');
     Route::patch('settings/modules', [ModuleController::class, 'toggle'])->name('modules.toggle');
+
+    // Activation des tableaux de bord « Stat- » par organisation (ADR 0071) — parametres.update.
+    Route::get('settings/tableaux-de-bord', EditTableauxDeBordController::class)->name('settings.tableaux-de-bord.edit');
+    Route::patch('settings/tableaux-de-bord', UpdateTableauDeBordController::class)->name('settings.tableaux-de-bord.update');
 
     Route::get('settings/theme', [ThemeController::class, 'edit'])->name('theme.edit');
     Route::put('settings/theme', [ThemeController::class, 'update'])->name('theme.update');

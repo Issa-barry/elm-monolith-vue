@@ -28,6 +28,9 @@ règle RH : statuts, dates, contrats et absences sont ceux des écrans RH
 
 ## Accès et périmètre
 
+- **Activation** : le tableau doit être activé pour l'organisation (Paramètres → Tableaux de
+  bord, désactivé par défaut), sinon il quitte le menu et sa route est refusée, avant tout calcul
+  ([tableaux-de-bord-activation.md](tableaux-de-bord-activation.md), ADR 0071).
 - **Module** RH actif.
 - **Accès** : au moins une des permissions `rh-employes.read`, `rh-contrats.read`,
   `rh-absences.read`. Aucune permission dédiée.
@@ -57,7 +60,10 @@ règle RH : statuts, dates, contrats et absences sont ceux des écrans RH
 
 ## Cartes
 
-Quatre cartes par bloc, sur une ligne chacune.
+Quatre cartes par bloc, sur une ligne chacune. Présentation commune à Stat-Stock et Stat-RH (`components/dashboard/shared/LignesIndicateursApollo.vue`,
+27/11/2026) : carte `.card` d'Apollo, quatre par ligne, titre de section en tête de chaque ligne ;
+icône de l'indicateur dans l'angle du titre, chiffre, détail court sur une ligne, en ambre pour une
+alerte à traiter (standard A8, rien n'est bloqué). Ici : la carte « Fins de CDD à traiter » dès qu'une fin est à traiter.
 
 **Effectifs** (à ce jour ; entrées et sorties de la période)
 

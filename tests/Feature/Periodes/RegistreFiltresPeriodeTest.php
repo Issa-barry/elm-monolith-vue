@@ -3,6 +3,7 @@
 namespace Tests\Feature\Periodes;
 
 use App\Features\ModuleFeature;
+use App\Features\TableauDeBordFeature;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
@@ -60,6 +61,7 @@ class RegistreFiltresPeriodeTest extends TestCase
         'dashboard.depenses' => 'Tableau de bord des dépenses (Stat-Dépenses)',
         'dashboard.stock' => 'Tableau de bord du stock (Stat-Stock)',
         'dashboard.rh' => 'Tableau de bord RH (Stat-RH)',
+        'dashboard.vehicules' => 'Tableau de bord du parc (Stat-Véhicules)',
         'absences.index' => 'Absences des salariés',
     ];
 
@@ -89,6 +91,10 @@ class RegistreFiltresPeriodeTest extends TestCase
         $org = Organization::factory()->create();
         // Modules désactivés par défaut mais dont les écrans sont au registre.
         Feature::for($org)->activate(ModuleFeature::ACHATS);
+        // Idem pour les tableaux de bord désactivés par défaut (ADR 0071).
+        foreach (TableauDeBordFeature::ALL as $tableau) {
+            Feature::for($org)->activate($tableau);
+        }
         $site = Site::factory()->for($org)->create();
         $this->admin = User::factory()->create(['organization_id' => $org->id]);
         $this->admin->assignRole('super_admin');
@@ -160,7 +166,7 @@ class RegistreFiltresPeriodeTest extends TestCase
      */
     public function test_les_tableaux_de_bord_proposent_les_memes_periodes_et_les_dates_libres(): void
     {
-        foreach (['dashboard', 'dashboard.commissions', 'dashboard.depenses', 'dashboard.stock', 'dashboard.rh'] as $route) {
+        foreach (['dashboard', 'dashboard.commissions', 'dashboard.depenses', 'dashboard.stock', 'dashboard.rh', 'dashboard.vehicules'] as $route) {
             foreach (['hier', 't1', 's2', 'annee_precedente', 'mois_dernier', 'tout'] as $cle) {
                 $this->actingAs($this->admin)->get(route($route, ['periode' => $cle]))->assertOk()->assertSessionHasNoErrors();
             }

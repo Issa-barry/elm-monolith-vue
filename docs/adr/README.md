@@ -92,5 +92,6 @@ amende ou remplace.
 | [0068](0068-paiement-groupe-des-fiches-de-commission.md) | Paiement groupé des fiches de commission | 2026-11-19 | Accepté |
 | [0069](0069-idempotence-des-paiements-de-fiche.md) | Idempotence des paiements de fiche | 2026-11-20 | Accepté |
 | [0070](0070-absences-des-salaries.md) | Absences des salariés, distinctes des congés | 2026-11-23 | Accepté |
+| [0071](0071-activation-des-tableaux-de-bord.md) | Activation des tableaux de bord par organisation | 2026-11-27 | Accepté |
 
-Dernier numéro attribué : **0070**. Le prochain ADR sera le **0071**.
+Dernier numéro attribué : **0071**. Le prochain ADR sera le **0072**.

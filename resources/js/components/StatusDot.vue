@@ -41,6 +41,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     a_regulariser: 'bg-amber-500',
     // ADR 0066 : client créé à l'inscription, nature commerciale à confirmer.
     a_qualifier: 'bg-amber-500',
+    // État d'un véhicule actif dans Stat-Véhicules (TableauDeBordVehiculesService) : utilisable
+    // pour tous ses usages, ou au moins un usage bloqué par sa configuration.
+    operationnel: 'bg-emerald-500',
+    a_configurer: 'bg-amber-500',
     // Partage Livreur d'un véhicule (liste des véhicules, PartageConformiteVehiculesService).
     fait: 'bg-emerald-500',
     non_requis: 'bg-zinc-400 dark:bg-zinc-500',

@@ -80,6 +80,7 @@ Chaque document technique indique en tête son **statut** :
 - [Date métier des mouvements de stock](stock-mouvements-date.md)
 - [Tableau de bord du stock](tableau-de-bord-stock.md)
 - [Capacités de chargement des véhicules](capacites-vehicule.md)
+- [Tableau de bord du parc (Stat-Véhicules)](tableau-de-bord-vehicules.md)
 - [Parrainage véhicule](parrainage-vehicule.md)
 - [Import de mise à jour des véhicules](import-vehicules-maj.md)
 - [Dashboard mobile : QR d'identité et scanner](scanner-dashboard-mobile.md)
@@ -120,6 +121,7 @@ Chaque document technique indique en tête son **statut** :
 **Rapports**
 
 - [Rapport d'activité, rapport par agence et « Ma situation »](rapports.md)
+- [Activation des tableaux de bord « Stat- » par organisation](tableaux-de-bord-activation.md)
 
 **Organisation, agences et communications**
 

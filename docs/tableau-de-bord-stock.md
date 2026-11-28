@@ -21,6 +21,9 @@ ceux de l'historique du stock.
 
 ## Accès et périmètre
 
+- **Activation** : le tableau doit être activé pour l'organisation (Paramètres → Tableaux de
+  bord, activé par défaut), sinon il quitte le menu et sa route est refusée, avant tout calcul
+  ([tableaux-de-bord-activation.md](tableaux-de-bord-activation.md), ADR 0071).
 - **Droit** : `produits.read`, module Produits actif, comme la page Stock. Aucune permission dédiée.
 - **Périmètre** : celui de la page Stock (`EtatStock::sitesConsultables`) : toutes les agences pour
   la vision toutes agences, sinon les agences de rattachement.
@@ -48,6 +51,11 @@ S1 n'affiche aucune valeur financière du stock et ne gère pas le surstock (dé
 25/11/2026).
 
 ## Cartes
+
+Présentation commune à Stat-Stock et Stat-RH (`components/dashboard/shared/LignesIndicateursApollo.vue`,
+27/11/2026) : carte `.card` d'Apollo, quatre par ligne, titre de section en tête de chaque ligne ;
+icône de l'indicateur dans l'angle du titre, chiffre, détail court sur une ligne, en ambre pour une
+alerte à traiter (standard A8, rien n'est bloqué). Ici : la carte « Alertes stock » dès qu'une alerte existe.
 
 | Carte | Formule | Source |
 |---|---|---|

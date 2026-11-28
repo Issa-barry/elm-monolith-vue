@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\CategorieDepense;
 use App\Enums\StatutDepense;
 use App\Features\ModuleFeature;
+use App\Features\TableauDeBordFeature;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Organization;
@@ -46,6 +47,8 @@ class DashboardDepensesTest extends TestCase
         Carbon::setTestNow('2026-11-22 10:00:00');
 
         $this->org = Organization::factory()->create();
+        // Désactivé par défaut (ADR 0071) : refus couvert par TableauxDeBordActivationTest.
+        Feature::for($this->org)->activate(TableauDeBordFeature::DEPENSES);
         $this->matoto = $this->site('Matoto');
         $this->cba = $this->site('Cba');
         $this->auteur = User::factory()->create(['organization_id' => $this->org->id]);

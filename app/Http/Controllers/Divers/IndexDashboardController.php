@@ -7,6 +7,7 @@ use App\Enums\ModeRemiseGrossiste;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
+use App\Features\TableauDeBordFeature;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionProcessus;
 use App\Models\FactureVente;
@@ -14,6 +15,7 @@ use App\Models\Site;
 use App\Services\Client\QrPayloadResolver;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\SiteScopeService;
+use App\Services\TableauDeBordService;
 use App\Support\Periodes\Periode;
 use App\Support\Periodes\TranchesPeriode;
 use Carbon\CarbonImmutable;
@@ -36,6 +38,18 @@ class IndexDashboardController extends Controller
     {
         $user = auth()->user();
         $orgId = $user->organization_id;
+
+        // Stat-Ventes désactivé (ADR 0071) : la page reste l'accueil du back-office (connexion,
+        // onboarding, fils d'Ariane) avec l'en-tête, le QR et le menu rapide mobile, mais aucun
+        // indicateur de ventes n'est calculé ni envoyé — la période n'est même pas lue.
+        $organisation = $user->loadMissing('organization')->organization;
+        if (! $organisation || ! TableauDeBordService::isActive(TableauDeBordFeature::VENTES, $organisation)) {
+            return Inertia::render('Dashboard', [
+                'ventes_actif' => false,
+                'qr_payload' => $this->qrPayloadResolver->resolveForUser($request->user()),
+            ]);
+        }
+
         $periode = Periode::depuisRequeteValidee($request, 'ce_mois', self::PERIODES);
 
         // Périmètre d'agence : même mécanisme que la trésorerie et les rapports (SiteScopeService) —
@@ -233,6 +247,7 @@ class IndexDashboardController extends Controller
             ->toArray();
 
         return Inertia::render('Dashboard', [
+            'ventes_actif' => true,
             // Filtre unique de la page : cartes, graphiques et répartitions portent sur cette période.
             'periode' => [...$periode->pourFront(self::PERIODES), 'libelle' => $periode->libelle()],
             // null = toute l'organisation ; sinon les agences auxquelles les chiffres sont limités.

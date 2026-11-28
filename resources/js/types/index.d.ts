@@ -170,6 +170,15 @@ export type ModuleFlagKey =
     | 'cashback'
     | 'logistique';
 
+/** Clés courtes de TableauDeBordFeature (ADR 0071), dans l'ordre du menu « Tableau de bord ». */
+export type TableauDeBordKey =
+    | 'ventes'
+    | 'commissions'
+    | 'depenses'
+    | 'stock'
+    | 'rh'
+    | 'vehicules';
+
 export type AppPageProps<
     T extends Record<string, unknown> = Record<string, unknown>,
 > = T & {
@@ -185,6 +194,8 @@ export type AppPageProps<
     mouvements_fonds_a_confirmer: number;
     approvisionnements_a_confirmer: number;
     module_flags: Partial<Record<ModuleFlagKey, boolean>>;
+    /** Tableaux de bord « Stat- » activés pour l'organisation (ADR 0071). */
+    tableaux_de_bord: Partial<Record<TableauDeBordKey, boolean>>;
     /** Choix standard du champ « Période » (Periode::options(), ADR 0057). */
     periodes?: { value: string; label: string }[];
     seoDefaults: SeoDefaults;

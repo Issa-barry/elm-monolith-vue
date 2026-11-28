@@ -62,7 +62,12 @@ Les tableaux de bord (Stat-Ventes, Stat-Commissions) reprennent à l'identique d
 Apollo (`_template/apollo-vue-6.2.0`) au lieu de `KpiCard` : cartes Banking pour les ventes, cartes
 Ecommerce (mini-courbe, flèche d'évolution, Knob) pour les commissions — demande du 22/11/2026, cf.
 [tableau-de-bord-commissions.md](tableau-de-bord-commissions.md#reprise-du-template-apollo). Même
-conversion des tailles (rem Apollo × 14 px). Les autres écrans gardent `KpiCard`.
+conversion des tailles (rem Apollo × 14 px). Stat-Dépenses reprend les cartes Ecommerce. Stat-Stock,
+Stat-RH et Stat-Véhicules, sans évolution ni série à tracer, partagent
+`components/dashboard/shared/LignesIndicateursApollo.vue` (27/11/2026) : même carte Apollo, icône
+PrimeIcons dans l'angle du titre (cartes métriques d'Apollo, `apps/Files.vue`) à la place de la
+mini-courbe, détail court sur une ligne, en ambre pour une alerte, titre de section par ligne. Un
+nouveau tableau de bord du même genre réutilise ce composant. Les autres écrans gardent `KpiCard`.
 
 ## Bouton d'information
 

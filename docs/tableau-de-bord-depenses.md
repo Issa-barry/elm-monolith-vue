@@ -18,6 +18,9 @@ comptabilisation des dépenses (`DepenseComptabilisationService`).
 
 ## Accès et périmètre
 
+- **Activation** : le tableau doit être activé pour l'organisation (Paramètres → Tableaux de
+  bord, désactivé par défaut), sinon il quitte le menu et sa route est refusée, avant tout calcul
+  ([tableaux-de-bord-activation.md](tableaux-de-bord-activation.md), ADR 0071).
 - **Droit** : `depenses.read`, module Dépenses actif — les mêmes que la liste des dépenses. Aucune
   permission dédiée.
 - **Périmètre** : exactement celui de la liste des dépenses, `DepensePerimetre::appliquer`
